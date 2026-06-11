@@ -10,11 +10,9 @@ export type AuthUser = {
   nome?: string;
 };
 
-declare global {
-  namespace Express {
-    interface Request {
-      user?: AuthUser;
-    }
+declare module 'express-serve-static-core' {
+  interface Request {
+    user?: AuthUser;
   }
 }
 
@@ -22,7 +20,7 @@ const JWT_SECRET = String(
   config.jwtSecret || process.env.JWT_SECRET || 'segredo-temporario-dev'
 );
 
-export function signToken(user: AuthUser) {
+export function signToken(user: AuthUser): string {
   const payload = {
     id: user.id,
     email: user.email,
@@ -71,3 +69,7 @@ export function admin(req: Request, _res: Response, next: NextFunction) {
 
   return next();
 }
+
+export const authMiddleware = auth;
+export const adminMiddleware = admin;
+export const generateToken = signToken;
