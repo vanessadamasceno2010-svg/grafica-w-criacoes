@@ -63,6 +63,10 @@ app.use(errorHandler);
 
 const port = Number(config.port || process.env.PORT || 3001);
 
-app.listen(port, () => {
-  console.log(`API Grafica W Criacoes rodando na porta ${port}`);
-});
+if (!process.env.VERCEL) {
+  app.listen(port, () => {
+    console.log(`API Grafica W Criacoes rodando na porta ${port}`);
+  });
+}
+
+export default app;
