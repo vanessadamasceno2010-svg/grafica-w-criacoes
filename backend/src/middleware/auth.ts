@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import jwt, { JwtPayload, Secret, SignOptions } from 'jsonwebtoken';
+import jwt from 'jsonwebtoken';
 import { config } from '../config.js';
 
 export interface AuthRequest extends Request {
@@ -10,7 +10,9 @@ export interface AuthRequest extends Request {
   };
 }
 
-const jwtSecret: Secret = String(config.jwtSecret || process.env.JWT_SECRET || 'segredo-temporario-dev');
+const JWT_SECRET = String(
+  config.jwtSecret || process.env.JWT_SECRET || 'segredo-temporario-dev'
+);
 
 export function generateToken(user: { id: string; email: string; role: 'user' | 'admin' }) {
   const payload = {
@@ -19,11 +21,9 @@ export function generateToken(user: { id: string; email: string; role: 'user' | 
     role: user.role
   };
 
-  const options: SignOptions = {
-    expiresIn: '7d'
-  };
-
-  return jwt.sign(payload, jwtSecret, options);
+  return jwt.sign(payload, JWT_SECRET, {
+    expiresIn: 604800
+  });
 }
 
 export function authMiddleware(req: AuthRequest, res: Response, next: NextFunction) {
@@ -46,7 +46,7 @@ export function authMiddleware(req: AuthRequest, res: Response, next: NextFuncti
       });
     }
 
-    const decoded = jwt.verify(token, jwtSecret) as JwtPayload & {
+    const decoded = jwt.verify(token, JWT_SECRET) as {
       id: string;
       email: string;
       role: 'user' | 'admin';
