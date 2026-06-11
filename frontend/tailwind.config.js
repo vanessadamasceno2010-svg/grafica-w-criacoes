@@ -1,0 +1,1 @@
+export default { content:['./index.html','./src/**/*.{ts,tsx}'], theme:{ extend:{ colors:{ primary:'#061532', secondary:'#09245a', accent:'#d79b26', success:'#10b981', warning:'#f59e0b', danger:'#ef4444' }, fontFamily:{ sans:['Inter','sans-serif'], display:['Poppins','sans-serif'] }, boxShadow:{ premium:'0 20px 60px rgba(6,21,50,.12)' } } }, plugins:[] }

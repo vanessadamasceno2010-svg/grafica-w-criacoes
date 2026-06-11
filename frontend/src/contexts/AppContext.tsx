@@ -1,0 +1,7 @@
+import React, {createContext,useContext,useMemo,useState} from 'react';
+import { CartItem, Product } from '../lib/api';
+type User={id:string;nome:string;email:string;role:'user'|'admin'}|null;
+type Ctx={user:User;setUser:(u:User)=>void;cart:CartItem[];addToCart:(p:Product,q:number,s:Record<string,string>)=>void;removeCart:(id:string)=>void;updateQty:(id:string,q:number)=>void;clearCart:()=>void};
+const C=createContext<Ctx|null>(null);
+export function AppProvider({children}:{children:React.ReactNode}){const [user,setUser]=useState<User>(()=>JSON.parse(localStorage.getItem('gp_user')||'null')); const [cart,setCart]=useState<CartItem[]>(()=>JSON.parse(localStorage.getItem('gp_cart')||'[]')); const save=(items:CartItem[])=>{setCart(items);localStorage.setItem('gp_cart',JSON.stringify(items))}; const value=useMemo(()=>({user,setUser:(u:User)=>{setUser(u);localStorage.setItem('gp_user',JSON.stringify(u))},cart,addToCart:(p:Product,q:number,s:Record<string,string>)=>save([...cart,{id:crypto.randomUUID(),produto_id:p.id,nome:p.nome,slug:p.slug,imagem_principal:p.imagem_principal,quantidade:q,preco_unitario:Number(p.preco),especificacoes_selecionadas:s}]),removeCart:(id:string)=>save(cart.filter(i=>i.id!==id)),updateQty:(id:string,q:number)=>save(cart.map(i=>i.id===id?{...i,quantidade:q}:i)),clearCart:()=>save([])}),[user,cart]); return <C.Provider value={value}>{children}</C.Provider>}
+export function useApp(){const c=useContext(C); if(!c) throw new Error('AppProvider ausente'); return c}

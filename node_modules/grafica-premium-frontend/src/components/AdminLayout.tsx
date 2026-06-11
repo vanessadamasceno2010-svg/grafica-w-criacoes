@@ -1,0 +1,4 @@
+import { NavLink, Outlet } from 'react-router-dom';
+const links=['Dashboard','Produtos','Pedidos','Clientes','Categorias','Cupons','Avaliações','Configurações','Contatos','Relatórios','Usuários'];
+const path=(l:string)=>'/admin'+(l==='Dashboard'?'':'/'+l.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''));
+export function AdminLayout(){return <div className="min-h-screen bg-gray-100 flex"><aside className="w-72 bg-primary text-white p-6 hidden lg:block"><img src="/assets/logo-wide.jpeg" alt="Gráfica W Criações" className="rounded-2xl mb-8"/><h2 className="font-display text-2xl mb-5">Painel Admin</h2><nav className="grid gap-2">{links.map(l=><NavLink key={l} to={path(l)} className="px-4 py-3 rounded-xl hover:bg-white/10">{l}</NavLink>)}</nav></aside><section className="flex-1 p-5 lg:p-8"><Outlet/></section></div>}
