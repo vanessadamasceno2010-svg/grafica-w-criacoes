@@ -14,6 +14,74 @@ export const BRAND = {
   slogan: 'Pequeno por fora, gigante na divulgação!',
 };
 
+
+
+export function getToken(): string {
+  return localStorage.getItem('gp_token') || localStorage.getItem('token') || '';
+}
+
+export function setAuthSession(token: string, user: any) {
+  localStorage.setItem('gp_token', token);
+  localStorage.setItem('gp_user', JSON.stringify(user));
+}
+
+export function clearAuthSession() {
+  localStorage.removeItem('gp_token');
+  localStorage.removeItem('token');
+  localStorage.removeItem('gp_user');
+}
+
+export async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  const token = getToken();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(options.headers as Record<string, string> || {})
+  };
+
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  const response = await fetch(`${API_URL}${endpoint}`, {
+    ...options,
+    headers
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(data?.message || data?.error || 'Erro na comunicação com o servidor');
+  }
+
+  return data as T;
+}
+
+export function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
+}
+
+export function normalizeProduct(p: any): Product {
+  return {
+    ...p,
+    categoria_nome: p.categoria_nome || p.categoria || 'Sem categoria',
+    descricao_completa: p.descricao_completa || p.descricao_longa || p.descricao || '',
+    imagens_adicionais: Array.isArray(p.imagens_adicionais) ? p.imagens_adicionais : [],
+    especificacoes: p.especificacoes && typeof p.especificacoes === 'object' ? p.especificacoes : {},
+    preco: Number(p.preco || 0),
+    preco_original: p.preco_original ? Number(p.preco_original) : undefined,
+    estoque: Number(p.estoque || 0),
+    tempo_producao: Number(p.tempo_producao || 3),
+    destaque: Boolean(p.destaque),
+    avaliacao_media: Number(p.avaliacao_media || 5),
+    avaliacoes_total: Number(p.avaliacoes_total || 0)
+  };
+}
+
 export function formatMoney(value: number | string): string {
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
