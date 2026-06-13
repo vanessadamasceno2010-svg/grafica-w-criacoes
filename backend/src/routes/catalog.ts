@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { auth, admin, staff } from '../middleware/auth.js';
+import { auth, staff } from '../middleware/auth.js';
 import { asyncHandler, HttpError } from '../utils/http.js';
 import { restEq, slugify, supabaseRest } from '../lib/supabaseRest.js';
 
@@ -32,7 +32,7 @@ catalogRoutes.get('/categorias', asyncHandler(async (_req, res) => {
   res.json(rows);
 }));
 
-catalogRoutes.post('/categorias', auth, admin, asyncHandler(async (req, res) => {
+catalogRoutes.post('/categorias', auth, staff, asyncHandler(async (req, res) => {
   const data = z.object({
     nome: z.string().min(2),
     descricao: z.string().optional().default(''),
@@ -58,7 +58,7 @@ catalogRoutes.post('/categorias', auth, admin, asyncHandler(async (req, res) => 
   res.status(201).json(rows[0]);
 }));
 
-catalogRoutes.put('/categorias/:id', auth, admin, asyncHandler(async (req, res) => {
+catalogRoutes.put('/categorias/:id', auth, staff, asyncHandler(async (req, res) => {
   const data = z.object({
     nome: z.string().optional(),
     descricao: z.string().optional(),
@@ -76,7 +76,7 @@ catalogRoutes.put('/categorias/:id', auth, admin, asyncHandler(async (req, res) 
   res.json(rows[0] || { ok: true });
 }));
 
-catalogRoutes.delete('/categorias/:id', auth, admin, asyncHandler(async (req, res) => {
+catalogRoutes.delete('/categorias/:id', auth, staff, asyncHandler(async (req, res) => {
   const id = req.params.id;
 
   await supabaseRest(`/produtos?categoria_id=eq.${restEq(id)}`, {

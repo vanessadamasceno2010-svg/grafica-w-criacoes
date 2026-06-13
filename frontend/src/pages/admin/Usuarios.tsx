@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Edit, KeyRound, Trash2, UserCog } from 'lucide-react';
+import { Edit, KeyRound, ShieldCheck, Trash2 } from 'lucide-react';
 import { apiFetch } from '../../lib/api';
+import { BottomSheet } from '../../components/BottomSheet';
 
 type Usuario = {
   id: string;
@@ -8,14 +9,30 @@ type Usuario = {
   email: string;
   telefone?: string;
   role?: string;
+  permissoes?: string[];
 };
+
+const permissoesDisponiveis = [
+  { key: 'dashboard', label: 'Dashboard' },
+  { key: 'produtos', label: 'Produtos' },
+  { key: 'pedidos', label: 'Pedidos' },
+  { key: 'clientes', label: 'Clientes' },
+  { key: 'avaliacoes', label: 'Avaliações' },
+  { key: 'relatorios', label: 'Relatórios' }
+];
 
 export function Usuarios() {
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState<'editar' | 'senha' | null>(null);
   const [selecionado, setSelecionado] = useState<Usuario | null>(null);
-  const [form, setForm] = useState({ nome: '', telefone: '', role: 'user', senha: '' });
+  const [form, setForm] = useState({
+    nome: '',
+    telefone: '',
+    role: 'user',
+    senha: '',
+    permissoes: [] as string[]
+  });
 
   async function carregar() {
     setLoading(true);
@@ -33,26 +50,38 @@ export function Usuarios() {
     carregar();
   }, []);
 
-  function editar(usuario: Usuario) {
+  function abrirEditar(usuario: Usuario) {
     setSelecionado(usuario);
     setForm({
       nome: usuario.nome || '',
       telefone: usuario.telefone || '',
       role: usuario.role || 'user',
-      senha: ''
+      senha: '',
+      permissoes: Array.isArray(usuario.permissoes) ? usuario.permissoes : []
     });
     setModal('editar');
   }
 
-  function senha(usuario: Usuario) {
+  function abrirSenha(usuario: Usuario) {
     setSelecionado(usuario);
     setForm({
       nome: usuario.nome || '',
       telefone: usuario.telefone || '',
       role: usuario.role || 'user',
-      senha: ''
+      senha: '',
+      permissoes: Array.isArray(usuario.permissoes) ? usuario.permissoes : []
     });
     setModal('senha');
+  }
+
+  function togglePermissao(key: string) {
+    setForm((prev) => {
+      const exists = prev.permissoes.includes(key);
+      return {
+        ...prev,
+        permissoes: exists ? prev.permissoes.filter((p) => p !== key) : [...prev.permissoes, key]
+      };
+    });
   }
 
   async function salvar() {
@@ -65,7 +94,8 @@ export function Usuarios() {
           body: JSON.stringify({
             nome: form.nome,
             telefone: form.telefone,
-            role: form.role
+            role: form.role,
+            permissoes: form.role === 'funcionario' ? form.permissoes : []
           })
         });
       }
@@ -83,7 +113,9 @@ export function Usuarios() {
       }
 
       setModal(null);
+      setSelecionado(null);
       await carregar();
+      alert('Usuário atualizado com sucesso.');
     } catch (error: any) {
       alert(error.message || 'Erro ao salvar usuário.');
     }
@@ -102,46 +134,38 @@ export function Usuarios() {
 
   return (
     <div className="fade-in">
-      <h1 className="font-display text-2xl sm:text-3xl font-bold text-primary mb-2">
-        Gerenciador de Usuários
-      </h1>
-      <p className="text-gray-500 mb-6">
-        Defina permissões: admin, funcionário ou cliente.
-      </p>
+      <h1 className="font-display text-2xl sm:text-3xl font-bold text-primary mb-2">Gerenciador de Usuários</h1>
+      <p className="text-gray-500 mb-6">Defina função, senha e permissões de funcionários.</p>
 
       {loading ? (
         <div className="card p-4">Carregando usuários...</div>
       ) : (
         <div className="grid gap-4">
           {usuarios.map((u) => (
-            <div key={u.id} className="card p-5">
-              <div className="grid sm:grid-cols-[1fr_auto] gap-4">
+            <div className="card p-4" key={u.id}>
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                 <div>
-                  <div className="flex items-center gap-3">
-                    <div className="w-11 h-11 rounded-xl bg-gold/10 flex items-center justify-center text-gold">
-                      <UserCog size={20} />
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-primary">{u.nome}</h3>
-                      <p className="text-sm text-gray-500">{u.email}</p>
-                    </div>
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-2 text-sm">
+                  <h3 className="font-bold text-primary text-lg">{u.nome}</h3>
+                  <p className="text-sm text-gray-500">{u.email}</p>
+                  <p className="text-sm text-gray-500">{u.telefone || 'Sem telefone'}</p>
+                  <div className="flex flex-wrap gap-2 mt-3">
                     <span className="badge bg-gold/10 text-gold">{u.role || 'user'}</span>
-                    <span className="badge bg-gray-100 text-gray-600">{u.telefone || 'Sem telefone'}</span>
+                    {u.role === 'funcionario' && (u.permissoes || []).map((p) => (
+                      <span key={p} className="badge bg-primary/10 text-primary">{p}</span>
+                    ))}
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  <button className="btn btn-outline" onClick={() => editar(u)}>
+                <div className="grid sm:grid-cols-3 gap-2">
+                  <button className="btn btn-outline" onClick={() => abrirEditar(u)}>
                     <Edit size={16} />
                     Editar
                   </button>
-                  <button className="btn btn-outline" onClick={() => senha(u)}>
+                  <button className="btn btn-outline" onClick={() => abrirSenha(u)}>
                     <KeyRound size={16} />
                     Senha
                   </button>
-                  <button className="btn bg-red-50 text-red-700" onClick={() => excluir(u)}>
+                  <button className="btn bg-red-50 text-red-700 hover:bg-red-100" onClick={() => excluir(u)}>
                     <Trash2 size={16} />
                     Excluir
                   </button>
@@ -152,35 +176,64 @@ export function Usuarios() {
         </div>
       )}
 
-      {modal && selecionado && (
-        <div className="fixed inset-0 z-[80] bg-black/50 flex items-end sm:items-center justify-center p-4">
-          <div className="w-full max-w-lg bg-white rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl">
-            <h2 className="font-display text-2xl font-bold text-primary mb-4">
-              {modal === 'editar' ? 'Editar usuário' : 'Redefinir senha'}
-            </h2>
+      <BottomSheet isOpen={!!modal} onClose={() => setModal(null)} title={modal === 'senha' ? 'Redefinir senha' : 'Editar usuário'}>
+        {selecionado && (
+          <div className="space-y-4">
+            {modal === 'editar' && (
+              <>
+                <label className="block">
+                  <span className="text-sm font-bold text-gray-700">Nome</span>
+                  <input className="input mt-1" value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} />
+                </label>
 
-            {modal === 'editar' ? (
-              <div className="space-y-4">
-                <input className="input" value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} placeholder="Nome" />
-                <input className="input" value={form.telefone} onChange={(e) => setForm({ ...form, telefone: e.target.value })} placeholder="Telefone" />
-                <select className="input" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
-                  <option value="user">Cliente</option>
-                  <option value="funcionario">Funcionário</option>
-                  <option value="admin">Administrador</option>
-                  <option value="inactive">Inativo</option>
-                </select>
-              </div>
-            ) : (
-              <input type="password" className="input" value={form.senha} onChange={(e) => setForm({ ...form, senha: e.target.value })} placeholder="Nova senha" />
+                <label className="block">
+                  <span className="text-sm font-bold text-gray-700">Telefone</span>
+                  <input className="input mt-1" value={form.telefone} onChange={(e) => setForm({ ...form, telefone: e.target.value })} />
+                </label>
+
+                <label className="block">
+                  <span className="text-sm font-bold text-gray-700">Função</span>
+                  <select className="input mt-1" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
+                    <option value="user">Cliente</option>
+                    <option value="funcionario">Funcionário</option>
+                    <option value="admin">Administrador</option>
+                    <option value="inactive">Inativo</option>
+                  </select>
+                </label>
+
+                {form.role === 'funcionario' && (
+                  <div className="rounded-2xl border border-gray-200 p-4">
+                    <div className="flex items-center gap-2 mb-3 font-bold text-primary">
+                      <ShieldCheck size={18} />
+                      Permissões do funcionário
+                    </div>
+                    <div className="grid sm:grid-cols-2 gap-2">
+                      {permissoesDisponiveis.map((p) => (
+                        <label key={p.key} className="flex items-center gap-3 rounded-xl bg-gray-50 px-3 py-3 font-semibold">
+                          <input type="checkbox" checked={form.permissoes.includes(p.key)} onChange={() => togglePermissao(p.key)} />
+                          {p.label}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
             )}
 
-            <div className="grid grid-cols-2 gap-3 mt-6">
+            {modal === 'senha' && (
+              <label className="block">
+                <span className="text-sm font-bold text-gray-700">Nova senha para {selecionado.nome}</span>
+                <input type="password" className="input mt-1" value={form.senha} onChange={(e) => setForm({ ...form, senha: e.target.value })} placeholder="Digite a nova senha" />
+              </label>
+            )}
+
+            <div className="grid grid-cols-2 gap-2 pt-2">
               <button className="btn btn-outline" onClick={() => setModal(null)}>Cancelar</button>
               <button className="btn btn-primary" onClick={salvar}>Salvar</button>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </BottomSheet>
     </div>
   );
 }

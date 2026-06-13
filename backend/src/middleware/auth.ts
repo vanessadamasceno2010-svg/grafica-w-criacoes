@@ -26,7 +26,7 @@ export function signToken(user: AuthUser): string {
   const payload = {
     id: user.id,
     email: user.email,
-    role: user.role || 'user',
+    role: user.role,
     nome: user.nome || ''
   };
 
@@ -49,7 +49,7 @@ export function auth(req: Request, _res: Response, next: NextFunction) {
     req.user = {
       id: decoded.id,
       email: decoded.email,
-      role: decoded.role || 'user',
+      role: decoded.role,
       nome: decoded.nome || ''
     };
 
@@ -64,7 +64,7 @@ export function admin(req: Request, _res: Response, next: NextFunction) {
     throw new HttpError(401, 'Usuário não autenticado.');
   }
 
-  if (String(req.user.role).toLowerCase() !== 'admin') {
+  if (req.user.role !== 'admin') {
     throw new HttpError(403, 'Acesso restrito ao administrador.');
   }
 
@@ -87,5 +87,4 @@ export function staff(req: Request, _res: Response, next: NextFunction) {
 
 export const authMiddleware = auth;
 export const adminMiddleware = admin;
-export const staffMiddleware = staff;
 export const generateToken = signToken;

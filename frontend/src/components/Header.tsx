@@ -5,19 +5,31 @@ import { useApp } from '../contexts/AppContext';
 import { BRAND } from '../lib/api';
 import { BottomSheet } from './BottomSheet';
 
+function isStaffRole(role?: string) {
+  return ['admin', 'funcionario', 'staff', 'employee'].includes(String(role || '').toLowerCase());
+}
+
+function panelPath(user: any) {
+  const role = String(user?.role || '').toLowerCase();
+  if (role === 'admin') return '/admin';
+  if (isStaffRole(role)) return '/admin/pedidos';
+  return '/minha-conta';
+}
+
 export function Header() {
   const { cart, user } = useApp();
   const [menuOpen, setMenuOpen] = useState(false);
   const location = useLocation();
 
   const cartCount = cart.reduce((sum, item) => sum + item.quantidade, 0);
+  const accountPath = user ? panelPath(user) : '/login';
 
   const navLinks = [
     { to: '/', label: 'Início' },
     { to: '/catalogo', label: 'Catálogo' },
     { to: '/acompanhar', label: 'Acompanhar' },
     { to: '/sobre', label: 'Sobre' },
-    { to: '/contato', label: 'Contato' },
+    { to: '/contato', label: 'Contato' }
   ];
 
   return (
@@ -34,19 +46,17 @@ export function Header() {
           </Link>
 
           <div className="flex items-center gap-3">
-            <Link
-              to="/login"
-              className="p-2.5 rounded-xl bg-gray-50 text-gray-600 active:bg-gray-100 transition-colors"
-              aria-label="Minha conta"
-            >
+            {user && isStaffRole(user.role) && (
+              <Link to="/admin" className="hidden sm:inline-flex btn btn-outline h-10 px-4">
+                Painel
+              </Link>
+            )}
+
+            <Link to={accountPath} className="p-2.5 rounded-xl bg-gray-50 text-gray-600 active:bg-gray-100 transition-colors" aria-label="Minha conta">
               <User size={20} />
             </Link>
 
-            <Link
-              to="/carrinho"
-              className="relative p-2.5 rounded-xl bg-primary text-white active:bg-secondary transition-colors"
-              aria-label="Carrinho"
-            >
+            <Link to="/carrinho" className="relative p-2.5 rounded-xl bg-primary text-white active:bg-secondary transition-colors" aria-label="Carrinho">
               <ShoppingCart size={20} />
               {cartCount > 0 && (
                 <span className="absolute -top-1 -right-1 w-5 h-5 bg-gold text-primary text-xs font-bold rounded-full flex items-center justify-center border-2 border-white">
@@ -55,11 +65,7 @@ export function Header() {
               )}
             </Link>
 
-            <button
-              onClick={() => setMenuOpen(true)}
-              className="p-2.5 rounded-xl bg-gray-50 text-gray-600 active:bg-gray-100 transition-colors sm:hidden"
-              aria-label="Abrir menu"
-            >
+            <button onClick={() => setMenuOpen(true)} className="p-2.5 rounded-xl bg-gray-50 text-gray-600 active:bg-gray-100 transition-colors sm:hidden" aria-label="Abrir menu">
               <Menu size={20} />
             </button>
           </div>
@@ -74,19 +80,17 @@ export function Header() {
               to={link.to}
               onClick={() => setMenuOpen(false)}
               className={`flex items-center gap-3 px-4 py-3.5 rounded-xl font-semibold transition-colors ${
-                location.pathname === link.to
-                  ? 'bg-primary text-white'
-                  : 'bg-gray-50 text-gray-700 active:bg-gray-100'
+                location.pathname === link.to ? 'bg-primary text-white' : 'bg-gray-50 text-gray-700 active:bg-gray-100'
               }`}
             >
               {link.label}
             </Link>
           ))}
-          
+
           <div className="h-px bg-gray-200 my-2" />
-          
+
           <a
-            href={`https://wa.me/${BRAND.whatsappNumber}`}
+            href={`https://wa.me/${BRAND.whatsappNumber || '5588996240470'}`}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl font-bold bg-success text-white active:bg-green-700 transition-colors"
@@ -94,15 +98,13 @@ export function Header() {
             Chamar no WhatsApp
           </a>
 
-          {user?.role === 'admin' && (
-            <Link
-              to="/admin"
-              onClick={() => setMenuOpen(false)}
-              className="flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl font-bold bg-gold/10 text-gold active:bg-gold/20 transition-colors mt-2"
-            >
-              Painel Admin
-            </Link>
-          )}
+          <Link
+            to={accountPath}
+            onClick={() => setMenuOpen(false)}
+            className="flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl font-bold bg-gold/10 text-gold active:bg-gold/20 transition-colors mt-2"
+          >
+            {user && isStaffRole(user.role) ? 'Voltar ao painel' : 'Minha conta'}
+          </Link>
         </nav>
       </BottomSheet>
     </>

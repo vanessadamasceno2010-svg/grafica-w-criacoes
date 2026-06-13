@@ -1,11 +1,13 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Product, CartItem, LocalOrder } from '../lib/api';
+import { Product, CartItem } from '../lib/api';
 
 type User = {
   id: string;
   nome: string;
   email: string;
-  role: 'admin' | 'user' | 'funcionario' | 'inactive' | string;
+  telefone?: string;
+  role?: 'admin' | 'user' | 'funcionario' | 'inactive' | string;
+  permissoes?: string[];
 } | null;
 
 type AppContextType = {
@@ -20,11 +22,19 @@ type AppContextType = {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
+function readStoredUser(): User {
+  const saved = localStorage.getItem('gp_user') || localStorage.getItem('user');
+  if (!saved) return null;
+
+  try {
+    return JSON.parse(saved);
+  } catch {
+    return null;
+  }
+}
+
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User>(() => {
-    const saved = localStorage.getItem('gp_user') || localStorage.getItem('user');
-    return saved ? JSON.parse(saved) : null;
-  });
+  const [user, setUser] = useState<User>(() => readStoredUser());
 
   const [cart, setCart] = useState<CartItem[]>(() => {
     const saved = localStorage.getItem('gp_cart');
@@ -34,6 +44,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (user) {
       localStorage.setItem('gp_user', JSON.stringify(user));
+      localStorage.setItem('user', JSON.stringify(user));
     } else {
       localStorage.removeItem('gp_user');
       localStorage.removeItem('user');
@@ -56,7 +67,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return updated;
       }
 
-      return [...prev, { ...product, quantidade: quantity, especificacoes_selecionadas: specs }];
+      return [...prev, { ...product, quantidade, especificacoes_selecionadas: specs }];
     });
   };
 
@@ -76,7 +87,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setCart((prev) =>
       prev.map((item) =>
         item.id === productId && JSON.stringify(item.especificacoes_selecionadas) === JSON.stringify(specs)
-          ? { ...item, quantidade: quantity }
+          ? { ...item, quantidade }
           : item
       )
     );
@@ -87,17 +98,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AppContext.Provider
-      value={{
-        user,
-        setUser,
-        cart,
-        addToCart,
-        removeFromCart,
-        updateQuantity,
-        clearCart,
-      }}
-    >
+    <AppContext.Provider value={{ user, setUser, cart, addToCart, removeFromCart, updateQuantity, clearCart }}>
       {children}
     </AppContext.Provider>
   );

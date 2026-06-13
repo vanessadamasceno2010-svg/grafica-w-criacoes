@@ -33,7 +33,9 @@ export function Configuracoes() {
     }
   }
 
-  useEffect(() => { carregar(); }, []);
+  useEffect(() => {
+    carregar();
+  }, []);
 
   function setCampo(chave: string, valor: string) {
     setDados((prev) => ({ ...prev, [chave]: valor }));
@@ -45,7 +47,10 @@ export function Configuracoes() {
       for (const campo of campos) {
         await apiFetch('/admin/configuracoes/' + campo.chave, {
           method: 'PUT',
-          body: JSON.stringify({ valor: dados[campo.chave] || '', tipo: campo.tipo === 'textarea' ? 'texto_longo' : 'texto' })
+          body: JSON.stringify({
+            valor: dados[campo.chave] || '',
+            tipo: 'texto'
+          })
         });
       }
       alert('Configurações salvas com sucesso.');
@@ -60,19 +65,34 @@ export function Configuracoes() {
   if (loading) return <div className="p-8">Carregando configurações...</div>;
 
   return (
-    <div className="p-4 md:p-8">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-        <div><h1 className="text-3xl font-black text-slate-950">Configurações</h1><p className="text-slate-500">Informações principais do site.</p></div>
-        <button onClick={salvarTudo} disabled={salvando} className="h-12 px-5 rounded-2xl bg-amber-400 text-slate-950 font-black flex items-center justify-center gap-2 disabled:opacity-60"><Save size={18} />{salvando ? 'Salvando...' : 'Salvar configurações'}</button>
+    <div className="fade-in">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+        <div>
+          <h1 className="font-display text-2xl sm:text-3xl font-bold text-primary">Configurações</h1>
+          <p className="text-gray-500">Informações principais do site.</p>
+        </div>
+        <button onClick={salvarTudo} disabled={salvando} className="btn btn-primary">
+          <Save size={18} />
+          {salvando ? 'Salvando...' : 'Salvar configurações'}
+        </button>
       </div>
-      <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-5 grid gap-4">
+
+      <div className="card p-5 grid gap-4">
         {campos.map((campo) => (
           <label key={campo.chave} className="block">
-            <span className="text-sm font-bold text-slate-700">{campo.label}</span>
+            <span className="text-sm font-bold text-gray-700">{campo.label}</span>
             {campo.tipo === 'textarea' ? (
-              <textarea className="mt-1 w-full min-h-[130px] rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-4 focus:ring-amber-100" value={dados[campo.chave] || ''} onChange={(e) => setCampo(campo.chave, e.target.value)} />
+              <textarea
+                className="input mt-1 min-h-[130px]"
+                value={dados[campo.chave] || ''}
+                onChange={(e) => setCampo(campo.chave, e.target.value)}
+              />
             ) : (
-              <input className="mt-1 w-full h-12 rounded-2xl border border-slate-200 px-4 outline-none focus:ring-4 focus:ring-amber-100" value={dados[campo.chave] || ''} onChange={(e) => setCampo(campo.chave, e.target.value)} />
+              <input
+                className="input mt-1"
+                value={dados[campo.chave] || ''}
+                onChange={(e) => setCampo(campo.chave, e.target.value)}
+              />
             )}
           </label>
         ))}

@@ -1,13 +1,21 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { auth, staff } from '../middleware/auth.js';
-import { asyncHandler } from '../utils/http.js';
+import { auth } from '../middleware/auth.js';
+import { asyncHandler, HttpError } from '../utils/http.js';
 import { restEq, supabaseRest } from '../lib/supabaseRest.js';
 
 export const orderRoutes = Router();
 
+function roleOf(req: any) {
+  return String(req.user?.role || '').toLowerCase();
+}
+
 function canSeeAll(req: any) {
-  return ['admin', 'funcionario', 'staff', 'employee'].includes(String(req.user?.role || '').toLowerCase());
+  return ['admin', 'funcionario', 'staff', 'employee'].includes(roleOf(req));
+}
+
+function canManageOrders(req: any) {
+  return ['admin', 'funcionario', 'staff', 'employee'].includes(roleOf(req));
 }
 
 orderRoutes.get('/pedidos', auth, asyncHandler(async (req, res) => {
@@ -82,7 +90,11 @@ orderRoutes.post('/pedidos', auth, asyncHandler(async (req, res) => {
   res.status(201).json(pedido);
 }));
 
-orderRoutes.put('/pedidos/:id', auth, staff, asyncHandler(async (req, res) => {
+orderRoutes.put('/pedidos/:id', auth, asyncHandler(async (req, res) => {
+  if (!canManageOrders(req)) {
+    throw new HttpError(403, 'Sem permissão para atualizar pedidos.');
+  }
+
   const d = z.object({
     status: z.string().optional(),
     status_pagamento: z.string().optional(),
