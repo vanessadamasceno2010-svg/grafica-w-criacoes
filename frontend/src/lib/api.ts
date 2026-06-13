@@ -1,3 +1,4 @@
+```ts
 export const API_BASE =
   import.meta.env.VITE_API_URL || 'https://grafica-w-criacoes-backend.vercel.app/api';
 
@@ -29,8 +30,13 @@ export type Product = {
   tempo_producao: number;
   categoria_id?: string;
   categoria_nome?: string;
+  categoria_slug?: string;
   avaliacao_media?: number;
   avaliacoes_total?: number;
+  ativo?: boolean;
+  sku?: string;
+  peso?: number;
+  dimensoes?: any;
 };
 
 export type Category = {
@@ -39,6 +45,7 @@ export type Category = {
   slug: string;
   descricao: string;
   imagem_url: string;
+  ordem?: number;
   ativo?: boolean;
 };
 
@@ -72,7 +79,20 @@ export type LocalOrder = {
   created_at: string;
 };
 
-export function formatMoney(valor: number | string) {
+export type User = {
+  id: string;
+  nome: string;
+  email: string;
+  telefone?: string;
+  role?: 'user' | 'admin' | 'inactive' | string;
+};
+
+export type AuthResponse = {
+  user: User;
+  token: string;
+};
+
+export function formatMoney(valor: number | string | null | undefined) {
   return Number(valor || 0).toLocaleString('pt-BR', {
     style: 'currency',
     currency: 'BRL'
@@ -85,6 +105,38 @@ export function token() {
     localStorage.getItem('gp_token') ||
     ''
   );
+}
+
+export function getAuthToken() {
+  return token();
+}
+
+export function setAuthSession(authToken: string, user: any) {
+  localStorage.setItem('token', authToken);
+  localStorage.setItem('gp_token', authToken);
+  localStorage.setItem('user', JSON.stringify(user));
+  localStorage.setItem('gp_user', JSON.stringify(user));
+}
+
+export function clearAuthSession() {
+  localStorage.removeItem('token');
+  localStorage.removeItem('gp_token');
+  localStorage.removeItem('user');
+  localStorage.removeItem('gp_user');
+}
+
+export function getStoredUser() {
+  const user =
+    localStorage.getItem('user') ||
+    localStorage.getItem('gp_user');
+
+  if (!user) return null;
+
+  try {
+    return JSON.parse(user);
+  } catch {
+    return null;
+  }
 }
 
 export async function apiFetch<T = any>(
@@ -120,7 +172,12 @@ export async function apiFetch<T = any>(
   }
 
   if (!response.ok) {
-    throw new Error(data?.message || data?.error || 'Erro interno do servidor.');
+    throw new Error(
+      data?.message ||
+      data?.error ||
+      data?.details ||
+      'Erro interno do servidor.'
+    );
   }
 
   return data as T;
@@ -131,6 +188,53 @@ export async function api<T = any>(
   options: RequestInit = {}
 ): Promise<T> {
   return apiFetch<T>(path, options);
+}
+
+export function normalizeProduct(product: any): Product {
+  return {
+    id: product?.id || '',
+    nome: product?.nome || '',
+    slug: product?.slug || '',
+    descricao: product?.descricao || '',
+    descricao_longa: product?.descricao_longa || '',
+    preco: Number(product?.preco || 0),
+    preco_original:
+      product?.preco_original !== undefined && product?.preco_original !== null
+        ? Number(product.preco_original)
+        : null,
+    estoque: Number(product?.estoque || 0),
+    imagem_principal: product?.imagem_principal || '',
+    imagens_adicionais: Array.isArray(product?.imagens_adicionais)
+      ? product.imagens_adicionais
+      : [],
+    especificacoes:
+      product?.especificacoes && typeof product.especificacoes === 'object'
+        ? product.especificacoes
+        : {},
+    destaque: Boolean(product?.destaque),
+    tempo_producao: Number(product?.tempo_producao || 3),
+    categoria_id: product?.categoria_id || '',
+    categoria_nome: product?.categoria_nome || 'Sem categoria',
+    categoria_slug: product?.categoria_slug || '',
+    avaliacao_media: Number(product?.avaliacao_media || 5),
+    avaliacoes_total: Number(product?.avaliacoes_total || 0),
+    ativo: product?.ativo !== false,
+    sku: product?.sku || '',
+    peso: Number(product?.peso || 0),
+    dimensoes: product?.dimensoes || {}
+  };
+}
+
+export function normalizeCategory(category: any): Category {
+  return {
+    id: category?.id || '',
+    nome: category?.nome || '',
+    slug: category?.slug || '',
+    descricao: category?.descricao || '',
+    imagem_url: category?.imagem_url || '',
+    ordem: Number(category?.ordem || 0),
+    ativo: category?.ativo !== false
+  };
 }
 
 export function createWhatsAppOrderMessage(order: LocalOrder) {
@@ -172,70 +276,15 @@ export function whatsappUrl(message: string) {
   return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
 }
 
+export function slugify(text: string) {
+  return String(text || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
+}
+
 export const mockProducts: Product[] = [];
 export const mockCategories: Category[] = [];
-
-export function setAuthSession(token: string, user: any) {
-  localStorage.setItem('token', token);
-  localStorage.setItem('gp_token', token);
-  localStorage.setItem('user', JSON.stringify(user));
-  localStorage.setItem('gp_user', JSON.stringify(user));
-}
-
-export function clearAuthSession() {
-  localStorage.removeItem('token');
-  localStorage.removeItem('gp_token');
-  localStorage.removeItem('user');
-  localStorage.removeItem('gp_user');
-}
-
-export function getStoredUser() {
-  const user =
-    localStorage.getItem('user') ||
-    localStorage.getItem('gp_user');
-
-  if (!user) return null;
-
-  try {
-    return JSON.parse(user);
-  } catch {
-    return null;
-  }
-}
-export function normalizeProduct(product: any): Product {
-  return {
-    id: product.id || '',
-    nome: product.nome || '',
-    slug: product.slug || '',
-    descricao: product.descricao || '',
-    descricao_longa: product.descricao_longa || '',
-    preco: Number(product.preco || 0),
-    preco_original: product.preco_original ? Number(product.preco_original) : null,
-    estoque: Number(product.estoque || 0),
-    imagem_principal: product.imagem_principal || '',
-    imagens_adicionais: Array.isArray(product.imagens_adicionais)
-      ? product.imagens_adicionais
-      : [],
-    especificacoes:
-      product.especificacoes && typeof product.especificacoes === 'object'
-        ? product.especificacoes
-        : {},
-    destaque: Boolean(product.destaque),
-    tempo_producao: Number(product.tempo_producao || 3),
-    categoria_id: product.categoria_id || '',
-    categoria_nome: product.categoria_nome || 'Sem categoria',
-    avaliacao_media: Number(product.avaliacao_media || 5),
-    avaliacoes_total: Number(product.avaliacoes_total || 0)
-  };
-}
-
-export function normalizeCategory(category: any): Category {
-  return {
-    id: category.id || '',
-    nome: category.nome || '',
-    slug: category.slug || '',
-    descricao: category.descricao || '',
-    imagem_url: category.imagem_url || '',
-    ativo: category.ativo !== false
-  };
-}
+```
