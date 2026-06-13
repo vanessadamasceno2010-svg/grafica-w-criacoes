@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
-import { query } from '../db/pool.js';
+import { query, hasDatabaseUrl } from '../db/pool.js';
 import { auth, signToken } from '../middleware/auth.js';
 import { asyncHandler, HttpError } from '../utils/http.js';
 
