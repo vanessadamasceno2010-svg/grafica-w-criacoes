@@ -25,7 +25,7 @@ export type Product = {
   estoque: number;
   imagem_principal: string;
   imagens_adicionais?: string[];
-  especificacoes?: Record<string, string[]>;
+  especificacoes?: Record<string, any>;
   destaque?: boolean;
   tempo_producao: number;
   categoria_id?: string;
@@ -126,14 +126,16 @@ export function clearAuthSession() {
 }
 
 export function getStoredUser() {
-  const user =
+  const storedUser =
     localStorage.getItem('user') ||
     localStorage.getItem('gp_user');
 
-  if (!user) return null;
+  if (!storedUser) {
+    return null;
+  }
 
   try {
-    return JSON.parse(user);
+    return JSON.parse(storedUser);
   } catch {
     return null;
   }
@@ -153,7 +155,7 @@ export async function apiFetch<T = any>(
     headers.Authorization = 'Bearer ' + authToken;
   }
 
-  const response = await fetch(`${API_BASE}${path}`, {
+  const response = await fetch(API_BASE + path, {
     ...options,
     headers: {
       ...headers,
