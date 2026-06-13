@@ -44,15 +44,6 @@ authRoutes.get('/db-test', async (_req, res) => {
     });
   }
 });
-  } catch (error: any) {
-    return res.status(500).json({
-      ok: false,
-      message: 'Falha ao conectar no banco.',
-      error: error?.message || String(error),
-      code: error?.code || null
-    });
-  }
-});
 
 authRoutes.post('/register', asyncHandler(async (req, res) => {
   const data = registerSchema.parse(req.body);
@@ -101,7 +92,10 @@ authRoutes.post('/login', asyncHandler(async (req, res) => {
 
   let senhaValida = false;
 
-  if (String(user.senha).startsWith('$2a$') || String(user.senha).startsWith('$2b$')) {
+  if (
+    String(user.senha).startsWith('$2a$') ||
+    String(user.senha).startsWith('$2b$')
+  ) {
     senhaValida = await bcrypt.compare(data.senha, user.senha);
   } else {
     senhaValida = data.senha === user.senha;
