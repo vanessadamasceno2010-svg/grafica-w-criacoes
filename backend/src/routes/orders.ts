@@ -1,32 +1,41 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { auth } from '../middleware/auth.js';
-import { asyncHandler, HttpError } from '../utils/http.js';
+import { auth, staff } from '../middleware/auth.js';
+import { asyncHandler } from '../utils/http.js';
 import { restEq, supabaseRest } from '../lib/supabaseRest.js';
 
 export const orderRoutes = Router();
 
-function roleOf(req: any) {
-  return String(req.user?.role || '').toLowerCase();
-}
-
 function canSeeAll(req: any) {
-  return ['admin', 'funcionario', 'staff', 'employee'].includes(roleOf(req));
+  return ['admin', 'funcionario', 'staff', 'employee'].includes(String(req.user?.role || ''));
 }
 
-function canManageOrders(req: any) {
-  return ['admin', 'funcionario', 'staff', 'employee'].includes(roleOf(req));
+function prazoStatus(pedido: any) {
+  const raw = pedido.prazo_entrega || pedido.data_entrega_estimada;
+  if (!raw) return 'sem_prazo';
+
+  const prazo = new Date(raw);
+  if (Number.isNaN(prazo.getTime())) return 'sem_prazo';
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  prazo.setHours(0, 0, 0, 0);
+
+  const diff = Math.ceil((prazo.getTime() - today.getTime()) / 86400000);
+  if (diff < 0 && !['entregue', 'cancelado'].includes(String(pedido.status))) return 'atrasado';
+  if (diff <= 2) return 'atenção';
+  return 'no_prazo';
 }
 
 orderRoutes.get('/pedidos', auth, asyncHandler(async (req, res) => {
-  let path = '/pedidos?select=*&order=created_at.desc&limit=100';
+  let path = '/pedidos?select=*&order=created_at.desc&limit=500';
 
   if (!canSeeAll(req)) {
     path += `&usuario_id=eq.${restEq(req.user!.id)}`;
   }
 
   const rows = await supabaseRest<any[]>(path);
-  res.json(rows);
+  res.json(rows.map((p) => ({ ...p, prazo_status: prazoStatus(p) })));
 }));
 
 orderRoutes.post('/pedidos', auth, asyncHandler(async (req, res) => {
@@ -36,16 +45,24 @@ orderRoutes.post('/pedidos', auth, asyncHandler(async (req, res) => {
     frete: z.number().optional().default(0),
     desconto: z.number().optional().default(0),
     total: z.number().optional().default(0),
+    valor_entrada: z.number().optional().default(0),
+    valor_restante: z.number().optional(),
     metodo_pagamento: z.string().optional().default('whatsapp'),
     status_pagamento: z.string().optional().default('pendente'),
     endereco_entrega: z.string().optional().default('A combinar'),
     observacoes: z.string().optional().default(''),
     cliente_nome: z.string().optional(),
     cliente_email: z.string().optional(),
-    cliente_telefone: z.string().optional()
+    cliente_telefone: z.string().optional(),
+    prazo_entrega: z.string().optional().default('')
   }).parse(req.body);
 
   const numero = `WC${Date.now()}`;
+  const total = d.total || d.subtotal;
+  const entrada = Number(d.valor_entrada || 0);
+  const restante = d.valor_restante !== undefined ? Number(d.valor_restante) : Math.max(total - entrada, 0);
+  const statusPagamento = d.status_pagamento || (restante <= 0 && total > 0 ? 'confirmado' : entrada > 0 ? 'parcial' : 'pendente');
+  const prazo = d.prazo_entrega || new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
 
   const pedidos = await supabaseRest<any[]>('/pedidos', {
     method: 'POST',
@@ -56,16 +73,19 @@ orderRoutes.post('/pedidos', auth, asyncHandler(async (req, res) => {
       subtotal: d.subtotal,
       frete: d.frete,
       desconto: d.desconto,
-      total: d.total || d.subtotal,
+      total,
+      valor_entrada: entrada,
+      valor_restante: restante,
       metodo_pagamento: d.metodo_pagamento,
-      status_pagamento: d.status_pagamento,
+      status_pagamento: statusPagamento,
       endereco_entrega: d.endereco_entrega,
       observacoes: d.observacoes,
       cliente_nome: d.cliente_nome || req.user!.nome || '',
       cliente_email: d.cliente_email || req.user!.email || '',
       cliente_telefone: d.cliente_telefone || '',
       origem: 'site',
-      data_entrega_estimada: new Date(Date.now() + 7 * 86400000).toISOString(),
+      data_entrega_estimada: prazo,
+      prazo_entrega: prazo,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     })
@@ -87,30 +107,29 @@ orderRoutes.post('/pedidos', auth, asyncHandler(async (req, res) => {
     }).catch(() => null);
   }
 
-  res.status(201).json(pedido);
+  res.status(201).json({ ...pedido, prazo_status: prazoStatus(pedido) });
 }));
 
-orderRoutes.put('/pedidos/:id', auth, asyncHandler(async (req, res) => {
-  if (!canManageOrders(req)) {
-    throw new HttpError(403, 'Sem permissão para atualizar pedidos.');
-  }
-
+orderRoutes.put('/pedidos/:id', auth, staff, asyncHandler(async (req, res) => {
   const d = z.object({
     status: z.string().optional(),
     status_pagamento: z.string().optional(),
-    observacoes: z.string().optional()
+    observacoes: z.string().optional(),
+    valor_entrada: z.number().optional(),
+    valor_restante: z.number().optional(),
+    prazo_entrega: z.string().optional(),
+    data_entrega_estimada: z.string().optional(),
+    assinatura_url: z.string().optional(),
+    logo_documento_url: z.string().optional()
   }).parse(req.body);
 
-  const rows = await supabaseRest<any[]>(
-    `/pedidos?id=eq.${restEq(req.params.id)}`,
-    {
-      method: 'PATCH',
-      body: JSON.stringify({
-        ...d,
-        updated_at: new Date().toISOString()
-      })
-    }
-  );
+  const rows = await supabaseRest<any[]>(`/pedidos?id=eq.${restEq(req.params.id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      ...d,
+      updated_at: new Date().toISOString()
+    })
+  });
 
-  res.json(rows[0] || { ok: true });
+  res.json(rows[0] ? { ...rows[0], prazo_status: prazoStatus(rows[0]) } : { ok: true });
 }));

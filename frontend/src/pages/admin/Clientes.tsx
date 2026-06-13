@@ -1,13 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Edit, KeyRound, Trash2, UserPlus } from 'lucide-react';
 import { apiFetch, formatMoney } from '../../lib/api';
-import { useApp } from '../../contexts/AppContext';
 
 type Cliente = { id: string; nome: string; email: string; telefone?: string; role?: string; total_gasto?: number; pedidos?: number };
 
 export function Clientes() {
-  const { user } = useApp();
-  const isAdmin = String(user?.role || '').toLowerCase() === 'admin';
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState<'novo' | 'editar' | 'senha' | null>(null);
@@ -91,7 +88,7 @@ export function Clientes() {
           <h1 className="text-3xl font-black text-slate-950">Clientes</h1>
           <p className="text-slate-500">Cadastro, email de login e redefinição de senha.</p>
         </div>
-        {isAdmin && <button onClick={abrirNovo} className="h-12 px-5 rounded-2xl bg-amber-400 text-slate-950 font-black flex items-center justify-center gap-2"><UserPlus size={18} />Novo Cliente</button>}
+        <button onClick={abrirNovo} className="h-12 px-5 rounded-2xl bg-amber-400 text-slate-950 font-black flex items-center justify-center gap-2"><UserPlus size={18} />Novo Cliente</button>
       </div>
 
       {loading ? <div className="bg-white rounded-3xl p-6 shadow-sm">Carregando clientes...</div> : (
@@ -109,11 +106,11 @@ export function Clientes() {
                     <span className="px-3 py-1 rounded-full bg-blue-50 text-blue-700 font-bold">Pedidos: {cliente.pedidos || 0}</span>
                   </div>
                 </div>
-                {isAdmin && <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   <button onClick={() => abrirEditar(cliente)} className="h-11 px-4 rounded-xl bg-slate-100 font-bold flex items-center justify-center gap-2"><Edit size={16} />Editar</button>
                   <button onClick={() => abrirSenha(cliente)} className="h-11 px-4 rounded-xl bg-amber-100 text-amber-800 font-bold flex items-center justify-center gap-2"><KeyRound size={16} />Senha</button>
                   <button onClick={() => deletar(cliente)} className="h-11 px-4 rounded-xl bg-red-50 text-red-700 font-bold flex items-center justify-center gap-2"><Trash2 size={16} />Excluir</button>
-                </div>}
+                </div>
               </div>
             </div>
           ))}
@@ -143,3 +140,5 @@ export function Clientes() {
     </div>
   );
 }
+
+export default Clientes;

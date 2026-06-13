@@ -24,7 +24,7 @@ authRoutes.get('/db-test', async (_req, res) => {
     checkSupabaseRestEnv();
 
     const users = await supabaseRest<any[]>(
-      '/users?select=id,email,nome,role&limit=1'
+      '/users?select=id,email,nome,role,funcionario_permissoes&limit=1'
     );
 
     return res.json({
@@ -65,7 +65,8 @@ authRoutes.post('/register', asyncHandler(async (req, res) => {
     email: user.email,
     nome: user.nome,
     telefone: user.telefone,
-    role: user.role || 'user'
+    role: user.role || 'user',
+    funcionario_permissoes: Array.isArray(user.funcionario_permissoes) ? user.funcionario_permissoes : []
   };
 
   res.status(201).json({
@@ -79,7 +80,7 @@ authRoutes.post('/login', asyncHandler(async (req, res) => {
   const email = encodeURIComponent(data.email.toLowerCase());
 
   const users = await supabaseRest<any[]>(
-    `/users?select=id,email,nome,telefone,role,senha&email=eq.${email}&limit=1`
+    `/users?select=id,email,nome,telefone,role,senha,funcionario_permissoes&email=eq.${email}&limit=1`
   );
 
   const user = users[0];
@@ -112,7 +113,8 @@ authRoutes.post('/login', asyncHandler(async (req, res) => {
     email: user.email,
     nome: user.nome,
     telefone: user.telefone,
-    role: user.role || 'user'
+    role: user.role || 'user',
+    funcionario_permissoes: Array.isArray(user.funcionario_permissoes) ? user.funcionario_permissoes : []
   };
 
   res.json({

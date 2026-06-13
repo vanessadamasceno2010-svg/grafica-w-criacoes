@@ -3,13 +3,14 @@ import jwt from 'jsonwebtoken';
 import { config } from '../config.js';
 import { HttpError } from '../utils/http.js';
 
-export type UserRole = 'user' | 'admin' | 'funcionario' | 'inactive' | string;
+export type AuthRole = 'user' | 'admin' | 'funcionario' | 'inactive' | string;
 
 export type AuthUser = {
   id: string;
   email: string;
-  role: UserRole;
+  role: AuthRole;
   nome?: string;
+  funcionario_permissoes?: string[];
 };
 
 declare module 'express-serve-static-core' {
@@ -27,7 +28,10 @@ export function signToken(user: AuthUser): string {
     id: user.id,
     email: user.email,
     role: user.role,
-    nome: user.nome || ''
+    nome: user.nome || '',
+    funcionario_permissoes: Array.isArray(user.funcionario_permissoes)
+      ? user.funcionario_permissoes
+      : []
   };
 
   return (jwt.sign as any)(payload, JWT_SECRET, {
@@ -50,7 +54,10 @@ export function auth(req: Request, _res: Response, next: NextFunction) {
       id: decoded.id,
       email: decoded.email,
       role: decoded.role,
-      nome: decoded.nome || ''
+      nome: decoded.nome || '',
+      funcionario_permissoes: Array.isArray(decoded.funcionario_permissoes)
+        ? decoded.funcionario_permissoes
+        : []
     };
 
     return next();
@@ -76,10 +83,8 @@ export function staff(req: Request, _res: Response, next: NextFunction) {
     throw new HttpError(401, 'Usuário não autenticado.');
   }
 
-  const role = String(req.user.role || '').toLowerCase();
-
-  if (!['admin', 'funcionario', 'staff', 'employee'].includes(role)) {
-    throw new HttpError(403, 'Acesso restrito ao painel.');
+  if (!['admin', 'funcionario', 'staff', 'employee'].includes(String(req.user.role))) {
+    throw new HttpError(403, 'Acesso restrito.');
   }
 
   return next();
@@ -87,4 +92,5 @@ export function staff(req: Request, _res: Response, next: NextFunction) {
 
 export const authMiddleware = auth;
 export const adminMiddleware = admin;
+export const staffMiddleware = staff;
 export const generateToken = signToken;

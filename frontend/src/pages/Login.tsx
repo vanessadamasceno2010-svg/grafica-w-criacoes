@@ -98,3 +98,5 @@ export function Login() {
     </main>
   );
 }
+
+export default Login;

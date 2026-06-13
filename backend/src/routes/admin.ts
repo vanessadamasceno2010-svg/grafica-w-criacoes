@@ -2,150 +2,82 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { auth, admin } from '../middleware/auth.js';
-import { asyncHandler, HttpError } from '../utils/http.js';
+import { asyncHandler } from '../utils/http.js';
 import { restEq, supabaseRest } from '../lib/supabaseRest.js';
 
 export const adminRoutes = Router();
 
-const PERMISSION_LABELS: Record<string, string> = {
-  dashboard: 'Dashboard',
-  produtos: 'Produtos',
-  pedidos: 'Pedidos',
-  clientes: 'Clientes',
-  avaliacoes: 'Avaliações',
-  relatorios: 'Relatórios'
-};
-
-const DEFAULT_FUNCIONARIO_PERMISSOES = ['dashboard', 'pedidos'];
-
-function roleOf(user: any) {
-  return String(user?.role || '').toLowerCase();
+function isStaff(user: any) {
+  return ['admin', 'funcionario', 'staff', 'employee'].includes(String(user?.role || '').toLowerCase());
 }
 
-function isAdminUser(user: any) {
-  return roleOf(user) === 'admin';
-}
-
-function isStaffUser(user: any) {
-  const role = roleOf(user);
-  return ['admin', 'funcionario', 'staff', 'employee'].includes(role);
-}
-
-async function getFuncionarioPermissoes(userId: string): Promise<string[]> {
-  const chave = `funcionario_permissoes_${userId}`;
-
-  try {
-    const rows = await supabaseRest<any[]>(
-      `/configuracoes_site?select=valor&chave=eq.${restEq(chave)}&limit=1`
-    );
-
-    const raw = rows?.[0]?.valor;
-
-    if (!raw) {
-      return DEFAULT_FUNCIONARIO_PERMISSOES;
-    }
-
-    const parsed = JSON.parse(raw);
-
-    if (Array.isArray(parsed)) {
-      return parsed.map(String);
-    }
-  } catch (error) {
-    console.error('Falha ao carregar permissões do funcionário:', error);
+function requireStaff(req: any, res: any, next: any) {
+  if (!req.user || !isStaff(req.user)) {
+    return res.status(403).json({ message: 'Acesso restrito.' });
   }
-
-  return DEFAULT_FUNCIONARIO_PERMISSOES;
-}
-
-async function requirePainel(req: any, _res: any, next: any) {
-  if (!req.user || !isStaffUser(req.user)) {
-    throw new HttpError(403, 'Acesso restrito ao painel.');
-  }
-
   return next();
 }
 
-function requirePermissao(permissao: string) {
-  return async (req: any, _res: any, next: any) => {
-    if (!req.user) {
-      throw new HttpError(401, 'Usuário não autenticado.');
-    }
-
-    if (isAdminUser(req.user)) {
-      return next();
-    }
-
-    const permissoes = await getFuncionarioPermissoes(req.user.id);
-
-    if (!permissoes.includes(permissao)) {
-      throw new HttpError(403, 'Funcionário sem permissão para acessar esta função.');
-    }
-
-    return next();
-  };
+function toDate(value: any) {
+  if (!value) return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
 }
 
-async function salvarConfig(chave: string, valor: string, tipo = 'texto') {
-  const existing = await supabaseRest<any[]>(
-    `/configuracoes_site?select=id&chave=eq.${restEq(chave)}&limit=1`
-  );
+function applyDateFilter(rows: any[], from?: any, to?: any) {
+  const start = toDate(from);
+  const end = toDate(to);
 
-  if (existing[0]) {
-    const rows = await supabaseRest<any[]>(
-      `/configuracoes_site?chave=eq.${restEq(chave)}`,
-      {
-        method: 'PATCH',
-        body: JSON.stringify({
-          valor,
-          tipo,
-          updated_at: new Date().toISOString()
-        })
-      }
-    );
-
-    return rows[0] || { ok: true };
-  }
-
-  const rows = await supabaseRest<any[]>('/configuracoes_site', {
-    method: 'POST',
-    body: JSON.stringify({
-      chave,
-      valor,
-      tipo,
-      updated_at: new Date().toISOString()
-    })
+  return rows.filter((row) => {
+    const d = toDate(row.created_at);
+    if (!d) return true;
+    if (start && d < start) return false;
+    if (end) {
+      const endOfDay = new Date(end);
+      endOfDay.setHours(23, 59, 59, 999);
+      if (d > endOfDay) return false;
+    }
+    return true;
   });
+}
 
-  return rows[0] || { ok: true };
+function prazoStatus(pedido: any) {
+  const prazo = toDate(pedido.prazo_entrega || pedido.data_entrega_estimada);
+  if (!prazo) return 'sem_prazo';
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  prazo.setHours(0, 0, 0, 0);
+
+  const diff = Math.ceil((prazo.getTime() - today.getTime()) / 86400000);
+  if (diff < 0 && !['entregue', 'cancelado'].includes(String(pedido.status))) return 'atrasado';
+  if (diff <= 2) return 'atenção';
+  return 'no_prazo';
+}
+
+async function getConfigMap() {
+  const rows = await supabaseRest<any[]>('/configuracoes_site?select=chave,valor');
+  const config: Record<string, string> = {};
+  for (const item of rows || []) config[item.chave] = item.valor || '';
+  return config;
 }
 
 adminRoutes.use(auth);
-adminRoutes.use(requirePainel);
+adminRoutes.use(requireStaff);
 
-adminRoutes.get('/me/permissoes', asyncHandler(async (req, res) => {
-  if (isAdminUser(req.user)) {
-    return res.json({
-      role: req.user!.role,
-      permissoes: Object.keys(PERMISSION_LABELS),
-      labels: PERMISSION_LABELS
-    });
-  }
-
-  const permissoes = await getFuncionarioPermissoes(req.user!.id);
-
-  res.json({
-    role: req.user!.role,
-    permissoes,
-    labels: PERMISSION_LABELS
-  });
-}));
-
-adminRoutes.get('/dashboard', requirePermissao('dashboard'), asyncHandler(async (_req, res) => {
+adminRoutes.get('/dashboard', asyncHandler(async (req, res) => {
   const [pedidos, users, produtos] = await Promise.all([
-    supabaseRest<any[]>('/pedidos?select=id,total,status,created_at&limit=1000'),
-    supabaseRest<any[]>('/users?select=id,role,created_at&limit=1000'),
-    supabaseRest<any[]>('/produtos?select=id,estoque,ativo&limit=1000')
+    supabaseRest<any[]>('/pedidos?select=*&limit=2000&order=created_at.desc'),
+    supabaseRest<any[]>('/users?select=id,role,created_at&limit=2000'),
+    supabaseRest<any[]>('/produtos?select=id,estoque,ativo&limit=2000')
   ]);
+
+  const status = String(req.query.status || 'todos');
+  let filtered = applyDateFilter(pedidos, req.query.from, req.query.to);
+
+  if (status !== 'todos') {
+    filtered = filtered.filter((p) => String(p.status) === status || String(p.status_pagamento) === status);
+  }
 
   const now = new Date();
   const pedidosMes = pedidos.filter((p) => {
@@ -154,28 +86,32 @@ adminRoutes.get('/dashboard', requirePermissao('dashboard'), asyncHandler(async 
   });
 
   const vendasMes = pedidosMes.reduce((sum, p) => sum + Number(p.total || 0), 0);
+  const vendasPeriodo = filtered.reduce((sum, p) => sum + Number(p.total || 0), 0);
 
   res.json({
     vendasMes,
     pedidosMes: pedidosMes.length,
-    ticketMedio: pedidosMes.length ? vendasMes / pedidosMes.length : 0,
+    ticketMedio: filtered.length ? vendasPeriodo / filtered.length : 0,
     clientesNovos: users.filter((u) => {
       const d = new Date(u.created_at);
       return u.role === 'user' && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
     }).length,
     produtosEmEstoque: produtos.reduce((sum, p) => sum + Number(p.estoque || 0), 0),
-    pedidosPendentes: pedidos.filter((p) => ['pendente', 'confirmado', 'em_producao'].includes(p.status)).length
+    pedidosPendentes: pedidos.filter((p) => ['pendente', 'confirmado', 'em_producao'].includes(p.status)).length,
+    filtro: {
+      totalPedidos: filtered.length,
+      vendasPeriodo,
+      atrasados: filtered.filter((p) => prazoStatus(p) === 'atrasado').length,
+      atencao: filtered.filter((p) => prazoStatus(p) === 'atenção').length,
+      noPrazo: filtered.filter((p) => prazoStatus(p) === 'no_prazo').length
+    },
+    pedidosRecentes: filtered.slice(0, 8).map((p) => ({ ...p, prazo_status: prazoStatus(p) }))
   });
 }));
 
-adminRoutes.get('/clientes', requirePermissao('clientes'), asyncHandler(async (_req, res) => {
-  const users = await supabaseRest<any[]>(
-    '/users?select=id,nome,email,telefone,role,created_at&role=eq.user&order=created_at.desc&limit=1000'
-  );
-
-  const pedidos = await supabaseRest<any[]>(
-    '/pedidos?select=id,usuario_id,total&limit=1000'
-  ).catch(() => []);
+adminRoutes.get('/clientes', asyncHandler(async (_req, res) => {
+  const users = await supabaseRest<any[]>('/users?select=id,nome,email,telefone,role,created_at&role=eq.user&order=created_at.desc&limit=2000');
+  const pedidos = await supabaseRest<any[]>('/pedidos?select=id,usuario_id,total&limit=2000').catch(() => []);
 
   res.json(users.map((u) => {
     const userOrders = pedidos.filter((p) => p.usuario_id === u.id);
@@ -196,7 +132,6 @@ adminRoutes.post('/clientes', admin, asyncHandler(async (req, res) => {
   }).parse(req.body);
 
   const senhaHash = await bcrypt.hash(d.senha, 10);
-
   const rows = await supabaseRest<any[]>('/users', {
     method: 'POST',
     body: JSON.stringify({
@@ -214,35 +149,21 @@ adminRoutes.post('/clientes', admin, asyncHandler(async (req, res) => {
 }));
 
 adminRoutes.put('/clientes/:id', admin, asyncHandler(async (req, res) => {
-  const d = z.object({
-    nome: z.string().min(2).optional(),
-    email: z.string().email().optional(),
-    telefone: z.string().optional()
-  }).parse(req.body);
-
+  const d = z.object({ nome: z.string().min(2).optional(), email: z.string().email().optional(), telefone: z.string().optional() }).parse(req.body);
   const rows = await supabaseRest<any[]>(`/users?id=eq.${restEq(req.params.id)}`, {
     method: 'PATCH',
-    body: JSON.stringify({
-      ...d,
-      updated_at: new Date().toISOString()
-    })
+    body: JSON.stringify({ ...d, updated_at: new Date().toISOString() })
   });
-
   res.json(rows[0] || { ok: true });
 }));
 
 adminRoutes.put('/clientes/:id/redefinir-senha', admin, asyncHandler(async (req, res) => {
   const d = z.object({ senha: z.string().min(6) }).parse(req.body);
   const senhaHash = await bcrypt.hash(d.senha, 10);
-
   await supabaseRest(`/users?id=eq.${restEq(req.params.id)}`, {
     method: 'PATCH',
-    body: JSON.stringify({
-      senha: senhaHash,
-      updated_at: new Date().toISOString()
-    })
+    body: JSON.stringify({ senha: senhaHash, updated_at: new Date().toISOString() })
   });
-
   res.json({ ok: true });
 }));
 
@@ -251,20 +172,30 @@ adminRoutes.delete('/clientes/:id', admin, asyncHandler(async (req, res) => {
   res.json({ ok: true });
 }));
 
-
-adminRoutes.post('/pedidos/manual', requirePermissao('pedidos'), asyncHandler(async (req, res) => {
+adminRoutes.post('/pedidos/manual', asyncHandler(async (req, res) => {
   const d = z.object({
-    usuario_id: z.string().uuid().nullable().optional(),
+    usuario_id: z.string().uuid().optional().nullable(),
     cliente_nome: z.string().min(2),
     cliente_email: z.string().optional().default(''),
     cliente_telefone: z.string().optional().default(''),
     descricao: z.string().min(3),
+    subtotal: z.number().optional(),
     total: z.number().min(0),
+    valor_entrada: z.number().min(0).optional().default(0),
+    valor_restante: z.number().min(0).optional(),
     status: z.string().optional().default('pendente'),
     status_pagamento: z.string().optional().default('pendente'),
     endereco_entrega: z.string().optional().default('A combinar'),
+    prazo_entrega: z.string().optional().default(''),
+    data_entrega_estimada: z.string().optional().default(''),
     observacoes: z.string().optional().default('Pedido registrado manualmente no painel administrativo.')
   }).parse(req.body);
+
+  const total = Number(d.total || 0);
+  const entrada = Number(d.valor_entrada || 0);
+  const restante = d.valor_restante !== undefined ? Number(d.valor_restante) : Math.max(total - entrada, 0);
+  const statusPagamento = d.status_pagamento || (restante <= 0 && total > 0 ? 'confirmado' : entrada > 0 ? 'parcial' : 'pendente');
+  const prazo = d.prazo_entrega || d.data_entrega_estimada || null;
 
   const pedidos = await supabaseRest<any[]>('/pedidos', {
     method: 'POST',
@@ -272,17 +203,20 @@ adminRoutes.post('/pedidos/manual', requirePermissao('pedidos'), asyncHandler(as
       usuario_id: d.usuario_id || null,
       numero_pedido: `MAN${Date.now()}`,
       status: d.status,
-      subtotal: d.total,
+      subtotal: d.subtotal ?? total,
       frete: 0,
       desconto: 0,
-      total: d.total,
+      total,
+      valor_entrada: entrada,
+      valor_restante: restante,
       metodo_pagamento: 'manual',
-      status_pagamento: d.status_pagamento,
+      status_pagamento: statusPagamento,
       endereco_entrega: d.endereco_entrega,
-      observacoes: d.observacoes,
-      data_entrega_estimada: new Date(Date.now() + 7 * 86400000).toISOString(),
+      observacoes: d.observacoes + '\nDescrição: ' + d.descricao,
+      data_entrega_estimada: prazo,
+      prazo_entrega: prazo,
       cliente_nome: d.cliente_nome,
-      cliente_email: d.cliente_email || '',
+      cliente_email: d.cliente_email,
       cliente_telefone: d.cliente_telefone,
       origem: 'manual',
       created_at: new Date().toISOString(),
@@ -290,89 +224,67 @@ adminRoutes.post('/pedidos/manual', requirePermissao('pedidos'), asyncHandler(as
     })
   });
 
-  const pedido = pedidos[0];
-
-  const produtos = await supabaseRest<any[]>('/produtos?select=id&limit=1').catch(() => []);
-
-  if (produtos[0]?.id) {
-    await supabaseRest('/itens_pedido', {
-      method: 'POST',
-      body: JSON.stringify({
-        pedido_id: pedido.id,
-        produto_id: produtos[0].id,
-        quantidade: 1,
-        preco_unitario: d.total,
-        especificacoes: { descricao: d.descricao },
-        created_at: new Date().toISOString()
-      })
-    }).catch(() => null);
-  }
-
-  res.status(201).json(pedido);
+  res.status(201).json({ ...pedidos[0], prazo_status: prazoStatus(pedidos[0]) });
 }));
 
-adminRoutes.get('/pedidos/:id/recibo', requirePermissao('pedidos'), asyncHandler(async (req, res) => {
-  let pedidoRows = await supabaseRest<any[]>(
-    `/pedidos?select=*&id=eq.${restEq(req.params.id)}&limit=1`
-  );
+adminRoutes.get('/pedidos/:id/recibo', asyncHandler(async (req, res) => {
+  let pedidoRows = await supabaseRest<any[]>(`/pedidos?select=*&id=eq.${restEq(req.params.id)}&limit=1`);
 
   if (!pedidoRows[0]) {
-    pedidoRows = await supabaseRest<any[]>(
-      `/pedidos?select=*&numero_pedido=eq.${restEq(req.params.id)}&limit=1`
-    );
+    pedidoRows = await supabaseRest<any[]>(`/pedidos?select=*&numero_pedido=eq.${restEq(req.params.id)}&limit=1`);
   }
 
   const pedido = pedidoRows[0];
+  if (!pedido) return res.status(404).json({ message: 'Pedido não encontrado.' });
 
-  if (!pedido) {
-    return res.status(404).json({ message: 'Pedido não encontrado.' });
-  }
-
-  const itens = await supabaseRest<any[]>(
-    `/itens_pedido?select=*&pedido_id=eq.${restEq(pedido.id)}`
-  ).catch(() => []);
+  const itens = await supabaseRest<any[]>(`/itens_pedido?select=*&pedido_id=eq.${restEq(pedido.id)}`).catch(() => []);
+  const config = await getConfigMap();
+  const tipoDocumento = pedido.status_pagamento === 'confirmado' ? 'recibo' : 'ordem_servico';
 
   res.json({
-    pedido,
+    pedido: { ...pedido, prazo_status: prazoStatus(pedido) },
     itens,
-    recibo: {
-      empresa: 'Gráfica W Criações',
-      whatsapp: '88 99624-0470',
+    tipo_documento: tipoDocumento,
+    documento: {
+      titulo: tipoDocumento === 'recibo' ? 'Recibo Digital' : 'Ordem de Serviço',
+      empresa: config.nome_empresa || 'Gráfica W Criações',
+      whatsapp: config.whatsapp || '88 99624-0470',
+      logo_url: pedido.logo_documento_url || config.logo_documentos_url || config.logo_site_url || '',
+      assinatura_url: pedido.assinatura_url || config.assinatura_recibo_url || '',
       emitido_em: new Date().toISOString()
     }
   });
 }));
 
 adminRoutes.get('/configuracoes', admin, asyncHandler(async (_req, res) => {
-  const rows = await supabaseRest<any[]>('/configuracoes_site?select=*&order=chave.asc');
-  res.json(rows);
+  res.json(await supabaseRest<any[]>('/configuracoes_site?select=*&order=chave.asc'));
 }));
 
 adminRoutes.put('/configuracoes/:chave', admin, asyncHandler(async (req, res) => {
-  const d = z.object({
-    valor: z.string().default(''),
-    tipo: z.string().optional().default('texto')
-  }).parse(req.body);
-
+  const d = z.object({ valor: z.string().default(''), tipo: z.string().optional().default('texto') }).parse(req.body);
+  const chave = req.params.chave;
   const tipo = ['texto', 'numero', 'booleano', 'json'].includes(d.tipo) ? d.tipo : 'texto';
-  const row = await salvarConfig(req.params.chave, d.valor, tipo);
-  res.json(row);
+
+  const existing = await supabaseRest<any[]>(`/configuracoes_site?select=id&chave=eq.${restEq(chave)}&limit=1`);
+  let rows: any[];
+
+  if (existing[0]) {
+    rows = await supabaseRest<any[]>(`/configuracoes_site?chave=eq.${restEq(chave)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ valor: d.valor, tipo, updated_at: new Date().toISOString() })
+    });
+  } else {
+    rows = await supabaseRest<any[]>('/configuracoes_site', {
+      method: 'POST',
+      body: JSON.stringify({ chave, valor: d.valor, tipo, updated_at: new Date().toISOString() })
+    });
+  }
+
+  res.json(rows[0] || { ok: true });
 }));
 
 adminRoutes.get('/usuarios', admin, asyncHandler(async (_req, res) => {
-  const users = await supabaseRest<any[]>(
-    '/users?select=id,nome,email,telefone,role,created_at&order=created_at.desc&limit=1000'
-  );
-
-  const enriched = await Promise.all(users.map(async (u) => {
-    const permissoes = ['funcionario', 'staff', 'employee'].includes(String(u.role || '').toLowerCase())
-      ? await getFuncionarioPermissoes(u.id)
-      : [];
-
-    return { ...u, permissoes };
-  }));
-
-  res.json(enriched);
+  res.json(await supabaseRest<any[]>('/users?select=id,nome,email,telefone,role,funcionario_permissoes,created_at&order=created_at.desc'));
 }));
 
 adminRoutes.put('/usuarios/:id', admin, asyncHandler(async (req, res) => {
@@ -380,54 +292,19 @@ adminRoutes.put('/usuarios/:id', admin, asyncHandler(async (req, res) => {
     nome: z.string().optional(),
     telefone: z.string().optional(),
     role: z.enum(['user', 'admin', 'funcionario', 'inactive']).optional(),
-    permissoes: z.array(z.string()).optional()
+    funcionario_permissoes: z.array(z.string()).optional().default([])
   }).parse(req.body);
-
-  const payload: any = {
-    updated_at: new Date().toISOString()
-  };
-
-  if (d.nome !== undefined) payload.nome = d.nome;
-  if (d.telefone !== undefined) payload.telefone = d.telefone;
-  if (d.role !== undefined) payload.role = d.role;
 
   const rows = await supabaseRest<any[]>(`/users?id=eq.${restEq(req.params.id)}`, {
     method: 'PATCH',
-    body: JSON.stringify(payload)
+    body: JSON.stringify({
+      ...d,
+      funcionario_permissoes: d.role === 'funcionario' ? d.funcionario_permissoes : [],
+      updated_at: new Date().toISOString()
+    })
   });
-
-  if (d.permissoes) {
-    await salvarConfig(
-      `funcionario_permissoes_${req.params.id}`,
-      JSON.stringify(d.permissoes),
-      'json'
-    );
-  }
 
   res.json(rows[0] || { ok: true });
-}));
-
-adminRoutes.get('/usuarios/:id/permissoes', admin, asyncHandler(async (req, res) => {
-  res.json({
-    permissoes: await getFuncionarioPermissoes(req.params.id),
-    labels: PERMISSION_LABELS
-  });
-}));
-
-adminRoutes.put('/usuarios/:id/permissoes', admin, asyncHandler(async (req, res) => {
-  const d = z.object({
-    permissoes: z.array(z.string()).default([])
-  }).parse(req.body);
-
-  const validas = d.permissoes.filter((p) => Object.keys(PERMISSION_LABELS).includes(p));
-
-  await salvarConfig(
-    `funcionario_permissoes_${req.params.id}`,
-    JSON.stringify(validas),
-    'json'
-  );
-
-  res.json({ ok: true, permissoes: validas });
 }));
 
 adminRoutes.put('/usuarios/:id/redefinir-senha', admin, asyncHandler(async (req, res) => {
@@ -436,10 +313,7 @@ adminRoutes.put('/usuarios/:id/redefinir-senha', admin, asyncHandler(async (req,
 
   await supabaseRest(`/users?id=eq.${restEq(req.params.id)}`, {
     method: 'PATCH',
-    body: JSON.stringify({
-      senha: senhaHash,
-      updated_at: new Date().toISOString()
-    })
+    body: JSON.stringify({ senha: senhaHash, updated_at: new Date().toISOString() })
   });
 
   res.json({ ok: true });
@@ -454,15 +328,11 @@ adminRoutes.get('/cupons', admin, asyncHandler(async (_req, res) => {
   res.json(await supabaseRest<any[]>('/cupons_desconto?select=*&order=created_at.desc'));
 }));
 
-adminRoutes.get('/avaliacoes', requirePermissao('avaliacoes'), asyncHandler(async (_req, res) => {
+adminRoutes.get('/avaliacoes', asyncHandler(async (_req, res) => {
   res.json(await supabaseRest<any[]>('/avaliacoes?select=*&order=created_at.desc'));
 }));
 
-adminRoutes.get('/relatorios/vendas', requirePermissao('relatorios'), asyncHandler(async (_req, res) => {
+adminRoutes.get('/relatorios/vendas', admin, asyncHandler(async (_req, res) => {
   const rows = await supabaseRest<any[]>('/pedidos?select=created_at,total&order=created_at.desc&limit=90');
-  res.json(rows.map((r) => ({
-    data: new Date(r.created_at).toLocaleDateString('pt-BR'),
-    vendas: Number(r.total || 0),
-    pedidos: 1
-  })));
+  res.json(rows.map((r) => ({ data: new Date(r.created_at).toLocaleDateString('pt-BR'), vendas: Number(r.total || 0), pedidos: 1 })));
 }));

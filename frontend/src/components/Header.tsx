@@ -1,20 +1,9 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { ShoppingCart, Menu, X, User } from 'lucide-react';
+import { ShoppingCart, Menu, X, User, LayoutDashboard } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
-import { BRAND } from '../lib/api';
+import { BRAND, WHATSAPP_NUMBER } from '../lib/api';
 import { BottomSheet } from './BottomSheet';
-
-function isStaffRole(role?: string) {
-  return ['admin', 'funcionario', 'staff', 'employee'].includes(String(role || '').toLowerCase());
-}
-
-function panelPath(user: any) {
-  const role = String(user?.role || '').toLowerCase();
-  if (role === 'admin') return '/admin';
-  if (isStaffRole(role)) return '/admin/pedidos';
-  return '/minha-conta';
-}
 
 export function Header() {
   const { cart, user } = useApp();
@@ -22,14 +11,15 @@ export function Header() {
   const location = useLocation();
 
   const cartCount = cart.reduce((sum, item) => sum + item.quantidade, 0);
-  const accountPath = user ? panelPath(user) : '/login';
+  const role = String(user?.role || '').toLowerCase();
+  const isPanelUser = role === 'admin' || role === 'funcionario' || role === 'staff' || role === 'employee';
 
   const navLinks = [
     { to: '/', label: 'Início' },
     { to: '/catalogo', label: 'Catálogo' },
     { to: '/acompanhar', label: 'Acompanhar' },
     { to: '/sobre', label: 'Sobre' },
-    { to: '/contato', label: 'Contato' }
+    { to: '/contato', label: 'Contato' },
   ];
 
   return (
@@ -46,17 +36,29 @@ export function Header() {
           </Link>
 
           <div className="flex items-center gap-3">
-            {user && isStaffRole(user.role) && (
-              <Link to="/admin" className="hidden sm:inline-flex btn btn-outline h-10 px-4">
+            {isPanelUser && (
+              <Link
+                to="/admin"
+                className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl bg-gold/10 text-gold font-bold active:bg-gold/20 transition-colors"
+              >
+                <LayoutDashboard size={18} />
                 Painel
               </Link>
             )}
 
-            <Link to={accountPath} className="p-2.5 rounded-xl bg-gray-50 text-gray-600 active:bg-gray-100 transition-colors" aria-label="Minha conta">
+            <Link
+              to={user ? (isPanelUser ? '/admin' : '/minha-conta') : '/login'}
+              className="p-2.5 rounded-xl bg-gray-50 text-gray-600 active:bg-gray-100 transition-colors"
+              aria-label="Minha conta"
+            >
               <User size={20} />
             </Link>
 
-            <Link to="/carrinho" className="relative p-2.5 rounded-xl bg-primary text-white active:bg-secondary transition-colors" aria-label="Carrinho">
+            <Link
+              to="/carrinho"
+              className="relative p-2.5 rounded-xl bg-primary text-white active:bg-secondary transition-colors"
+              aria-label="Carrinho"
+            >
               <ShoppingCart size={20} />
               {cartCount > 0 && (
                 <span className="absolute -top-1 -right-1 w-5 h-5 bg-gold text-primary text-xs font-bold rounded-full flex items-center justify-center border-2 border-white">
@@ -65,7 +67,11 @@ export function Header() {
               )}
             </Link>
 
-            <button onClick={() => setMenuOpen(true)} className="p-2.5 rounded-xl bg-gray-50 text-gray-600 active:bg-gray-100 transition-colors sm:hidden" aria-label="Abrir menu">
+            <button
+              onClick={() => setMenuOpen(true)}
+              className="p-2.5 rounded-xl bg-gray-50 text-gray-600 active:bg-gray-100 transition-colors sm:hidden"
+              aria-label="Abrir menu"
+            >
               <Menu size={20} />
             </button>
           </div>
@@ -80,31 +86,35 @@ export function Header() {
               to={link.to}
               onClick={() => setMenuOpen(false)}
               className={`flex items-center gap-3 px-4 py-3.5 rounded-xl font-semibold transition-colors ${
-                location.pathname === link.to ? 'bg-primary text-white' : 'bg-gray-50 text-gray-700 active:bg-gray-100'
+                location.pathname === link.to
+                  ? 'bg-primary text-white'
+                  : 'bg-gray-50 text-gray-700 active:bg-gray-100'
               }`}
             >
               {link.label}
             </Link>
           ))}
 
+          {isPanelUser && (
+            <Link
+              to="/admin"
+              onClick={() => setMenuOpen(false)}
+              className="flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl font-bold bg-gold/10 text-gold active:bg-gold/20 transition-colors"
+            >
+              Painel Administrativo
+            </Link>
+          )}
+
           <div className="h-px bg-gray-200 my-2" />
 
           <a
-            href={`https://wa.me/${BRAND.whatsappNumber || '5588996240470'}`}
+            href={'https://wa.me/' + WHATSAPP_NUMBER}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl font-bold bg-success text-white active:bg-green-700 transition-colors"
           >
             Chamar no WhatsApp
           </a>
-
-          <Link
-            to={accountPath}
-            onClick={() => setMenuOpen(false)}
-            className="flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl font-bold bg-gold/10 text-gold active:bg-gold/20 transition-colors mt-2"
-          >
-            {user && isStaffRole(user.role) ? 'Voltar ao painel' : 'Minha conta'}
-          </Link>
         </nav>
       </BottomSheet>
     </>

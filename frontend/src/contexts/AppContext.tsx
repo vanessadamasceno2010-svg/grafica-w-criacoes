@@ -1,18 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Product, CartItem } from '../lib/api';
-
-type User = {
-  id: string;
-  nome: string;
-  email: string;
-  telefone?: string;
-  role?: 'admin' | 'user' | 'funcionario' | 'inactive' | string;
-  permissoes?: string[];
-} | null;
+import { Product, CartItem, User } from '../lib/api';
 
 type AppContextType = {
-  user: User;
-  setUser: (user: User) => void;
+  user: User | null;
+  setUser: (user: User | null) => void;
   cart: CartItem[];
   addToCart: (product: Product, quantity: number, specs: Record<string, string>) => void;
   removeFromCart: (productId: string, specs: Record<string, string>) => void;
@@ -22,24 +13,32 @@ type AppContextType = {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-function readStoredUser(): User {
-  const saved = localStorage.getItem('gp_user') || localStorage.getItem('user');
-  if (!saved) return null;
-
-  try {
-    return JSON.parse(saved);
-  } catch {
-    return null;
-  }
-}
-
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User>(() => readStoredUser());
+  const [user, setUserState] = useState<User | null>(() => {
+    const saved = localStorage.getItem('gp_user') || localStorage.getItem('user');
+    if (!saved) return null;
+
+    try {
+      return JSON.parse(saved);
+    } catch {
+      return null;
+    }
+  });
 
   const [cart, setCart] = useState<CartItem[]>(() => {
     const saved = localStorage.getItem('gp_cart');
-    return saved ? JSON.parse(saved) : [];
+    if (!saved) return [];
+
+    try {
+      return JSON.parse(saved);
+    } catch {
+      return [];
+    }
   });
+
+  const setUser = (nextUser: User | null) => {
+    setUserState(nextUser);
+  };
 
   useEffect(() => {
     if (user) {
@@ -67,7 +66,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return updated;
       }
 
-      return [...prev, { ...product, quantidade, especificacoes_selecionadas: specs }];
+      return [
+        ...prev,
+        {
+          id: product.id,
+          produto_id: product.id,
+          nome: product.nome,
+          slug: product.slug,
+          imagem_principal: product.imagem_principal,
+          quantidade,
+          preco_unitario: product.preco,
+          especificacoes_selecionadas: specs
+        }
+      ];
     });
   };
 
@@ -84,6 +95,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       removeFromCart(productId, specs);
       return;
     }
+
     setCart((prev) =>
       prev.map((item) =>
         item.id === productId && JSON.stringify(item.especificacoes_selecionadas) === JSON.stringify(specs)
@@ -93,9 +105,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     );
   };
 
-  const clearCart = () => {
-    setCart([]);
-  };
+  const clearCart = () => setCart([]);
 
   return (
     <AppContext.Provider value={{ user, setUser, cart, addToCart, removeFromCart, updateQuantity, clearCart }}>

@@ -85,6 +85,7 @@ export type User = {
   email: string;
   telefone?: string;
   role?: 'user' | 'admin' | 'funcionario' | 'inactive' | string;
+  funcionario_permissoes?: string[];
 };
 
 export type AuthResponse = {
@@ -100,11 +101,7 @@ export function formatMoney(valor: number | string | null | undefined) {
 }
 
 export function token() {
-  return (
-    localStorage.getItem('token') ||
-    localStorage.getItem('gp_token') ||
-    ''
-  );
+  return localStorage.getItem('token') || localStorage.getItem('gp_token') || '';
 }
 
 export function getAuthToken() {
@@ -126,19 +123,22 @@ export function clearAuthSession() {
 }
 
 export function getStoredUser() {
-  const storedUser =
-    localStorage.getItem('user') ||
-    localStorage.getItem('gp_user');
-
-  if (!storedUser) {
-    return null;
-  }
+  const storedUser = localStorage.getItem('user') || localStorage.getItem('gp_user');
+  if (!storedUser) return null;
 
   try {
     return JSON.parse(storedUser);
   } catch {
     return null;
   }
+}
+
+export function confirmAction(message: string) {
+  return window.confirm(message || 'Confirmar alteração?');
+}
+
+export function notifySuccess(message: string) {
+  window.alert(message || 'Alteração realizada com sucesso.');
 }
 
 export async function apiFetch<T = any>(
@@ -164,7 +164,6 @@ export async function apiFetch<T = any>(
   });
 
   const text = await response.text();
-
   let data: any = null;
 
   try {
@@ -175,20 +174,14 @@ export async function apiFetch<T = any>(
 
   if (!response.ok) {
     throw new Error(
-      data?.message ||
-      data?.error ||
-      data?.details ||
-      'Erro interno do servidor.'
+      data?.message || data?.error || data?.details || 'Erro interno do servidor.'
     );
   }
 
   return data as T;
 }
 
-export async function api<T = any>(
-  path: string,
-  options: RequestInit = {}
-): Promise<T> {
+export async function api<T = any>(path: string, options: RequestInit = {}) {
   return apiFetch<T>(path, options);
 }
 
