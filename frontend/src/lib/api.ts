@@ -174,3 +174,31 @@ export function whatsappUrl(message: string) {
 
 export const mockProducts: Product[] = [];
 export const mockCategories: Category[] = [];
+
+export function setAuthSession(token: string, user: any) {
+  localStorage.setItem('token', token);
+  localStorage.setItem('gp_token', token);
+  localStorage.setItem('user', JSON.stringify(user));
+  localStorage.setItem('gp_user', JSON.stringify(user));
+}
+
+export function clearAuthSession() {
+  localStorage.removeItem('token');
+  localStorage.removeItem('gp_token');
+  localStorage.removeItem('user');
+  localStorage.removeItem('gp_user');
+}
+
+export function getStoredUser() {
+  const user =
+    localStorage.getItem('user') ||
+    localStorage.getItem('gp_user');
+
+  if (!user) return null;
+
+  try {
+    return JSON.parse(user);
+  } catch {
+    return null;
+  }
+}
