@@ -1,47 +1,142 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Search, Eye, Edit2, Trash2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Edit, KeyRound, Trash2, UserPlus } from 'lucide-react';
 import { apiFetch, formatMoney } from '../../lib/api';
-import { BottomSheet } from '../../components/BottomSheet';
 
-export function Clientes() {
-  const [search, setSearch] = useState('');
-  const [clients, setClients] = useState<any[]>([]);
-  const [selected, setSelected] = useState<any>(null);
-  const [edit, setEdit] = useState<any>(null);
+type Cliente = { id: string; nome: string; email: string; telefone?: string; role?: string; total_gasto?: number; pedidos?: number };
+
+export default function Clientes() {
+  const [clientes, setClientes] = useState<Cliente[]>([]);
   const [loading, setLoading] = useState(true);
+  const [modal, setModal] = useState<'novo' | 'editar' | 'senha' | null>(null);
+  const [selecionado, setSelecionado] = useState<Cliente | null>(null);
+  const [form, setForm] = useState({ nome: '', email: '', telefone: '', senha: '' });
 
-  const load = async () => {
+  async function carregar() {
     setLoading(true);
-    try { setClients(await apiFetch<any[]>('/admin/clientes')); }
-    catch (err: any) { alert(err.message); }
-    finally { setLoading(false); }
-  };
-
-  useEffect(() => { load(); }, []);
-
-  const filtered = useMemo(() => clients.filter((c) => String(c.nome || '').toLowerCase().includes(search.toLowerCase()) || String(c.email || '').toLowerCase().includes(search.toLowerCase())), [clients, search]);
-
-  const save = async () => {
     try {
-      await apiFetch(`/admin/clientes/${edit.id}`, { method: 'PUT', body: JSON.stringify({ nome: edit.nome, email: edit.email, telefone: edit.telefone }) });
-      setEdit(null); await load(); alert('Cliente salvo no Supabase.');
-    } catch (err: any) { alert(err.message); }
-  };
+      const data = await apiFetch<Cliente[]>('/admin/clientes');
+      setClientes(Array.isArray(data) ? data : []);
+    } catch (error: any) {
+      alert(error.message || 'Erro ao carregar clientes.');
+    } finally {
+      setLoading(false);
+    }
+  }
 
-  const remove = async (c: any) => {
-    if (!confirm(`Deseja excluir ${c.nome}?`)) return;
-    try { await apiFetch(`/admin/clientes/${c.id}`, { method: 'DELETE' }); await load(); }
-    catch (err: any) { alert(err.message); }
-  };
+  useEffect(() => { carregar(); }, []);
+
+  function abrirNovo() {
+    setSelecionado(null);
+    setForm({ nome: '', email: '', telefone: '', senha: '' });
+    setModal('novo');
+  }
+
+  function abrirEditar(cliente: Cliente) {
+    setSelecionado(cliente);
+    setForm({ nome: cliente.nome || '', email: cliente.email || '', telefone: cliente.telefone || '', senha: '' });
+    setModal('editar');
+  }
+
+  function abrirSenha(cliente: Cliente) {
+    setSelecionado(cliente);
+    setForm({ nome: cliente.nome || '', email: cliente.email || '', telefone: cliente.telefone || '', senha: '' });
+    setModal('senha');
+  }
+
+  async function salvar() {
+    try {
+      if (modal === 'novo') {
+        await apiFetch('/admin/clientes', {
+          method: 'POST',
+          body: JSON.stringify({ nome: form.nome, email: form.email, telefone: form.telefone, senha: form.senha || '12345678', role: 'user' })
+        });
+      }
+      if (modal === 'editar' && selecionado) {
+        await apiFetch('/admin/clientes/' + selecionado.id, {
+          method: 'PUT',
+          body: JSON.stringify({ nome: form.nome, email: form.email, telefone: form.telefone })
+        });
+      }
+      if (modal === 'senha' && selecionado) {
+        if (!form.senha || form.senha.length < 6) return alert('A nova senha precisa ter pelo menos 6 caracteres.');
+        await apiFetch('/admin/clientes/' + selecionado.id + '/redefinir-senha', {
+          method: 'PUT',
+          body: JSON.stringify({ senha: form.senha })
+        });
+      }
+      setModal(null);
+      await carregar();
+    } catch (error: any) {
+      alert(error.message || 'Erro ao salvar.');
+    }
+  }
+
+  async function deletar(cliente: Cliente) {
+    if (!confirm('Deseja excluir este cliente?')) return;
+    try {
+      await apiFetch('/admin/clientes/' + cliente.id, { method: 'DELETE' });
+      await carregar();
+    } catch (error: any) {
+      alert(error.message || 'Erro ao excluir cliente.');
+    }
+  }
 
   return (
-    <div className="fade-in">
-      <h1 className="font-display text-2xl sm:text-3xl font-bold text-primary mb-6">Gerenciador de Clientes</h1>
-      <div className="relative mb-6"><Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={20}/><input className="input pl-11" placeholder="Buscar cliente..." value={search} onChange={(e)=>setSearch(e.target.value)}/></div>
-      {loading && <div className="card p-4 mb-4">Carregando clientes...</div>}
-      <div className="card overflow-hidden"><div className="hidden sm:block overflow-x-auto"><table className="w-full text-sm"><thead className="bg-gray-50 border-b border-gray-200"><tr><th className="text-left px-6 py-4">Nome</th><th className="text-left px-6 py-4">Email</th><th className="text-left px-6 py-4">Telefone</th><th className="text-left px-6 py-4">Total gasto</th><th className="text-right px-6 py-4">Ações</th></tr></thead><tbody className="divide-y divide-gray-100">{filtered.map((c) => <tr key={c.id}><td className="px-6 py-4 font-semibold text-primary">{c.nome}</td><td className="px-6 py-4">{c.email}</td><td className="px-6 py-4">{c.telefone}</td><td className="px-6 py-4 font-bold">{formatMoney(c.total_gasto || 0)}</td><td className="px-6 py-4"><div className="flex justify-end gap-2"><button onClick={()=>setSelected(c)} className="p-2 rounded-lg hover:bg-gray-100"><Eye size={16}/></button><button onClick={()=>setEdit({...c})} className="p-2 rounded-lg hover:bg-blue-50 text-blue-600"><Edit2 size={16}/></button><button onClick={()=>remove(c)} className="p-2 rounded-lg hover:bg-red-50 text-red-600"><Trash2 size={16}/></button></div></td></tr>)}</tbody></table></div><div className="sm:hidden divide-y divide-gray-100">{filtered.map((c) => <div key={c.id} className="p-4"><div className="flex justify-between gap-3"><div className="min-w-0"><h3 className="font-bold text-primary truncate">{c.nome}</h3><p className="text-sm text-gray-500 truncate">{c.email}</p><p className="text-sm text-gray-500">{c.telefone}</p></div></div><p className="mt-3 font-bold text-primary">{formatMoney(c.total_gasto || 0)} em compras</p><div className="grid grid-cols-3 gap-2 mt-4"><button onClick={()=>setSelected(c)} className="btn btn-outline"><Eye size={16}/>Ver</button><button onClick={()=>setEdit({...c})} className="btn btn-outline"><Edit2 size={16}/>Editar</button><button onClick={()=>remove(c)} className="btn btn-danger"><Trash2 size={16}/>Excluir</button></div></div>)}</div></div>
-      <BottomSheet isOpen={!!selected} onClose={()=>setSelected(null)} title="Detalhes do Cliente">{selected && <div className="space-y-3"><p><b>Nome:</b> {selected.nome}</p><p><b>Email:</b> {selected.email}</p><p><b>Telefone:</b> {selected.telefone}</p><p><b>Pedidos:</b> {selected.pedidos}</p><p><b>Total gasto:</b> {formatMoney(selected.total_gasto || 0)}</p><button className="btn btn-primary w-full" onClick={()=>{setEdit({...selected});setSelected(null)}}>Editar cliente</button></div>}</BottomSheet>
-      <BottomSheet isOpen={!!edit} onClose={()=>setEdit(null)} title="Editar Cliente">{edit && <div className="space-y-4"><input className="input" value={edit.nome || ''} onChange={(e)=>setEdit({...edit,nome:e.target.value})}/><input className="input" value={edit.email || ''} onChange={(e)=>setEdit({...edit,email:e.target.value})}/><input className="input" value={edit.telefone || ''} onChange={(e)=>setEdit({...edit,telefone:e.target.value})}/><button className="btn btn-primary w-full" onClick={save}>Salvar cliente no Supabase</button></div>}</BottomSheet>
+    <div className="p-4 md:p-8">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-3xl font-black text-slate-950">Clientes</h1>
+          <p className="text-slate-500">Cadastro, email de login e redefinição de senha.</p>
+        </div>
+        <button onClick={abrirNovo} className="h-12 px-5 rounded-2xl bg-amber-400 text-slate-950 font-black flex items-center justify-center gap-2"><UserPlus size={18} />Novo Cliente</button>
+      </div>
+
+      {loading ? <div className="bg-white rounded-3xl p-6 shadow-sm">Carregando clientes...</div> : (
+        <div className="grid gap-4">
+          {clientes.map((cliente) => (
+            <div key={cliente.id} className="bg-white rounded-3xl border border-slate-100 shadow-sm p-5">
+              <div className="grid md:grid-cols-[1fr_auto] gap-4">
+                <div>
+                  <h3 className="font-black text-lg text-slate-950">{cliente.nome}</h3>
+                  <p className="text-slate-600">{cliente.email}</p>
+                  <p className="text-slate-500">{cliente.telefone || 'Sem telefone'}</p>
+                  <div className="mt-2 flex flex-wrap gap-2 text-sm">
+                    <span className="px-3 py-1 rounded-full bg-slate-100 font-bold">Perfil: {cliente.role || 'user'}</span>
+                    <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 font-bold">Total: {formatMoney(cliente.total_gasto || 0)}</span>
+                    <span className="px-3 py-1 rounded-full bg-blue-50 text-blue-700 font-bold">Pedidos: {cliente.pedidos || 0}</span>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <button onClick={() => abrirEditar(cliente)} className="h-11 px-4 rounded-xl bg-slate-100 font-bold flex items-center justify-center gap-2"><Edit size={16} />Editar</button>
+                  <button onClick={() => abrirSenha(cliente)} className="h-11 px-4 rounded-xl bg-amber-100 text-amber-800 font-bold flex items-center justify-center gap-2"><KeyRound size={16} />Senha</button>
+                  <button onClick={() => deletar(cliente)} className="h-11 px-4 rounded-xl bg-red-50 text-red-700 font-bold flex items-center justify-center gap-2"><Trash2 size={16} />Excluir</button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {modal && (
+        <div className="fixed inset-0 z-[80] bg-black/50 flex items-end md:items-center justify-center p-4">
+          <div className="w-full max-w-lg bg-white rounded-t-3xl md:rounded-3xl p-6 shadow-2xl">
+            <h2 className="text-2xl font-black mb-4">{modal === 'novo' ? 'Novo Cliente' : modal === 'editar' ? 'Editar Cliente' : 'Redefinir Senha'}</h2>
+            {modal !== 'senha' && (
+              <>
+                <label className="block mb-3"><span className="text-sm font-bold text-slate-700">Nome</span><input className="mt-1 w-full h-12 rounded-2xl border px-4" value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} /></label>
+                <label className="block mb-3"><span className="text-sm font-bold text-slate-700">Email para login</span><input type="email" className="mt-1 w-full h-12 rounded-2xl border px-4" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></label>
+                <label className="block mb-3"><span className="text-sm font-bold text-slate-700">Telefone</span><input className="mt-1 w-full h-12 rounded-2xl border px-4" value={form.telefone} onChange={(e) => setForm({ ...form, telefone: e.target.value })} /></label>
+              </>
+            )}
+            {modal === 'novo' && <label className="block mb-3"><span className="text-sm font-bold text-slate-700">Senha inicial</span><input type="password" className="mt-1 w-full h-12 rounded-2xl border px-4" value={form.senha} onChange={(e) => setForm({ ...form, senha: e.target.value })} placeholder="Opcional: padrão 12345678" /></label>}
+            {modal === 'senha' && <label className="block mb-3"><span className="text-sm font-bold text-slate-700">Nova senha para {selecionado?.nome}</span><input type="password" className="mt-1 w-full h-12 rounded-2xl border px-4" value={form.senha} onChange={(e) => setForm({ ...form, senha: e.target.value })} placeholder="Digite a nova senha" /></label>}
+            <div className="grid grid-cols-2 gap-3 mt-5">
+              <button onClick={() => setModal(null)} className="h-12 rounded-2xl bg-slate-100 font-black">Cancelar</button>
+              <button onClick={salvar} className="h-12 rounded-2xl bg-amber-400 text-slate-950 font-black">Salvar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
