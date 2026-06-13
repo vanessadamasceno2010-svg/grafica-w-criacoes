@@ -1,0 +1,10 @@
+import { useState } from 'react';
+import { Plus, Edit2, Trash2 } from 'lucide-react';
+import { BottomSheet } from '../../components/BottomSheet';
+
+export function Cupons() {
+  const [items, setItems] = useState([{id:'1', codigo:'PRIMEIRA10', valor:'10%', status:'Ativo'}, {id:'2', codigo:'FRETE15', valor:'R$ 15', status:'Ativo'}]);
+  const [edit, setEdit] = useState<any>(null);
+  const save = () => { if (items.some(i => i.id === edit.id)) setItems(items.map(i => i.id === edit.id ? edit : i)); else setItems([{...edit, id:String(Date.now()), status:'Ativo'}, ...items]); setEdit(null); alert('Cupom salvo.'); };
+  return <div className="fade-in"><div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6"><h1 className="font-display text-2xl sm:text-3xl font-bold text-primary">Gerenciador de Cupons</h1><button className="btn btn-primary" onClick={()=>setEdit({codigo:'',valor:''})}><Plus size={18}/>Novo Cupom</button></div><div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">{items.map(c=><div className="card p-4" key={c.id}><h3 className="font-bold text-primary">{c.codigo}</h3><p className="text-gray-500 mt-1">Desconto: {c.valor}</p><span className="badge bg-success/10 text-success mt-3">{c.status}</span><div className="grid grid-cols-2 gap-2 mt-4"><button className="btn btn-outline" onClick={()=>setEdit({...c})}><Edit2 size={16}/>Editar</button><button className="btn btn-danger" onClick={()=>{ if(confirm('Deletar cupom?')) setItems(items.filter(i=>i.id!==c.id)); }}><Trash2 size={16}/>Deletar</button></div></div>)}</div><BottomSheet isOpen={!!edit} onClose={()=>setEdit(null)} title="Cupom">{edit && <div className="space-y-4"><input className="input" placeholder="Código" value={edit.codigo} onChange={(e)=>setEdit({...edit,codigo:e.target.value})}/><input className="input" placeholder="Valor" value={edit.valor} onChange={(e)=>setEdit({...edit,valor:e.target.value})}/><button className="btn btn-primary w-full" onClick={save}>Salvar cupom</button></div>}</BottomSheet></div>;
+}

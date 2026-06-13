@@ -1,0 +1,4 @@
+export function Contatos() {
+  const items = Array.from({length: 6}, (_, i) => ({ nome: `Lead ${i+1}`, email: `lead${i+1}@email.com`, assunto: 'Orçamento', status: i % 2 ? 'Respondido' : 'Pendente' }));
+  return <div className="fade-in"><h1 className="font-display text-2xl sm:text-3xl font-bold text-primary mb-6">Gerenciador de Contatos</h1><div className="grid sm:grid-cols-2 gap-4">{items.map((c)=><div className="card p-4" key={c.email}><div className="flex justify-between gap-3"><div><h3 className="font-bold text-primary">{c.nome}</h3><p className="text-sm text-gray-500">{c.email}</p></div><span className={`badge ${c.status === 'Pendente' ? 'bg-yellow-100 text-yellow-700' : 'bg-success/10 text-success'}`}>{c.status}</span></div><p className="mt-3 text-gray-700">Assunto: {c.assunto}</p><button className="btn btn-primary w-full mt-4" onClick={()=>alert('Mensagem aberta.')}>Ver mensagem</button></div>)}</div></div>;
+}
