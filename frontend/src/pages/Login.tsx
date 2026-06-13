@@ -4,7 +4,7 @@ import { Lock, Mail, ShieldCheck, UserPlus } from 'lucide-react';
 import { apiFetch, setAuthSession } from '../lib/api';
 import { useApp } from '../contexts/AppContext';
 
-export default function Login() {
+export function Login() {
   const navigate = useNavigate();
   const { setUser } = useApp();
   const [mode, setMode] = useState<'login' | 'cadastro'>('login');

@@ -21,7 +21,6 @@ import { Categorias } from './pages/admin/Categorias';
 import { Configuracoes } from './pages/admin/Configuracoes';
 import { Cupons } from './pages/admin/Cupons';
 import { Avaliacoes } from './pages/admin/Avaliacoes';
-import { Contatos } from './pages/admin/Contatos';
 import { Relatorios } from './pages/admin/Relatorios';
 import { Usuarios } from './pages/admin/Usuarios';
 
@@ -52,7 +51,6 @@ function App() {
             <Route path="cupons" element={<Cupons />} />
             <Route path="avaliacoes" element={<Avaliacoes />} />
             <Route path="configuracoes" element={<Configuracoes />} />
-            <Route path="contatos" element={<Contatos />} />
             <Route path="relatorios" element={<Relatorios />} />
             <Route path="usuarios" element={<Usuarios />} />
           </Route>

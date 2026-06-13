@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { auth, admin } from '../middleware/auth.js';
+import { auth, admin, staff } from '../middleware/auth.js';
 import { asyncHandler, HttpError } from '../utils/http.js';
 import { restEq, slugify, supabaseRest } from '../lib/supabaseRest.js';
 
@@ -154,7 +154,7 @@ const productSchema = z.object({
   ativo: z.boolean().optional().default(true)
 });
 
-catalogRoutes.post('/produtos', auth, admin, asyncHandler(async (req, res) => {
+catalogRoutes.post('/produtos', auth, staff, asyncHandler(async (req, res) => {
   const p = productSchema.parse(req.body);
 
   const rows = await supabaseRest<any[]>('/produtos', {
@@ -179,7 +179,7 @@ catalogRoutes.post('/produtos', auth, admin, asyncHandler(async (req, res) => {
   res.status(201).json(rows[0]);
 }));
 
-catalogRoutes.put('/produtos/:id', auth, admin, asyncHandler(async (req, res) => {
+catalogRoutes.put('/produtos/:id', auth, staff, asyncHandler(async (req, res) => {
   const p = productSchema.partial().parse(req.body);
   const payload: any = { ...p, updated_at: new Date().toISOString() };
 
@@ -193,7 +193,7 @@ catalogRoutes.put('/produtos/:id', auth, admin, asyncHandler(async (req, res) =>
   res.json(rows[0] || { ok: true });
 }));
 
-catalogRoutes.delete('/produtos/:id', auth, admin, asyncHandler(async (req, res) => {
+catalogRoutes.delete('/produtos/:id', auth, staff, asyncHandler(async (req, res) => {
   const id = req.params.id;
 
   await supabaseRest(`/itens_pedido?produto_id=eq.${restEq(id)}`, { method: 'DELETE' }).catch(() => null);

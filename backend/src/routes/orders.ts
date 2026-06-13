@@ -1,13 +1,13 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { auth, admin } from '../middleware/auth.js';
+import { auth, staff } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/http.js';
 import { restEq, supabaseRest } from '../lib/supabaseRest.js';
 
 export const orderRoutes = Router();
 
 function canSeeAll(req: any) {
-  return req.user?.role === 'admin';
+  return ['admin', 'funcionario', 'staff', 'employee'].includes(String(req.user?.role || '').toLowerCase());
 }
 
 orderRoutes.get('/pedidos', auth, asyncHandler(async (req, res) => {
@@ -82,7 +82,7 @@ orderRoutes.post('/pedidos', auth, asyncHandler(async (req, res) => {
   res.status(201).json(pedido);
 }));
 
-orderRoutes.put('/pedidos/:id', auth, admin, asyncHandler(async (req, res) => {
+orderRoutes.put('/pedidos/:id', auth, staff, asyncHandler(async (req, res) => {
   const d = z.object({
     status: z.string().optional(),
     status_pagamento: z.string().optional(),

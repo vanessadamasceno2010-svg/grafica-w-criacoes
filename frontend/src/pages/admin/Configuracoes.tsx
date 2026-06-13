@@ -14,7 +14,7 @@ const campos = [
   { chave: 'termos', label: 'Termos de uso', tipo: 'textarea' }
 ];
 
-export default function Configuracoes() {
+export function Configuracoes() {
   const [dados, setDados] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [salvando, setSalvando] = useState(false);

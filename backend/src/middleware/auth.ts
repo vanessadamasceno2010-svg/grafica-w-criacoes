@@ -3,10 +3,12 @@ import jwt from 'jsonwebtoken';
 import { config } from '../config.js';
 import { HttpError } from '../utils/http.js';
 
+export type UserRole = 'user' | 'admin' | 'funcionario' | 'inactive' | string;
+
 export type AuthUser = {
   id: string;
   email: string;
-  role: 'user' | 'admin';
+  role: UserRole;
   nome?: string;
 };
 
@@ -24,7 +26,7 @@ export function signToken(user: AuthUser): string {
   const payload = {
     id: user.id,
     email: user.email,
-    role: user.role,
+    role: user.role || 'user',
     nome: user.nome || ''
   };
 
@@ -42,13 +44,12 @@ export function auth(req: Request, _res: Response, next: NextFunction) {
 
   try {
     const token = header.replace('Bearer ', '').trim();
-
     const decoded = jwt.verify(token, JWT_SECRET) as AuthUser;
 
     req.user = {
       id: decoded.id,
       email: decoded.email,
-      role: decoded.role,
+      role: decoded.role || 'user',
       nome: decoded.nome || ''
     };
 
@@ -63,8 +64,22 @@ export function admin(req: Request, _res: Response, next: NextFunction) {
     throw new HttpError(401, 'Usuário não autenticado.');
   }
 
-  if (req.user.role !== 'admin') {
+  if (String(req.user.role).toLowerCase() !== 'admin') {
     throw new HttpError(403, 'Acesso restrito ao administrador.');
+  }
+
+  return next();
+}
+
+export function staff(req: Request, _res: Response, next: NextFunction) {
+  if (!req.user) {
+    throw new HttpError(401, 'Usuário não autenticado.');
+  }
+
+  const role = String(req.user.role || '').toLowerCase();
+
+  if (!['admin', 'funcionario', 'staff', 'employee'].includes(role)) {
+    throw new HttpError(403, 'Acesso restrito ao painel.');
   }
 
   return next();
@@ -72,4 +87,5 @@ export function admin(req: Request, _res: Response, next: NextFunction) {
 
 export const authMiddleware = auth;
 export const adminMiddleware = admin;
+export const staffMiddleware = staff;
 export const generateToken = signToken;

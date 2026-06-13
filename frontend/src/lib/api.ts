@@ -1,4 +1,3 @@
-```ts
 export const API_BASE =
   import.meta.env.VITE_API_URL || 'https://grafica-w-criacoes-backend.vercel.app/api';
 
@@ -11,6 +10,7 @@ export const BRAND = {
   name: 'Gráfica W Criações',
   phone: '(88) 99624-0470',
   whatsapp: '88 99624-0470',
+  whatsappNumber: WHATSAPP_NUMBER,
   slogan: 'Pequeno por fora, gigante na divulgação!'
 };
 
@@ -298,4 +298,3 @@ export function slugify(text: string) {
 
 export const mockProducts: Product[] = [];
 export const mockCategories: Category[] = [];
-```

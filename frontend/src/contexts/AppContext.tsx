@@ -5,7 +5,7 @@ type User = {
   id: string;
   nome: string;
   email: string;
-  role: 'admin' | 'user';
+  role: 'admin' | 'user' | 'funcionario' | 'inactive' | string;
 } | null;
 
 type AppContextType = {
@@ -22,7 +22,7 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User>(() => {
-    const saved = localStorage.getItem('gp_user');
+    const saved = localStorage.getItem('gp_user') || localStorage.getItem('user');
     return saved ? JSON.parse(saved) : null;
   });
 
@@ -36,6 +36,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       localStorage.setItem('gp_user', JSON.stringify(user));
     } else {
       localStorage.removeItem('gp_user');
+      localStorage.removeItem('user');
     }
   }, [user]);
 
