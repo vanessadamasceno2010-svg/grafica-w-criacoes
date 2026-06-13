@@ -87,6 +87,9 @@ adminRoutes.get('/dashboard', asyncHandler(async (req, res) => {
 
   const vendasMes = pedidosMes.reduce((sum, p) => sum + Number(p.total || 0), 0);
   const vendasPeriodo = filtered.reduce((sum, p) => sum + Number(p.total || 0), 0);
+  const valorRecebidoPeriodo = filtered.reduce((sum, p) => sum + Number(p.valor_entrada || 0), 0);
+  const valorAReceberPeriodo = filtered.reduce((sum, p) => sum + Number(p.valor_restante || Math.max(Number(p.total || 0) - Number(p.valor_entrada || 0), 0)), 0);
+  const valorAReceberGeral = pedidos.reduce((sum, p) => sum + Number(p.valor_restante || Math.max(Number(p.total || 0) - Number(p.valor_entrada || 0), 0)), 0);
 
   res.json({
     vendasMes,
@@ -101,6 +104,9 @@ adminRoutes.get('/dashboard', asyncHandler(async (req, res) => {
     filtro: {
       totalPedidos: filtered.length,
       vendasPeriodo,
+      valorRecebidoPeriodo,
+      valorAReceberPeriodo,
+      valorAReceberGeral,
       atrasados: filtered.filter((p) => prazoStatus(p) === 'atrasado').length,
       atencao: filtered.filter((p) => prazoStatus(p) === 'atenção').length,
       noPrazo: filtered.filter((p) => prazoStatus(p) === 'no_prazo').length
@@ -225,6 +231,45 @@ adminRoutes.post('/pedidos/manual', asyncHandler(async (req, res) => {
   });
 
   res.status(201).json({ ...pedidos[0], prazo_status: prazoStatus(pedidos[0]) });
+}));
+
+
+adminRoutes.put('/pedidos/:id', asyncHandler(async (req, res) => {
+  const d = z.object({
+    status: z.string().optional(),
+    status_pagamento: z.string().optional(),
+    observacoes: z.string().optional(),
+    valor_entrada: z.number().optional(),
+    prazo_entrega: z.string().optional(),
+    data_entrega_estimada: z.string().optional(),
+    assinatura_url: z.string().optional(),
+    logo_documento_url: z.string().optional()
+  }).parse(req.body);
+
+  const atualRows = await supabaseRest<any[]>(`/pedidos?select=id,total&id=eq.${restEq(req.params.id)}&limit=1`);
+
+  const pedidoAtual = atualRows[0] || {};
+  const total = Number(pedidoAtual.total || 0);
+  const entrada = Number(d.valor_entrada || 0);
+  const valor_restante = Math.max(total - entrada, 0);
+  const status_pagamento = d.status_pagamento || (total > 0 && valor_restante <= 0 ? 'confirmado' : entrada > 0 ? 'parcial' : 'pendente');
+
+  const payload: any = {
+    ...d,
+    valor_entrada: entrada,
+    valor_restante,
+    status_pagamento,
+    data_entrega_estimada: d.data_entrega_estimada || d.prazo_entrega || null,
+    prazo_entrega: d.prazo_entrega || d.data_entrega_estimada || null,
+    updated_at: new Date().toISOString()
+  };
+
+  const rows = await supabaseRest<any[]>(`/pedidos?id=eq.${restEq(req.params.id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload)
+  });
+
+  res.json(rows[0] ? { ...rows[0], prazo_status: prazoStatus(rows[0]) } : { ok: true });
 }));
 
 adminRoutes.get('/pedidos/:id/recibo', asyncHandler(async (req, res) => {

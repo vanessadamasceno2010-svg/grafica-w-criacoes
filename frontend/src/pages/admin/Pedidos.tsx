@@ -114,6 +114,19 @@ export function Pedidos() {
     setNewOrder(next);
   }
 
+
+  function updateSelectedEntrada(value: string) {
+    const total = Number(selectedOrder?.total || 0);
+    const entrada = Number(String(value).replace(',', '.')) || 0;
+    const restante = Math.max(total - entrada, 0);
+    setSelectedOrder({
+      ...selectedOrder,
+      valor_entrada: value,
+      valor_restante: restante,
+      status_pagamento: total > 0 && restante <= 0 ? 'confirmado' : entrada > 0 ? 'parcial' : 'pendente'
+    });
+  }
+
   const createOrder = async () => {
     if (!newOrder.client || !newOrder.description) return alert('Informe cliente e descrição.');
     if (!confirmAction('Confirmar criação deste pedido?')) return;
@@ -158,8 +171,7 @@ export function Pedidos() {
           status: selectedOrder.status,
           status_pagamento: selectedOrder.status_pagamento,
           observacoes: selectedOrder.observacoes || '',
-          valor_entrada: Number(selectedOrder.valor_entrada || 0),
-          valor_restante: Number(selectedOrder.valor_restante || 0),
+          valor_entrada: Number(String(selectedOrder.valor_entrada || 0).replace(',', '.')) || 0,
           prazo_entrega: selectedOrder.prazo_entrega || selectedOrder.data_entrega_estimada || '',
           data_entrega_estimada: selectedOrder.prazo_entrega || selectedOrder.data_entrega_estimada || '',
           assinatura_url: selectedOrder.assinatura_url || '',
@@ -273,7 +285,7 @@ export function Pedidos() {
           <p><b>Pedido:</b> {selectedOrder.numero_pedido}</p>
           <p><b>Cliente:</b> {selectedOrder.cliente_nome || selectedOrder.cliente_email}</p>
           <p><b>Total:</b> {formatMoney(selectedOrder.total)}</p>
-          <div className="grid sm:grid-cols-2 gap-3"><input className="input" placeholder="Entrada R$" value={selectedOrder.valor_entrada || ''} onChange={(e)=>setSelectedOrder({...selectedOrder,valor_entrada:e.target.value})}/><input className="input" placeholder="Restante R$" value={selectedOrder.valor_restante || ''} onChange={(e)=>setSelectedOrder({...selectedOrder,valor_restante:e.target.value})}/></div>
+          <div className="grid sm:grid-cols-2 gap-3"><label><span className="text-sm font-bold text-gray-600">Valor pago / entrada</span><input className="input mt-1" placeholder="Entrada R$" value={selectedOrder.valor_entrada || ''} onChange={(e)=>updateSelectedEntrada(e.target.value)}/></label><label><span className="text-sm font-bold text-gray-600">Restante automático</span><input className="input mt-1 bg-gray-50" readOnly value={formatMoney(Math.max(Number(selectedOrder.total || 0) - (Number(String(selectedOrder.valor_entrada || 0).replace(',', '.')) || 0), 0))}/></label></div>
           <label className="block"><span className="text-sm font-bold text-gray-600">Prazo de entrega</span><input type="date" className="input mt-1" value={(selectedOrder.prazo_entrega || selectedOrder.data_entrega_estimada || '').slice(0,10)} onChange={(e)=>setSelectedOrder({...selectedOrder,prazo_entrega:e.target.value,data_entrega_estimada:e.target.value})}/></label>
           <select className="input" value={selectedOrder.status} onChange={(e)=>setSelectedOrder({...selectedOrder,status:e.target.value})}>{Object.entries(statusLabels).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select>
           <select className="input" value={selectedOrder.status_pagamento || 'pendente'} onChange={(e)=>setSelectedOrder({...selectedOrder,status_pagamento:e.target.value})}><option value="pendente">Pagamento pendente</option><option value="parcial">Pagamento parcial</option><option value="confirmado">Pagamento confirmado</option><option value="recusado">Pagamento recusado</option></select>
@@ -292,7 +304,7 @@ export function Pedidos() {
           <input className="input" placeholder="Email" value={newOrder.email} onChange={(e)=>setNewOrder({...newOrder,email:e.target.value})}/>
           <input className="input" placeholder="Telefone" value={newOrder.phone} onChange={(e)=>setNewOrder({...newOrder,phone:e.target.value})}/>
           <textarea className="input min-h-24" placeholder="Descrição do pedido" value={newOrder.description} onChange={(e)=>setNewOrder({...newOrder,description:e.target.value})}/>
-          <div className="grid sm:grid-cols-3 gap-3"><input className="input" placeholder="Total R$" value={newOrder.total} onChange={(e)=>updateMoney('total',e.target.value)}/><input className="input" placeholder="Entrada R$" value={newOrder.entrada} onChange={(e)=>updateMoney('entrada',e.target.value)}/><input className="input" placeholder="Resta R$" value={newOrder.restante} onChange={(e)=>setNewOrder({...newOrder,restante:e.target.value})}/></div>
+          <div className="grid sm:grid-cols-3 gap-3"><input className="input" placeholder="Total R$" value={newOrder.total} onChange={(e)=>updateMoney('total',e.target.value)}/><input className="input" placeholder="Entrada R$" value={newOrder.entrada} onChange={(e)=>updateMoney('entrada',e.target.value)}/><input className="input bg-gray-50" placeholder="Resta automático" readOnly value={formatMoney(Math.max((Number(String(newOrder.total).replace(',', '.')) || 0) - (Number(String(newOrder.entrada).replace(',', '.')) || 0), 0))}/></div>
           <label className="block"><span className="text-sm font-bold text-gray-600">Prazo de entrega</span><input type="date" className="input mt-1" value={newOrder.prazo} onChange={(e)=>setNewOrder({...newOrder,prazo:e.target.value})}/></label>
           <button className="btn btn-primary w-full" onClick={createOrder}>Salvar pedido no Supabase</button>
         </div>}

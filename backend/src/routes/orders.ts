@@ -116,17 +116,28 @@ orderRoutes.put('/pedidos/:id', auth, staff, asyncHandler(async (req, res) => {
     status_pagamento: z.string().optional(),
     observacoes: z.string().optional(),
     valor_entrada: z.number().optional(),
-    valor_restante: z.number().optional(),
     prazo_entrega: z.string().optional(),
     data_entrega_estimada: z.string().optional(),
     assinatura_url: z.string().optional(),
     logo_documento_url: z.string().optional()
   }).parse(req.body);
 
+  const atualRows = await supabaseRest<any[]>(`/pedidos?select=id,total&id=eq.${restEq(req.params.id)}&limit=1`);
+  const pedidoAtual = atualRows[0] || {};
+  const total = Number(pedidoAtual.total || 0);
+  const entrada = Number(d.valor_entrada || 0);
+  const valor_restante = Math.max(total - entrada, 0);
+  const status_pagamento = d.status_pagamento || (total > 0 && valor_restante <= 0 ? 'confirmado' : entrada > 0 ? 'parcial' : 'pendente');
+
   const rows = await supabaseRest<any[]>(`/pedidos?id=eq.${restEq(req.params.id)}`, {
     method: 'PATCH',
     body: JSON.stringify({
       ...d,
+      valor_entrada: entrada,
+      valor_restante,
+      status_pagamento,
+      data_entrega_estimada: d.data_entrega_estimada || d.prazo_entrega || null,
+      prazo_entrega: d.prazo_entrega || d.data_entrega_estimada || null,
       updated_at: new Date().toISOString()
     })
   });
