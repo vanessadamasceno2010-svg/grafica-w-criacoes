@@ -18,12 +18,33 @@ app.disable('x-powered-by');
 
 app.use(helmet());
 
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'https://grafica-w-criacoes-frontend.vercel.app',
+  process.env.FRONTEND_URL
+].filter(Boolean);
+
 app.use(
   cors({
-    origin: config.frontendUrl || '*',
-    credentials: true
+    origin: function (origin, callback) {
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(null, true);
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
   })
 );
+
+app.options('*', cors());
 
 app.use(
   rateLimit({
