@@ -17,6 +17,23 @@ catalogRoutes.post('/categorias', auth, admin, asyncHandler(async (req, res) => 
   res.status(201).json(rows[0]);
 }));
 
+
+catalogRoutes.put('/categorias/:id', auth, admin, asyncHandler(async (req, res) => {
+  const data = z.object({ nome: z.string().optional(), descricao: z.string().optional(), slug: z.string().optional(), imagem_url: z.string().optional(), ordem: z.number().optional(), ativo: z.boolean().optional() }).parse(req.body);
+  const keys = Object.keys(data);
+  if (!keys.length) return res.json({ ok: true });
+  const sets = keys.map((k, i) => `${k}=$${i + 1}`).join(', ');
+  const values = keys.map((k) => (data as any)[k]);
+  values.push(req.params.id);
+  const { rows } = await query(`update categorias set ${sets}, updated_at=now() where id=$${values.length} returning *`, values);
+  res.json(rows[0]);
+}));
+
+catalogRoutes.delete('/categorias/:id', auth, admin, asyncHandler(async (req, res) => {
+  await query('update categorias set ativo=false, updated_at=now() where id=$1', [req.params.id]);
+  res.json({ ok: true });
+}));
+
 catalogRoutes.get('/produtos', asyncHandler(async (req, res) => {
   const page = Math.max(Number(req.query.page || 1), 1);
   const limit = Math.min(Math.max(Number(req.query.limit || 12), 1), 50);

@@ -24,6 +24,24 @@ adminRoutes.get('/clientes', asyncHandler(async (_req, res) => {
   res.json(rows);
 }));
 
+
+
+adminRoutes.put('/clientes/:id', asyncHandler(async (req, res) => {
+  const d = z.object({ nome: z.string().min(2).optional(), email: z.string().email().optional(), telefone: z.string().optional() }).parse(req.body);
+  const keys = Object.keys(d);
+  if (!keys.length) return res.json({ ok: true });
+  const sets = keys.map((k, i) => `${k}=$${i + 1}`).join(', ');
+  const values = keys.map((k) => (d as any)[k]);
+  values.push(req.params.id);
+  const { rows } = await query(`update users set ${sets}, updated_at=now() where id=$${values.length} and role='user' returning id,nome,email,telefone,created_at`, values);
+  res.json(rows[0]);
+}));
+
+adminRoutes.delete('/clientes/:id', asyncHandler(async (req, res) => {
+  await query("update users set role='inactive', updated_at=now() where id=$1 and role='user'", [req.params.id]);
+  res.json({ ok: true });
+}));
+
 adminRoutes.get('/cupons', asyncHandler(async (_req,res)=>{ const {rows}=await query('select * from cupons_desconto order by created_at desc'); res.json(rows); }));
 adminRoutes.post('/cupons', asyncHandler(async (req,res)=>{ const d=z.object({codigo:z.string(),descricao:z.string(),tipo:z.enum(['percentual','fixo']),valor:z.number(),uso_maximo:z.number().int(),data_inicio:z.string(),data_fim:z.string(),ativo:z.boolean().default(true)}).parse(req.body); const {rows}=await query('insert into cupons_desconto(codigo,descricao,tipo,valor,uso_maximo,data_inicio,data_fim,ativo) values($1,$2,$3,$4,$5,$6,$7,$8) returning *',[d.codigo,d.descricao,d.tipo,d.valor,d.uso_maximo,d.data_inicio,d.data_fim,d.ativo]); res.status(201).json(rows[0]); }));
 
