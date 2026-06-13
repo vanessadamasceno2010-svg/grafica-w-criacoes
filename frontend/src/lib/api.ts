@@ -202,3 +202,40 @@ export function getStoredUser() {
     return null;
   }
 }
+export function normalizeProduct(product: any): Product {
+  return {
+    id: product.id || '',
+    nome: product.nome || '',
+    slug: product.slug || '',
+    descricao: product.descricao || '',
+    descricao_longa: product.descricao_longa || '',
+    preco: Number(product.preco || 0),
+    preco_original: product.preco_original ? Number(product.preco_original) : null,
+    estoque: Number(product.estoque || 0),
+    imagem_principal: product.imagem_principal || '',
+    imagens_adicionais: Array.isArray(product.imagens_adicionais)
+      ? product.imagens_adicionais
+      : [],
+    especificacoes:
+      product.especificacoes && typeof product.especificacoes === 'object'
+        ? product.especificacoes
+        : {},
+    destaque: Boolean(product.destaque),
+    tempo_producao: Number(product.tempo_producao || 3),
+    categoria_id: product.categoria_id || '',
+    categoria_nome: product.categoria_nome || 'Sem categoria',
+    avaliacao_media: Number(product.avaliacao_media || 5),
+    avaliacoes_total: Number(product.avaliacoes_total || 0)
+  };
+}
+
+export function normalizeCategory(category: any): Category {
+  return {
+    id: category.id || '',
+    nome: category.nome || '',
+    slug: category.slug || '',
+    descricao: category.descricao || '',
+    imagem_url: category.imagem_url || '',
+    ativo: category.ativo !== false
+  };
+}
