@@ -21,6 +21,13 @@ const loginSchema = z.object({
 
 authRoutes.get('/db-test', async (_req, res) => {
   try {
+    if (!hasDatabaseUrl()) {
+      return res.status(500).json({
+        ok: false,
+        message: 'DATABASE_URL não está configurada no backend da Vercel.'
+      });
+    }
+
     const result = await query('select now() as agora');
 
     return res.json({
@@ -28,6 +35,15 @@ authRoutes.get('/db-test', async (_req, res) => {
       database: 'conectado',
       agora: result.rows[0].agora
     });
+  } catch (error: any) {
+    return res.status(500).json({
+      ok: false,
+      message: 'Falha ao conectar no banco.',
+      error: error?.message || String(error),
+      code: error?.code || null
+    });
+  }
+});
   } catch (error: any) {
     return res.status(500).json({
       ok: false,
