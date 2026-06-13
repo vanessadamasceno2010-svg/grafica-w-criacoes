@@ -3,11 +3,9 @@ import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { auth, signToken } from '../middleware/auth.js';
 import { asyncHandler, HttpError } from '../utils/http.js';
+import { checkSupabaseRestEnv, supabaseRest } from '../lib/supabaseRest.js';
 
 export const authRoutes = Router();
-
-const SUPABASE_URL = process.env.SUPABASE_URL || '';
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
 const registerSchema = z.object({
   email: z.string().email(),
@@ -21,54 +19,13 @@ const loginSchema = z.object({
   senha: z.string().min(1)
 });
 
-function checkSupabaseEnv() {
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-    throw new Error('SUPABASE_URL ou SUPABASE_SERVICE_ROLE_KEY não configurada.');
-  }
-}
-
-async function supabaseFetch(path: string, options: RequestInit = {}) {
-  checkSupabaseEnv();
-
-  const response = await fetch(`${SUPABASE_URL}/rest/v1${path}`, {
-    ...options,
-    headers: {
-      apikey: SUPABASE_SERVICE_ROLE_KEY,
-      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-      'Content-Type': 'application/json',
-      Prefer: 'return=representation',
-      ...(options.headers || {})
-    }
-  });
-
-  const text = await response.text();
-
-  let data: any = null;
-
-  try {
-    data = text ? JSON.parse(text) : null;
-  } catch {
-    data = text;
-  }
-
-  if (!response.ok) {
-    console.error('ERRO SUPABASE REST:', data);
-
-    throw new Error(
-      typeof data === 'string'
-        ? data
-        : data?.message || data?.details || 'Erro na API do Supabase'
-    );
-  }
-
-  return data;
-}
-
 authRoutes.get('/db-test', async (_req, res) => {
   try {
-    checkSupabaseEnv();
+    checkSupabaseRestEnv();
 
-    const users = await supabaseFetch('/users?select=id,email,nome,role&limit=1');
+    const users = await supabaseRest<any[]>(
+      '/users?select=id,email,nome,role&limit=1'
+    );
 
     return res.json({
       ok: true,
@@ -86,10 +43,9 @@ authRoutes.get('/db-test', async (_req, res) => {
 
 authRoutes.post('/register', asyncHandler(async (req, res) => {
   const data = registerSchema.parse(req.body);
-
   const senhaHash = await bcrypt.hash(data.senha, 10);
 
-  const users = await supabaseFetch('/users', {
+  const users = await supabaseRest<any[]>('/users', {
     method: 'POST',
     body: JSON.stringify({
       email: data.email.toLowerCase(),
@@ -102,7 +58,7 @@ authRoutes.post('/register', asyncHandler(async (req, res) => {
     })
   });
 
-  const user = Array.isArray(users) ? users[0] : users;
+  const user = users[0];
 
   const safeUser = {
     id: user.id,
@@ -120,14 +76,13 @@ authRoutes.post('/register', asyncHandler(async (req, res) => {
 
 authRoutes.post('/login', asyncHandler(async (req, res) => {
   const data = loginSchema.parse(req.body);
-
   const email = encodeURIComponent(data.email.toLowerCase());
 
-  const users = await supabaseFetch(
+  const users = await supabaseRest<any[]>(
     `/users?select=id,email,nome,telefone,role,senha&email=eq.${email}&limit=1`
   );
 
-  const user = Array.isArray(users) ? users[0] : null;
+  const user = users[0];
 
   if (!user) {
     throw new HttpError(401, 'Email ou senha inválidos.');

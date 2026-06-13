@@ -1,88 +1,299 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { query } from '../db/pool.js';
 import { auth, admin } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/http.js';
+import { restEq, supabaseRest } from '../lib/supabaseRest.js';
 
 export const adminRoutes = Router();
+
 adminRoutes.use(auth, admin);
 
 adminRoutes.get('/dashboard', asyncHandler(async (_req, res) => {
-  const [vendas, pedidos, clientes, estoque, pendentes] = await Promise.all([
-    query("select coalesce(sum(total),0) total from pedidos where date_trunc('month',created_at)=date_trunc('month',now())"),
-    query("select count(*) total from pedidos where date_trunc('month',created_at)=date_trunc('month',now())"),
-    query("select count(*) total from users where role='user' and date_trunc('month',created_at)=date_trunc('month',now())"),
-    query('select coalesce(sum(estoque),0) total from produtos'),
-    query("select count(*) total from pedidos where status in ('pendente','confirmado','em_producao')")
+  const [pedidos, users, produtos] = await Promise.all([
+    supabaseRest<any[]>('/pedidos?select=id,total,status,created_at&limit=1000'),
+    supabaseRest<any[]>('/users?select=id,role,created_at&limit=1000'),
+    supabaseRest<any[]>('/produtos?select=id,estoque,ativo&limit=1000')
   ]);
-  const { rows: chart } = await query("select to_char(created_at,'DD/MM') dia, sum(total)::numeric(10,2) total from pedidos where created_at >= now()-interval '30 days' group by 1 order by min(created_at)");
-  res.json({ vendasMes: vendas.rows[0].total, pedidosMes: pedidos.rows[0].total, ticketMedio: Number(pedidos.rows[0].total) ? Number(vendas.rows[0].total)/Number(pedidos.rows[0].total) : 0, clientesNovos: clientes.rows[0].total, produtosEmEstoque: estoque.rows[0].total, pedidosPendentes: pendentes.rows[0].total, vendasPorPeriodo: chart });
+
+  const now = new Date();
+  const month = now.getMonth();
+  const year = now.getFullYear();
+
+  const pedidosMes = pedidos.filter((p) => {
+    const d = new Date(p.created_at);
+    return d.getMonth() === month && d.getFullYear() === year;
+  });
+
+  const vendasMes = pedidosMes.reduce((sum, p) => sum + Number(p.total || 0), 0);
+  const clientesNovos = users.filter((u) => {
+    const d = new Date(u.created_at);
+    return u.role === 'user' && d.getMonth() === month && d.getFullYear() === year;
+  }).length;
+
+  const produtosEmEstoque = produtos.reduce((sum, p) => sum + Number(p.estoque || 0), 0);
+  const pedidosPendentes = pedidos.filter((p) =>
+    ['pendente', 'confirmado', 'em_producao'].includes(p.status)
+  ).length;
+
+  res.json({
+    vendasMes,
+    pedidosMes: pedidosMes.length,
+    ticketMedio: pedidosMes.length ? vendasMes / pedidosMes.length : 0,
+    clientesNovos,
+    produtosEmEstoque,
+    pedidosPendentes,
+    vendasPorPeriodo: pedidos.slice(0, 30).map((p) => ({
+      dia: new Date(p.created_at).toLocaleDateString('pt-BR'),
+      total: Number(p.total || 0)
+    }))
+  });
 }));
 
 adminRoutes.get('/clientes', asyncHandler(async (_req, res) => {
-  const { rows } = await query('select u.id,u.nome,u.email,u.telefone,u.created_at,coalesce(sum(p.total),0) total_gasto,count(p.id) pedidos from users u left join pedidos p on p.usuario_id=u.id where u.role=$1 group by u.id order by u.created_at desc', ['user']);
+  const users = await supabaseRest<any[]>(
+    '/users?select=id,nome,email,telefone,role,created_at&role=eq.user&order=created_at.desc&limit=1000'
+  );
+
+  const pedidos = await supabaseRest<any[]>(
+    '/pedidos?select=id,usuario_id,total&limit=1000'
+  ).catch(() => []);
+
+  const rows = users.map((u) => {
+    const userOrders = pedidos.filter((p) => p.usuario_id === u.id);
+
+    return {
+      ...u,
+      total_gasto: userOrders.reduce((sum, p) => sum + Number(p.total || 0), 0),
+      pedidos: userOrders.length
+    };
+  });
+
   res.json(rows);
 }));
 
-
-
 adminRoutes.put('/clientes/:id', asyncHandler(async (req, res) => {
-  const d = z.object({ nome: z.string().min(2).optional(), email: z.string().email().optional(), telefone: z.string().optional() }).parse(req.body);
-  const keys = Object.keys(d);
-  if (!keys.length) return res.json({ ok: true });
-  const sets = keys.map((k, i) => `${k}=$${i + 1}`).join(', ');
-  const values = keys.map((k) => (d as any)[k]);
-  values.push(req.params.id);
-  const { rows } = await query(`update users set ${sets}, updated_at=now() where id=$${values.length} and role='user' returning id,nome,email,telefone,created_at`, values);
-  res.json(rows[0]);
+  const d = z.object({
+    nome: z.string().min(2).optional(),
+    email: z.string().email().optional(),
+    telefone: z.string().optional()
+  }).parse(req.body);
+
+  const rows = await supabaseRest<any[]>(
+    `/users?id=eq.${restEq(req.params.id)}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({
+        ...d,
+        updated_at: new Date().toISOString()
+      })
+    }
+  );
+
+  res.json(rows[0] || { ok: true });
 }));
 
 adminRoutes.delete('/clientes/:id', asyncHandler(async (req, res) => {
-  await query("update users set role='inactive', updated_at=now() where id=$1 and role='user'", [req.params.id]);
+  await supabaseRest(
+    `/users?id=eq.${restEq(req.params.id)}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({
+        role: 'inactive',
+        updated_at: new Date().toISOString()
+      })
+    }
+  );
+
   res.json({ ok: true });
 }));
 
-adminRoutes.get('/cupons', asyncHandler(async (_req,res)=>{ const {rows}=await query('select * from cupons_desconto order by created_at desc'); res.json(rows); }));
-adminRoutes.post('/cupons', asyncHandler(async (req,res)=>{ const d=z.object({codigo:z.string(),descricao:z.string(),tipo:z.enum(['percentual','fixo']),valor:z.number(),uso_maximo:z.number().int(),data_inicio:z.string(),data_fim:z.string(),ativo:z.boolean().default(true)}).parse(req.body); const {rows}=await query('insert into cupons_desconto(codigo,descricao,tipo,valor,uso_maximo,data_inicio,data_fim,ativo) values($1,$2,$3,$4,$5,$6,$7,$8) returning *',[d.codigo,d.descricao,d.tipo,d.valor,d.uso_maximo,d.data_inicio,d.data_fim,d.ativo]); res.status(201).json(rows[0]); }));
-
-adminRoutes.get('/avaliacoes', asyncHandler(async (_req,res)=>{ const {rows}=await query('select a.*,p.nome produto_nome,u.nome cliente_nome from avaliacoes a join produtos p on p.id=a.produto_id join users u on u.id=a.usuario_id order by a.created_at desc'); res.json(rows); }));
-adminRoutes.put('/avaliacoes/:id', asyncHandler(async (req,res)=>{ const {verificado,comentario}=z.object({verificado:z.boolean().optional(),comentario:z.string().optional()}).parse(req.body); const {rows}=await query('update avaliacoes set verificado=coalesce($1,verificado), comentario=coalesce($2,comentario) where id=$3 returning *',[verificado,comentario,req.params.id]); res.json(rows[0]); }));
-adminRoutes.delete('/avaliacoes/:id', asyncHandler(async (req,res)=>{ await query('delete from avaliacoes where id=$1',[req.params.id]); res.json({ok:true}); }));
-
-adminRoutes.get('/configuracoes', asyncHandler(async (_req,res)=>{ const {rows}=await query('select * from configuracoes_site order by chave'); res.json(rows); }));
-adminRoutes.put('/configuracoes/:chave', asyncHandler(async (req,res)=>{ const d=z.object({valor:z.string(),tipo:z.enum(['texto','numero','booleano','json']).default('texto')}).parse(req.body); const {rows}=await query('insert into configuracoes_site(chave,valor,tipo) values($1,$2,$3) on conflict(chave) do update set valor=excluded.valor,tipo=excluded.tipo,updated_at=now() returning *',[req.params.chave,d.valor,d.tipo]); res.json(rows[0]); }));
-
-adminRoutes.get('/contatos', asyncHandler(async (_req,res)=>{ const {rows}=await query('select * from contatos_formulario order by created_at desc'); res.json(rows); }));
-adminRoutes.put('/contatos/:id', asyncHandler(async (req,res)=>{ const d=z.object({respondido:z.boolean(),resposta:z.string().optional()}).parse(req.body); const {rows}=await query('update contatos_formulario set respondido=$1,resposta=$2 where id=$3 returning *',[d.respondido,d.resposta||'',req.params.id]); res.json(rows[0]); }));
-
-adminRoutes.get('/usuarios', asyncHandler(async (_req,res)=>{ const {rows}=await query('select id,nome,email,role,created_at from users order by created_at desc'); res.json(rows); }));
-adminRoutes.put('/usuarios/:id', asyncHandler(async (req,res)=>{ const d=z.object({role:z.enum(['user','admin'])}).parse(req.body); const {rows}=await query('update users set role=$1,updated_at=now() where id=$2 returning id,nome,email,role,created_at',[d.role,req.params.id]); res.json(rows[0]); }));
-
-
-adminRoutes.post('/pedidos/manual', asyncHandler(async (req,res)=>{
-  const d=z.object({
-    cliente_nome:z.string().min(2),
-    cliente_email:z.string().email().optional().or(z.literal('')),
-    cliente_telefone:z.string().optional().default(''),
-    descricao:z.string().min(3),
-    total:z.number().min(0),
-    status:z.enum(['pendente','confirmado','em_producao','pronto','enviado','entregue','cancelado']).default('pendente'),
-    status_pagamento:z.enum(['pendente','confirmado','recusado']).default('pendente'),
-    endereco_entrega:z.string().optional().default('A combinar'),
-    observacoes:z.string().optional().default('Pedido registrado manualmente no painel administrativo.')
+adminRoutes.post('/pedidos/manual', asyncHandler(async (req, res) => {
+  const d = z.object({
+    cliente_nome: z.string().min(2),
+    cliente_email: z.string().optional().default(''),
+    cliente_telefone: z.string().optional().default(''),
+    descricao: z.string().min(3),
+    total: z.number().min(0),
+    status: z.string().optional().default('pendente'),
+    status_pagamento: z.string().optional().default('pendente'),
+    endereco_entrega: z.string().optional().default('A combinar'),
+    observacoes: z.string().optional().default('Pedido registrado manualmente no painel administrativo.')
   }).parse(req.body);
-  const numero=`MAN${Date.now()}`;
-  const {rows}=await query("insert into pedidos(usuario_id,numero_pedido,status,subtotal,frete,desconto,total,metodo_pagamento,status_pagamento,endereco_entrega,observacoes,data_entrega_estimada,cliente_nome,cliente_email,cliente_telefone,origem) values(null,$1,$2,$3,0,0,$3,$4,$5,$6,$7,current_date + interval '7 days',$8,$9,$10,$11) returning *",[numero,d.status,d.total,'manual',d.status_pagamento,d.endereco_entrega,d.observacoes,d.cliente_nome,d.cliente_email||'',d.cliente_telefone,'manual']);
-  await query('insert into itens_pedido(pedido_id,produto_id,quantidade,preco_unitario,especificacoes) values($1,(select id from produtos limit 1),1,$2,$3)',[rows[0].id,d.total,JSON.stringify({descricao:d.descricao})]);
-  res.status(201).json(rows[0]);
+
+  const numero = `MAN${Date.now()}`;
+
+  const pedidos = await supabaseRest<any[]>('/pedidos', {
+    method: 'POST',
+    body: JSON.stringify({
+      usuario_id: null,
+      numero_pedido: numero,
+      status: d.status,
+      subtotal: d.total,
+      frete: 0,
+      desconto: 0,
+      total: d.total,
+      metodo_pagamento: 'manual',
+      status_pagamento: d.status_pagamento,
+      endereco_entrega: d.endereco_entrega,
+      observacoes: d.observacoes,
+      data_entrega_estimada: new Date(Date.now() + 7 * 86400000).toISOString(),
+      cliente_nome: d.cliente_nome,
+      cliente_email: d.cliente_email || '',
+      cliente_telefone: d.cliente_telefone,
+      origem: 'manual',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    })
+  });
+
+  const pedido = pedidos[0];
+
+  const produtos = await supabaseRest<any[]>('/produtos?select=id&limit=1').catch(() => []);
+
+  if (produtos[0]?.id) {
+    await supabaseRest('/itens_pedido', {
+      method: 'POST',
+      body: JSON.stringify({
+        pedido_id: pedido.id,
+        produto_id: produtos[0].id,
+        quantidade: 1,
+        preco_unitario: d.total,
+        especificacoes: { descricao: d.descricao },
+        created_at: new Date().toISOString()
+      })
+    }).catch(() => null);
+  }
+
+  res.status(201).json(pedido);
 }));
 
-adminRoutes.get('/pedidos/:id/recibo', asyncHandler(async (req,res)=>{
-  const {rows}=await query('select * from pedidos where id::text=$1 or numero_pedido=$1 limit 1',[req.params.id]);
-  const pedido=rows[0];
-  if(!pedido) return res.status(404).json({message:'Pedido não encontrado.'});
-  const {rows:itens}=await query('select i.*,p.nome from itens_pedido i left join produtos p on p.id=i.produto_id where i.pedido_id=$1',[pedido.id]);
-  res.json({pedido,itens,recibo:{empresa:'Gráfica W Criações',whatsapp:'88 99624-0470',emitido_em:new Date().toISOString()}});
+adminRoutes.get('/pedidos/:id/recibo', asyncHandler(async (req, res) => {
+  let pedidoRows = await supabaseRest<any[]>(
+    `/pedidos?select=*&id=eq.${restEq(req.params.id)}&limit=1`
+  );
+
+  if (!pedidoRows[0]) {
+    pedidoRows = await supabaseRest<any[]>(
+      `/pedidos?select=*&numero_pedido=eq.${restEq(req.params.id)}&limit=1`
+    );
+  }
+
+  const pedido = pedidoRows[0];
+
+  if (!pedido) {
+    return res.status(404).json({ message: 'Pedido não encontrado.' });
+  }
+
+  const itens = await supabaseRest<any[]>(
+    `/itens_pedido?select=*&pedido_id=eq.${restEq(pedido.id)}`
+  ).catch(() => []);
+
+  res.json({
+    pedido,
+    itens,
+    recibo: {
+      empresa: 'Gráfica W Criações',
+      whatsapp: '88 99624-0470',
+      emitido_em: new Date().toISOString()
+    }
+  });
 }));
 
-adminRoutes.get('/relatorios/vendas', asyncHandler(async (_req,res)=>{ const {rows}=await query("select date(created_at) data, count(*) pedidos, sum(total)::numeric(10,2) vendas from pedidos group by 1 order by 1 desc limit 90"); res.json(rows); }));
+adminRoutes.get('/configuracoes', asyncHandler(async (_req, res) => {
+  const rows = await supabaseRest<any[]>(
+    '/configuracoes_site?select=*&order=chave.asc'
+  );
+  res.json(rows);
+}));
+
+adminRoutes.put('/configuracoes/:chave', asyncHandler(async (req, res) => {
+  const d = z.object({
+    valor: z.string(),
+    tipo: z.string().optional().default('texto')
+  }).parse(req.body);
+
+  const chave = req.params.chave;
+
+  const existing = await supabaseRest<any[]>(
+    `/configuracoes_site?select=id&chave=eq.${restEq(chave)}&limit=1`
+  );
+
+  let rows: any[];
+
+  if (existing[0]) {
+    rows = await supabaseRest<any[]>(
+      `/configuracoes_site?chave=eq.${restEq(chave)}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({
+          valor: d.valor,
+          tipo: d.tipo,
+          updated_at: new Date().toISOString()
+        })
+      }
+    );
+  } else {
+    rows = await supabaseRest<any[]>('/configuracoes_site', {
+      method: 'POST',
+      body: JSON.stringify({
+        chave,
+        valor: d.valor,
+        tipo: d.tipo,
+        updated_at: new Date().toISOString()
+      })
+    });
+  }
+
+  res.json(rows[0] || { ok: true });
+}));
+
+adminRoutes.get('/cupons', asyncHandler(async (_req, res) => {
+  const rows = await supabaseRest<any[]>('/cupons_desconto?select=*&order=created_at.desc');
+  res.json(rows);
+}));
+
+adminRoutes.get('/avaliacoes', asyncHandler(async (_req, res) => {
+  const rows = await supabaseRest<any[]>('/avaliacoes?select=*&order=created_at.desc');
+  res.json(rows);
+}));
+
+adminRoutes.get('/contatos', asyncHandler(async (_req, res) => {
+  const rows = await supabaseRest<any[]>('/contatos_formulario?select=*&order=created_at.desc');
+  res.json(rows);
+}));
+
+adminRoutes.get('/usuarios', asyncHandler(async (_req, res) => {
+  const rows = await supabaseRest<any[]>('/users?select=id,nome,email,role,created_at&order=created_at.desc');
+  res.json(rows);
+}));
+
+adminRoutes.put('/usuarios/:id', asyncHandler(async (req, res) => {
+  const d = z.object({
+    role: z.enum(['user', 'admin', 'inactive'])
+  }).parse(req.body);
+
+  const rows = await supabaseRest<any[]>(
+    `/users?id=eq.${restEq(req.params.id)}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({
+        role: d.role,
+        updated_at: new Date().toISOString()
+      })
+    }
+  );
+
+  res.json(rows[0] || { ok: true });
+}));
+
+adminRoutes.get('/relatorios/vendas', asyncHandler(async (_req, res) => {
+  const rows = await supabaseRest<any[]>(
+    '/pedidos?select=created_at,total&order=created_at.desc&limit=90'
+  );
+
+  res.json(rows.map((r) => ({
+    data: new Date(r.created_at).toLocaleDateString('pt-BR'),
+    vendas: Number(r.total || 0),
+    pedidos: 1
+  })));
+}));
