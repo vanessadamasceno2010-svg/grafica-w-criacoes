@@ -150,8 +150,8 @@ export async function apiFetch<T = any>(
   };
 
   if (authToken) {
-  headers.Authorization = 'Bearer ' + authToken;
-}
+    headers.Authorization = 'Bearer ' + authToken;
+  }
 
   const response = await fetch(`${API_BASE}${path}`, {
     ...options,
