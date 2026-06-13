@@ -15,8 +15,16 @@ import { errorHandler, notFound } from './middleware/error.js';
 export const app = express();
 
 app.disable('x-powered-by');
+app.set('trust proxy', 1);
 
 app.use(helmet());
+
+app.use(
+  cors({
+    origin: config.frontendUrl || '*',
+    credentials: true
+  })
+);
 
 const allowedOrigins = [
   'http://localhost:5173',
