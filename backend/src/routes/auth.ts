@@ -19,14 +19,24 @@ const loginSchema = z.object({
   senha: z.string().min(1)
 });
 
-authRoutes.get('/db-test', asyncHandler(async (_req, res) => {
-  const result = await query('select now() as agora');
-  res.json({
-    ok: true,
-    database: 'conectado',
-    agora: result.rows[0].agora
-  });
-}));
+authRoutes.get('/db-test', async (_req, res) => {
+  try {
+    const result = await query('select now() as agora');
+
+    return res.json({
+      ok: true,
+      database: 'conectado',
+      agora: result.rows[0].agora
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      ok: false,
+      message: 'Falha ao conectar no banco.',
+      error: error?.message || String(error),
+      code: error?.code || null
+    });
+  }
+});
 
 authRoutes.post('/register', asyncHandler(async (req, res) => {
   const data = registerSchema.parse(req.body);
