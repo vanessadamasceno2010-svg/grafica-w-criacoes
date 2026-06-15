@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Search, Eye, Printer, AlertTriangle } from 'lucide-react';
-import { apiFetch, confirmAction, formatMoney, notifySuccess } from '../../lib/api';
+import { Plus, Search, Printer, Trash2, Clock, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { apiFetch, formatMoney } from '../../lib/api';
 import { BottomSheet } from '../../components/BottomSheet';
 
 const statusLabels: Record<string, string> = {
@@ -13,48 +13,54 @@ const statusLabels: Record<string, string> = {
   cancelado: 'Cancelado'
 };
 
-const pagamentoLabels: Record<string, string> = {
-  pendente: 'Pendente',
-  parcial: 'Parcial',
-  confirmado: 'Confirmado',
-  recusado: 'Recusado'
+const paymentLabels: Record<string, string> = {
+  pendente: 'Pagamento pendente',
+  parcial: 'Pagamento parcial',
+  confirmado: 'Pagamento confirmado',
+  recusado: 'Pagamento recusado'
 };
 
-function prazoClass(status: string) {
-  if (status === 'atrasado') return 'bg-red-50 text-red-700 border-red-200';
-  if (status === 'atenção') return 'bg-yellow-50 text-yellow-700 border-yellow-200';
-  if (status === 'no_prazo') return 'bg-green-50 text-green-700 border-green-200';
-  return 'bg-gray-50 text-gray-600 border-gray-200';
+function moneyToNumber(value: any) {
+  if (typeof value === 'number') return value;
+  return Number(String(value || '0').replace(/\./g, '').replace(',', '.')) || 0;
 }
 
-function prazoLabel(status: string) {
-  if (status === 'atrasado') return 'Atrasado';
-  if (status === 'atenção') return 'Atenção';
-  if (status === 'no_prazo') return 'No prazo';
-  return 'Sem prazo';
+function dateOnly(value: any) {
+  return value ? String(value).slice(0, 10) : '';
+}
+
+function prazoStatus(order: any) {
+  if (!order.prazo_entrega || ['entregue', 'cancelado'].includes(order.status)) return { label: 'Sem prazo', cls: 'bg-gray-100 text-gray-600', icon: Clock };
+  const today = new Date();
+  const deadline = new Date(dateOnly(order.prazo_entrega) + 'T23:59:59');
+  const diff = Math.ceil((deadline.getTime() - today.getTime()) / 86400000);
+  if (diff < 0) return { label: 'Atrasado', cls: 'bg-red-50 text-red-700', icon: AlertTriangle };
+  if (diff <= 2) return { label: 'Atenção', cls: 'bg-amber-50 text-amber-700', icon: AlertTriangle };
+  return { label: 'No prazo', cls: 'bg-emerald-50 text-emerald-700', icon: CheckCircle2 };
 }
 
 export function Pedidos() {
   const [orders, setOrders] = useState<any[]>([]);
   const [clientes, setClientes] = useState<any[]>([]);
   const [search, setSearch] = useState('');
-  const [filterStatus, setFilterStatus] = useState('todos');
-  const [filterPrazo, setFilterPrazo] = useState('todos');
+  const [statusFilter, setStatusFilter] = useState('todos');
+  const [prazoFilter, setPrazoFilter] = useState('todos');
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
+  const [history, setHistory] = useState<any[]>([]);
   const [newOrder, setNewOrder] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   const load = async () => {
     setLoading(true);
     try {
-      const [pedidos, clientesRows] = await Promise.all([
+      const [pedidos, clientesData] = await Promise.all([
         apiFetch<any[]>('/pedidos'),
         apiFetch<any[]>('/admin/clientes').catch(() => [])
       ]);
-      setOrders(pedidos);
-      setClientes(clientesRows);
+      setOrders(Array.isArray(pedidos) ? pedidos : []);
+      setClientes(Array.isArray(clientesData) ? clientesData : []);
     } catch (err: any) {
-      alert(err.message || 'Erro ao carregar pedidos.');
+      alert(err.message);
     } finally {
       setLoading(false);
     }
@@ -62,17 +68,33 @@ export function Pedidos() {
 
   useEffect(() => { load(); }, []);
 
+  async function openOrder(order: any) {
+    setSelectedOrder({
+      ...order,
+      total: Number(order.total || 0),
+      valor_entrada: Number(order.valor_entrada || 0),
+      valor_restante: Number(order.valor_restante || Math.max(Number(order.total || 0) - Number(order.valor_entrada || 0), 0)),
+      prazo_entrega: dateOnly(order.prazo_entrega)
+    });
+
+    try {
+      const data = await apiFetch<any[]>('/admin/pedidos/' + order.id + '/historico');
+      setHistory(Array.isArray(data) ? data : []);
+    } catch {
+      setHistory([]);
+    }
+  }
+
   const filtered = useMemo(() => {
     return orders.filter((o) => {
-      const term = search.toLowerCase();
-      const matchesText =
-        String(o.numero_pedido || '').toLowerCase().includes(term) ||
-        String(o.cliente_nome || o.cliente_email || '').toLowerCase().includes(term);
-      const matchesStatus = filterStatus === 'todos' || o.status === filterStatus || o.status_pagamento === filterStatus;
-      const matchesPrazo = filterPrazo === 'todos' || o.prazo_status === filterPrazo;
-      return matchesText && matchesStatus && matchesPrazo;
+      const text = [o.numero_pedido, o.cliente_nome, o.cliente_email, o.cliente_telefone].join(' ').toLowerCase();
+      const matchesSearch = text.includes(search.toLowerCase());
+      const matchesStatus = statusFilter === 'todos' || o.status === statusFilter;
+      const prazo = prazoStatus(o).label;
+      const matchesPrazo = prazoFilter === 'todos' || prazo === prazoFilter;
+      return matchesSearch && matchesStatus && matchesPrazo;
     });
-  }, [orders, search, filterStatus, filterPrazo]);
+  }, [orders, search, statusFilter, prazoFilter]);
 
   const openNew = () => setNewOrder({
     usuario_id: '',
@@ -81,59 +103,26 @@ export function Pedidos() {
     phone: '',
     description: '',
     total: '',
-    entrada: '',
-    restante: '',
-    prazo: '',
+    valor_entrada: '',
+    valor_restante: 0,
     status: 'pendente',
     payment: 'pendente',
-    useExistingClient: true
+    prazo_entrega: ''
   });
 
-  function selectClient(id: string) {
-    const cliente = clientes.find((c) => c.id === id);
-    if (!cliente) {
-      setNewOrder({ ...newOrder, usuario_id: '', client: '', email: '', phone: '' });
-      return;
-    }
-
-    setNewOrder({
-      ...newOrder,
-      usuario_id: cliente.id,
-      client: cliente.nome || '',
-      email: cliente.email || '',
-      phone: cliente.telefone || ''
-    });
-  }
-
-  function updateMoney(field: string, value: string) {
-    const next = { ...newOrder, [field]: value };
-    const total = Number(String(field === 'total' ? value : next.total).replace(',', '.')) || 0;
-    const entrada = Number(String(field === 'entrada' ? value : next.entrada).replace(',', '.')) || 0;
-    next.restante = String(Math.max(total - entrada, 0));
-    next.payment = total > 0 && entrada >= total ? 'confirmado' : entrada > 0 ? 'parcial' : 'pendente';
-    setNewOrder(next);
-  }
-
-
-  function updateSelectedEntrada(value: string) {
-    const total = Number(selectedOrder?.total || 0);
-    const entrada = Number(String(value).replace(',', '.')) || 0;
-    const restante = Math.max(total - entrada, 0);
-    setSelectedOrder({
-      ...selectedOrder,
-      valor_entrada: value,
-      valor_restante: restante,
-      status_pagamento: total > 0 && restante <= 0 ? 'confirmado' : entrada > 0 ? 'parcial' : 'pendente'
-    });
+  function setNewClient(id: string) {
+    const c = clientes.find((x) => x.id === id);
+    if (!c) return setNewOrder({ ...newOrder, usuario_id: '', client: '', email: '', phone: '' });
+    setNewOrder({ ...newOrder, usuario_id: c.id, client: c.nome || '', email: c.email || '', phone: c.telefone || '' });
   }
 
   const createOrder = async () => {
     if (!newOrder.client || !newOrder.description) return alert('Informe cliente e descrição.');
-    if (!confirmAction('Confirmar criação deste pedido?')) return;
-
-    const total = Number(String(newOrder.total).replace(',', '.')) || 0;
-    const entrada = Number(String(newOrder.entrada).replace(',', '.')) || 0;
+    const total = moneyToNumber(newOrder.total);
+    const entrada = moneyToNumber(newOrder.valor_entrada);
     const restante = Math.max(total - entrada, 0);
+
+    if (!confirm('Confirmar criação deste pedido?')) return;
 
     try {
       await apiFetch('/admin/pedidos/manual', {
@@ -146,166 +135,188 @@ export function Pedidos() {
           descricao: newOrder.description,
           total,
           valor_entrada: entrada,
-          valor_restante: restante,
           status: newOrder.status,
-          status_pagamento: newOrder.payment,
-          prazo_entrega: newOrder.prazo,
+          status_pagamento: restante <= 0 ? 'confirmado' : entrada > 0 ? 'parcial' : newOrder.payment,
+          prazo_entrega: newOrder.prazo_entrega || null,
           endereco_entrega: 'A combinar'
         })
       });
       setNewOrder(null);
       await load();
-      notifySuccess('Pedido salvo com sucesso.');
+      alert('Pedido salvo com sucesso.');
     } catch (err: any) {
-      alert(err.message || 'Erro ao salvar pedido.');
+      alert(err.message);
     }
   };
 
   const saveStatus = async () => {
-    if (!confirmAction('Confirmar alteração deste pedido?')) return;
+    if (!selectedOrder) return;
+    if (!confirm('Confirmar alteração deste pedido?')) return;
+
+    const total = moneyToNumber(selectedOrder.total);
+    const entrada = moneyToNumber(selectedOrder.valor_entrada);
+    const restante = Math.max(total - entrada, 0);
 
     try {
       await apiFetch('/pedidos/' + selectedOrder.id, {
         method: 'PUT',
         body: JSON.stringify({
           status: selectedOrder.status,
-          status_pagamento: selectedOrder.status_pagamento,
+          status_pagamento: restante <= 0 ? 'confirmado' : entrada > 0 ? 'parcial' : selectedOrder.status_pagamento,
           observacoes: selectedOrder.observacoes || '',
-          valor_entrada: Number(String(selectedOrder.valor_entrada || 0).replace(',', '.')) || 0,
-          prazo_entrega: selectedOrder.prazo_entrega || selectedOrder.data_entrega_estimada || '',
-          data_entrega_estimada: selectedOrder.prazo_entrega || selectedOrder.data_entrega_estimada || '',
-          assinatura_url: selectedOrder.assinatura_url || '',
-          logo_documento_url: selectedOrder.logo_documento_url || ''
+          total,
+          valor_entrada: entrada,
+          prazo_entrega: selectedOrder.prazo_entrega || null,
+          cliente_nome: selectedOrder.cliente_nome || '',
+          cliente_email: selectedOrder.cliente_email || '',
+          cliente_telefone: selectedOrder.cliente_telefone || ''
         })
       });
       setSelectedOrder(null);
+      setHistory([]);
       await load();
-      notifySuccess('Pedido atualizado com sucesso.');
+      alert('Pedido atualizado com sucesso.');
     } catch (err: any) {
-      alert(err.message || 'Erro ao atualizar pedido.');
+      alert(err.message);
     }
   };
 
+  async function deleteOrder(order: any) {
+    if (!confirm('Deseja excluir este pedido? Essa ação não pode ser desfeita.')) return;
+    try {
+      await apiFetch('/pedidos/' + order.id, { method: 'DELETE' });
+      if (selectedOrder?.id === order.id) setSelectedOrder(null);
+      await load();
+      alert('Pedido excluído.');
+    } catch (err: any) {
+      alert(err.message);
+    }
+  }
+
   const printDocument = async (order: any) => {
     try {
-      const data = await apiFetch<any>('/admin/pedidos/' + order.id + '/recibo');
+      const data = await apiFetch<any>('/admin/pedidos/' + order.id + '/documento');
       const pedido = data.pedido;
-      const doc = data.documento;
-      const tipo = data.tipo_documento;
-      const paymentInfo = tipo === 'recibo' ? 'Pagamento confirmado' : 'Ordem de serviço - pagamento ainda não confirmado';
-
+      const tipoTitulo = data.tipo === 'recibo' ? 'Recibo Digital' : 'Ordem de Serviço';
       const html = `
-        <div style="font-family:Arial;padding:24px;max-width:760px;margin:auto;color:#0b1635">
-          <div style="display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #d9a321;padding-bottom:12px;margin-bottom:20px">
-            <div>${doc.logo_url ? `<img src="${doc.logo_url}" style="max-height:72px;max-width:180px;object-fit:contain"/>` : `<h2>${doc.empresa}</h2>`}</div>
-            <div style="text-align:right"><h1 style="margin:0">${doc.titulo}</h1><p style="margin:4px 0">${pedido.numero_pedido}</p></div>
+        <div style="font-family:Arial;padding:24px;max-width:760px;margin:auto;color:#0b1b3a">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:2px solid #e6aa21;padding-bottom:16px;margin-bottom:20px">
+            <div>${data.empresa?.logo ? `<img src="${data.empresa.logo}" style="max-height:70px;max-width:180px;object-fit:contain"/>` : ''}</div>
+            <div style="text-align:right"><h1 style="margin:0">${tipoTitulo}</h1><p style="margin:4px 0">${data.empresa?.nome || 'Gráfica W Criações'}</p></div>
           </div>
+          <p><b>Pedido:</b> ${pedido.numero_pedido}</p>
           <p><b>Cliente:</b> ${pedido.cliente_nome || pedido.cliente_email || ''}</p>
-          <p><b>Telefone:</b> ${pedido.cliente_telefone || ''}</p>
-          <p><b>Status do pedido:</b> ${statusLabels[pedido.status] || pedido.status}</p>
-          <p><b>Status do pagamento:</b> ${pagamentoLabels[pedido.status_pagamento] || pedido.status_pagamento}</p>
-          <p><b>Total:</b> ${formatMoney(pedido.total)}</p>
-          <p><b>Entrada:</b> ${formatMoney(pedido.valor_entrada || 0)}</p>
-          <p><b>Restante:</b> ${formatMoney(pedido.valor_restante || 0)}</p>
-          <p><b>Prazo de entrega:</b> ${pedido.prazo_entrega || pedido.data_entrega_estimada || 'A combinar'}</p>
+          <p><b>Status:</b> ${statusLabels[pedido.status] || pedido.status}</p>
+          <p><b>Status pagamento:</b> ${paymentLabels[pedido.status_pagamento] || pedido.status_pagamento}</p>
+          <p><b>Total:</b> ${formatMoney(pedido.total)} | <b>Pago:</b> ${formatMoney(pedido.valor_entrada || 0)} | <b>Resta:</b> ${formatMoney(pedido.valor_restante || 0)}</p>
+          <p><b>Prazo de entrega:</b> ${pedido.prazo_entrega ? new Date(pedido.prazo_entrega).toLocaleDateString('pt-BR') : 'A combinar'}</p>
+          <p><b>Observações:</b> ${pedido.observacoes || '-'}</p>
           <hr/>
-          <p><b>Observações:</b></p>
-          <p>${String(pedido.observacoes || '').replace(/\n/g, '<br/>')}</p>
-          <hr/>
-          <p><b>${paymentInfo}</b></p>
-          ${doc.assinatura_url ? `<div style="margin-top:40px;text-align:center"><img src="${doc.assinatura_url}" style="max-height:90px;object-fit:contain"/><p>Assinatura</p></div>` : ''}
-          <p style="margin-top:40px;font-size:12px;color:#666">Emitido em ${new Date().toLocaleString('pt-BR')}</p>
+          <p><b>WhatsApp:</b> ${data.empresa?.whatsapp || ''}</p>
+          <p><b>Endereço:</b> ${data.empresa?.endereco || ''}</p>
+          ${data.tipo === 'recibo' && data.empresa?.assinatura ? `<div style="margin-top:40px;text-align:center"><img src="${data.empresa.assinatura}" style="max-height:90px"/><p>Assinatura digital</p></div>` : ''}
+          <p style="margin-top:30px;font-size:12px;color:#666">Emitido em ${new Date().toLocaleString('pt-BR')}</p>
           <script>window.print()</script>
         </div>`;
       const win = window.open('', '_blank');
       if (win) { win.document.write(html); win.document.close(); }
     } catch (err: any) {
-      alert(err.message || 'Erro ao gerar documento.');
+      alert(err.message);
     }
   };
 
   return (
-    <div className="fade-in">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-        <h1 className="font-display text-2xl sm:text-3xl font-bold text-primary">Gerenciador de Pedidos</h1>
-        <button className="btn btn-primary" onClick={openNew}><Plus size={18}/>Pedido Manual</button>
+    <div className="fade-in w-full overflow-hidden">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
+        <div>
+          <h1 className="font-display text-2xl sm:text-3xl font-bold text-primary">Gerenciador de Pedidos</h1>
+          <p className="text-gray-500 mt-1">Clique em qualquer pedido para abrir, editar e ver histórico.</p>
+        </div>
+        <button className="btn btn-primary" onClick={openNew}><Plus size={18}/> Pedido Manual</button>
       </div>
 
-      <div className="card p-4 grid md:grid-cols-4 gap-3 mb-6">
-        <div className="relative md:col-span-2">
+      <div className="card p-4 mb-6 grid md:grid-cols-3 gap-3">
+        <div className="relative">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={20}/>
           <input className="input pl-11" placeholder="Buscar pedido ou cliente..." value={search} onChange={(e)=>setSearch(e.target.value)}/>
         </div>
-        <select className="input" value={filterStatus} onChange={(e)=>setFilterStatus(e.target.value)}>
+        <select className="input" value={statusFilter} onChange={(e)=>setStatusFilter(e.target.value)}>
           <option value="todos">Todos os status</option>
-          {Object.entries(statusLabels).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          <option value="parcial">Pagamento parcial</option>
-          <option value="confirmado">Pagamento confirmado</option>
+          {Object.entries(statusLabels).map(([key,label])=><option key={key} value={key}>{label}</option>)}
         </select>
-        <select className="input" value={filterPrazo} onChange={(e)=>setFilterPrazo(e.target.value)}>
+        <select className="input" value={prazoFilter} onChange={(e)=>setPrazoFilter(e.target.value)}>
           <option value="todos">Todos os prazos</option>
-          <option value="atrasado">Atrasados</option>
-          <option value="atenção">Atenção</option>
-          <option value="no_prazo">No prazo</option>
-          <option value="sem_prazo">Sem prazo</option>
+          <option value="Atrasado">Atrasados</option>
+          <option value="Atenção">Atenção</option>
+          <option value="No prazo">No prazo</option>
+          <option value="Sem prazo">Sem prazo</option>
         </select>
       </div>
 
       {loading && <div className="card p-4 mb-4">Carregando pedidos...</div>}
 
-      <div className="card overflow-hidden">
-        <div className="hidden sm:block overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200"><tr><th className="text-left px-6 py-4">Pedido</th><th className="text-left px-6 py-4">Cliente</th><th className="text-left px-6 py-4">Prazo</th><th className="text-left px-6 py-4">Pagamento</th><th className="text-left px-6 py-4">Total</th><th className="text-right px-6 py-4">Ações</th></tr></thead>
-            <tbody className="divide-y divide-gray-100">
-              {filtered.map((o)=><tr key={o.id}>
-                <td className="px-6 py-4 font-bold text-primary">{o.numero_pedido}</td>
-                <td className="px-6 py-4">{o.cliente_nome || o.cliente_email || 'Cliente'}</td>
-                <td className="px-6 py-4"><span className={'px-2 py-1 rounded-full border text-xs font-bold ' + prazoClass(o.prazo_status)}>{prazoLabel(o.prazo_status)}</span><p className="text-xs text-gray-500 mt-1">{o.prazo_entrega || o.data_entrega_estimada || '-'}</p></td>
-                <td className="px-6 py-4"><p>{pagamentoLabels[o.status_pagamento] || o.status_pagamento}</p><p className="text-xs text-gray-500">Entrada: {formatMoney(o.valor_entrada || 0)}</p><p className="text-xs text-gray-500">Resta: {formatMoney(o.valor_restante || 0)}</p></td>
-                <td className="px-6 py-4 font-bold">{formatMoney(o.total)}</td>
-                <td className="px-6 py-4"><div className="flex justify-end gap-2"><button className="p-2 rounded-lg hover:bg-gray-100" onClick={()=>setSelectedOrder({...o})}><Eye size={16}/></button><button className="p-2 rounded-lg hover:bg-gray-100" onClick={()=>printDocument(o)}><Printer size={16}/></button></div></td>
-              </tr>)}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="sm:hidden divide-y divide-gray-100">
-          {filtered.map((o)=><div key={o.id} className="p-4">
-            <div className="flex items-start justify-between gap-3"><div><h3 className="font-bold text-primary">{o.numero_pedido}</h3><p className="text-sm text-gray-500">{o.cliente_nome || o.cliente_email || 'Cliente'}</p></div><span className={'px-2 py-1 rounded-full border text-xs font-bold ' + prazoClass(o.prazo_status)}>{prazoLabel(o.prazo_status)}</span></div>
-            <p className="mt-2"><b>{formatMoney(o.total)}</b> • {statusLabels[o.status] || o.status}</p>
-            <p className="text-xs text-gray-500">Entrada {formatMoney(o.valor_entrada || 0)} • Resta {formatMoney(o.valor_restante || 0)}</p>
-            <div className="grid grid-cols-2 gap-2 mt-4"><button className="btn btn-outline" onClick={()=>setSelectedOrder({...o})}><Eye size={16}/>Ver</button><button className="btn btn-outline" onClick={()=>printDocument(o)}><Printer size={16}/>{o.status_pagamento === 'confirmado' ? 'Recibo' : 'OS'}</button></div>
-          </div>)}
-        </div>
+      <div className="grid gap-3">
+        {filtered.map((o) => {
+          const pz = prazoStatus(o);
+          const Icon = pz.icon;
+          return (
+            <button key={o.id} onClick={() => openOrder(o)} className="card p-4 text-left hover:ring-2 hover:ring-gold/40 transition">
+              <div className="grid lg:grid-cols-[1fr_1fr_130px_170px_130px] gap-3 items-center">
+                <div><p className="font-bold text-primary">{o.numero_pedido}</p><p className="text-sm text-gray-500">{statusLabels[o.status] || o.status}</p></div>
+                <div><p className="font-semibold text-primary truncate">{o.cliente_nome || o.cliente_email || 'Cliente'}</p><p className="text-sm text-gray-500 truncate">{o.cliente_telefone || o.cliente_email}</p></div>
+                <div><span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold ${pz.cls}`}><Icon size={14}/>{pz.label}</span><p className="text-xs text-gray-500 mt-1">{o.prazo_entrega ? new Date(o.prazo_entrega).toLocaleDateString('pt-BR') : 'A combinar'}</p></div>
+                <div><p className="font-bold text-primary">{formatMoney(o.total)}</p><p className="text-xs text-gray-500">Pago {formatMoney(o.valor_entrada || 0)} • Resta {formatMoney(o.valor_restante || 0)}</p></div>
+                <div className="flex gap-2 justify-start lg:justify-end" onClick={(e) => e.stopPropagation()}>
+                  <button className="p-2 rounded-lg bg-gray-50 hover:bg-gray-100" onClick={() => printDocument(o)} title="Documento"><Printer size={17}/></button>
+                  <button className="p-2 rounded-lg bg-red-50 text-red-700 hover:bg-red-100" onClick={() => deleteOrder(o)} title="Excluir"><Trash2 size={17}/></button>
+                </div>
+              </div>
+            </button>
+          );
+        })}
       </div>
 
       <BottomSheet isOpen={!!selectedOrder} onClose={()=>setSelectedOrder(null)} title="Pedido">
         {selectedOrder && <div className="space-y-4">
-          <p><b>Pedido:</b> {selectedOrder.numero_pedido}</p>
-          <p><b>Cliente:</b> {selectedOrder.cliente_nome || selectedOrder.cliente_email}</p>
-          <p><b>Total:</b> {formatMoney(selectedOrder.total)}</p>
-          <div className="grid sm:grid-cols-2 gap-3"><label><span className="text-sm font-bold text-gray-600">Valor pago / entrada</span><input className="input mt-1" placeholder="Entrada R$" value={selectedOrder.valor_entrada || ''} onChange={(e)=>updateSelectedEntrada(e.target.value)}/></label><label><span className="text-sm font-bold text-gray-600">Restante automático</span><input className="input mt-1 bg-gray-50" readOnly value={formatMoney(Math.max(Number(selectedOrder.total || 0) - (Number(String(selectedOrder.valor_entrada || 0).replace(',', '.')) || 0), 0))}/></label></div>
-          <label className="block"><span className="text-sm font-bold text-gray-600">Prazo de entrega</span><input type="date" className="input mt-1" value={(selectedOrder.prazo_entrega || selectedOrder.data_entrega_estimada || '').slice(0,10)} onChange={(e)=>setSelectedOrder({...selectedOrder,prazo_entrega:e.target.value,data_entrega_estimada:e.target.value})}/></label>
-          <select className="input" value={selectedOrder.status} onChange={(e)=>setSelectedOrder({...selectedOrder,status:e.target.value})}>{Object.entries(statusLabels).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select>
-          <select className="input" value={selectedOrder.status_pagamento || 'pendente'} onChange={(e)=>setSelectedOrder({...selectedOrder,status_pagamento:e.target.value})}><option value="pendente">Pagamento pendente</option><option value="parcial">Pagamento parcial</option><option value="confirmado">Pagamento confirmado</option><option value="recusado">Pagamento recusado</option></select>
-          <input className="input" placeholder="URL da assinatura do recibo" value={selectedOrder.assinatura_url || ''} onChange={(e)=>setSelectedOrder({...selectedOrder,assinatura_url:e.target.value})}/>
-          <input className="input" placeholder="URL da logo do documento" value={selectedOrder.logo_documento_url || ''} onChange={(e)=>setSelectedOrder({...selectedOrder,logo_documento_url:e.target.value})}/>
+          <div className="grid sm:grid-cols-2 gap-3">
+            <input className="input" value={selectedOrder.cliente_nome || ''} onChange={(e)=>setSelectedOrder({...selectedOrder,cliente_nome:e.target.value})} placeholder="Cliente" />
+            <input className="input" value={selectedOrder.cliente_telefone || ''} onChange={(e)=>setSelectedOrder({...selectedOrder,cliente_telefone:e.target.value})} placeholder="Telefone" />
+            <input className="input" value={selectedOrder.cliente_email || ''} onChange={(e)=>setSelectedOrder({...selectedOrder,cliente_email:e.target.value})} placeholder="Email" />
+            <input className="input" type="date" value={selectedOrder.prazo_entrega || ''} onChange={(e)=>setSelectedOrder({...selectedOrder,prazo_entrega:e.target.value})} />
+          </div>
+          <div className="grid sm:grid-cols-3 gap-3">
+            <input className="input" type="number" step="0.01" value={selectedOrder.total || 0} onChange={(e)=>{const total=moneyToNumber(e.target.value); const entrada=moneyToNumber(selectedOrder.valor_entrada); setSelectedOrder({...selectedOrder,total,valor_restante:Math.max(total-entrada,0)});}} placeholder="Total" />
+            <input className="input" type="number" step="0.01" value={selectedOrder.valor_entrada || 0} onChange={(e)=>{const entrada=moneyToNumber(e.target.value); const total=moneyToNumber(selectedOrder.total); setSelectedOrder({...selectedOrder,valor_entrada:entrada,valor_restante:Math.max(total-entrada,0)});}} placeholder="Pago/entrada" />
+            <input className="input bg-gray-50" readOnly value={formatMoney(selectedOrder.valor_restante || 0)} placeholder="Resta" />
+          </div>
+          <div className="grid sm:grid-cols-2 gap-3">
+            <select className="input" value={selectedOrder.status} onChange={(e)=>setSelectedOrder({...selectedOrder,status:e.target.value})}>{Object.entries(statusLabels).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select>
+            <select className="input" value={selectedOrder.status_pagamento || 'pendente'} onChange={(e)=>setSelectedOrder({...selectedOrder,status_pagamento:e.target.value})}>{Object.entries(paymentLabels).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select>
+          </div>
           <textarea className="input min-h-24" placeholder="Observações" value={selectedOrder.observacoes || ''} onChange={(e)=>setSelectedOrder({...selectedOrder,observacoes:e.target.value})}/>
-          <div className="grid grid-cols-2 gap-2"><button className="btn btn-outline" onClick={()=>printDocument(selectedOrder)}>{selectedOrder.status_pagamento === 'confirmado' ? 'Recibo' : 'Ordem de Serviço'}</button><button className="btn btn-primary" onClick={saveStatus}>Salvar</button></div>
+          <div className="grid grid-cols-3 gap-2"><button className="btn btn-outline" onClick={()=>printDocument(selectedOrder)}>Documento</button><button className="btn btn-outline text-red-700" onClick={()=>deleteOrder(selectedOrder)}>Excluir</button><button className="btn btn-primary" onClick={saveStatus}>Salvar</button></div>
+          <div className="border-t border-gray-100 pt-4">
+            <h3 className="font-bold text-primary mb-3">Histórico do pedido</h3>
+            {history.length === 0 && <p className="text-sm text-gray-500">Nenhuma alteração registrada.</p>}
+            <div className="space-y-2 max-h-56 overflow-y-auto">
+              {history.map((h) => <div key={h.id || h.created_at} className="bg-gray-50 rounded-xl p-3 text-sm"><p className="font-bold text-primary">{h.usuario_nome || 'Sistema'} {h.acao} {h.campo}</p><p className="text-gray-500">De: {h.valor_anterior || '-'} • Para: {h.valor_novo || '-'}</p><p className="text-xs text-gray-400">{new Date(h.created_at).toLocaleString('pt-BR')}</p></div>)}
+            </div>
+          </div>
         </div>}
       </BottomSheet>
 
       <BottomSheet isOpen={!!newOrder} onClose={()=>setNewOrder(null)} title="Novo Pedido Manual">
         {newOrder && <div className="space-y-4">
-          <label className="flex items-center gap-2 text-sm font-bold"><input type="checkbox" checked={newOrder.useExistingClient} onChange={(e)=>setNewOrder({...newOrder,useExistingClient:e.target.checked,usuario_id:''})}/>Selecionar cliente cadastrado</label>
-          {newOrder.useExistingClient && <select className="input" value={newOrder.usuario_id} onChange={(e)=>selectClient(e.target.value)}><option value="">Selecione um cliente</option>{clientes.map((c)=><option key={c.id} value={c.id}>{c.nome} - {c.email}</option>)}</select>}
+          <select className="input" value={newOrder.usuario_id || ''} onChange={(e)=>setNewClient(e.target.value)}>
+            <option value="">Selecionar cliente cadastrado ou preencher manualmente</option>
+            {clientes.map((c)=><option key={c.id} value={c.id}>{c.nome} - {c.email}</option>)}
+          </select>
           <input className="input" placeholder="Nome do cliente" value={newOrder.client} onChange={(e)=>setNewOrder({...newOrder,client:e.target.value})}/>
           <input className="input" placeholder="Email" value={newOrder.email} onChange={(e)=>setNewOrder({...newOrder,email:e.target.value})}/>
           <input className="input" placeholder="Telefone" value={newOrder.phone} onChange={(e)=>setNewOrder({...newOrder,phone:e.target.value})}/>
           <textarea className="input min-h-24" placeholder="Descrição do pedido" value={newOrder.description} onChange={(e)=>setNewOrder({...newOrder,description:e.target.value})}/>
-          <div className="grid sm:grid-cols-3 gap-3"><input className="input" placeholder="Total R$" value={newOrder.total} onChange={(e)=>updateMoney('total',e.target.value)}/><input className="input" placeholder="Entrada R$" value={newOrder.entrada} onChange={(e)=>updateMoney('entrada',e.target.value)}/><input className="input bg-gray-50" placeholder="Resta automático" readOnly value={formatMoney(Math.max((Number(String(newOrder.total).replace(',', '.')) || 0) - (Number(String(newOrder.entrada).replace(',', '.')) || 0), 0))}/></div>
-          <label className="block"><span className="text-sm font-bold text-gray-600">Prazo de entrega</span><input type="date" className="input mt-1" value={newOrder.prazo} onChange={(e)=>setNewOrder({...newOrder,prazo:e.target.value})}/></label>
+          <div className="grid sm:grid-cols-3 gap-3"><input className="input" placeholder="Total R$" value={newOrder.total} onChange={(e)=>{const total=moneyToNumber(e.target.value); const entrada=moneyToNumber(newOrder.valor_entrada); setNewOrder({...newOrder,total:e.target.value,valor_restante:Math.max(total-entrada,0)});}}/><input className="input" placeholder="Entrada R$" value={newOrder.valor_entrada} onChange={(e)=>{const entrada=moneyToNumber(e.target.value); const total=moneyToNumber(newOrder.total); setNewOrder({...newOrder,valor_entrada:e.target.value,valor_restante:Math.max(total-entrada,0)});}}/><input className="input bg-gray-50" readOnly value={formatMoney(newOrder.valor_restante || 0)} /></div>
+          <input className="input" type="date" value={newOrder.prazo_entrega} onChange={(e)=>setNewOrder({...newOrder,prazo_entrega:e.target.value})}/>
           <button className="btn btn-primary w-full" onClick={createOrder}>Salvar pedido no Supabase</button>
         </div>}
       </BottomSheet>

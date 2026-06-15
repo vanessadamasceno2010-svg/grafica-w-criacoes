@@ -1,25 +1,36 @@
-import { useEffect, useState } from 'react';
-import { DollarSign, ShoppingCart, Users, TrendingUp, AlertTriangle, WalletCards } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { DollarSign, ShoppingCart, Users, Package, TrendingUp, WalletCards, AlertTriangle } from 'lucide-react';
 import { apiFetch, formatMoney } from '../../lib/api';
+
+const statusOptions = [
+  { value: 'todos', label: 'Todos os status' },
+  { value: 'pendente', label: 'Pendente' },
+  { value: 'confirmado', label: 'Confirmado' },
+  { value: 'em_producao', label: 'Em produção' },
+  { value: 'pronto', label: 'Pronto' },
+  { value: 'entregue', label: 'Entregue' },
+  { value: 'cancelado', label: 'Cancelado' }
+];
 
 export function Dashboard() {
   const [data, setData] = useState<any>(null);
+  const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({ from: '', to: '', status: 'todos' });
+  const [filters, setFilters] = useState({ status: 'todos', date_from: '', date_to: '' });
 
   async function load() {
     setLoading(true);
+    const qs = new URLSearchParams();
+    if (filters.status !== 'todos') qs.set('status', filters.status);
+    if (filters.date_from) qs.set('date_from', filters.date_from);
+    if (filters.date_to) qs.set('date_to', filters.date_to);
 
     try {
-      const params = new URLSearchParams();
-      if (filters.from) params.set('from', filters.from);
-      if (filters.to) params.set('to', filters.to);
-      if (filters.status !== 'todos') params.set('status', filters.status);
-
-      const dashboard = await apiFetch<any>('/admin/dashboard' + (params.toString() ? '?' + params.toString() : ''));
+      const dashboard = await apiFetch<any>('/admin/dashboard?' + qs.toString());
       setData(dashboard);
+      setOrders(dashboard.pedidosRecentes || []);
     } catch (err: any) {
-      alert(err.message || 'Erro ao carregar dashboard.');
+      alert(err.message);
     } finally {
       setLoading(false);
     }
@@ -27,90 +38,64 @@ export function Dashboard() {
 
   useEffect(() => { load(); }, []);
 
-  const stats = [
-    { label: 'Vendas no filtro', value: formatMoney(data?.filtro?.vendasPeriodo || 0), icon: DollarSign, color: 'text-success', bg: 'bg-success/10' },
-    { label: 'A receber', value: formatMoney(data?.filtro?.valorAReceberPeriodo || 0), icon: WalletCards, color: 'text-red-600', bg: 'bg-red-50' },
-    { label: 'Pedidos no filtro', value: String(data?.filtro?.totalPedidos || 0), icon: ShoppingCart, color: 'text-primary', bg: 'bg-primary/10' },
-    { label: 'Ticket médio', value: formatMoney(data?.ticketMedio || 0), icon: TrendingUp, color: 'text-gold', bg: 'bg-gold/10' }
-  ];
-
-  const recent = data?.pedidosRecentes || [];
+  const stats = useMemo(() => [
+    { label: 'Vendas filtradas', value: formatMoney(data?.vendasMes || 0), icon: DollarSign, color: 'text-success', bg: 'bg-success/10' },
+    { label: 'A receber', value: formatMoney(data?.valoresAReceber || 0), icon: WalletCards, color: 'text-red-600', bg: 'bg-red-50' },
+    { label: 'Pedidos filtrados', value: String(data?.pedidosMes || 0), icon: ShoppingCart, color: 'text-primary', bg: 'bg-primary/10' },
+    { label: 'Ticket médio', value: formatMoney(data?.ticketMedio || 0), icon: TrendingUp, color: 'text-gold', bg: 'bg-gold/10' },
+    { label: 'Clientes', value: String(data?.clientesNovos || 0), icon: Users, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+    { label: 'Estoque total', value: String(data?.produtosEmEstoque || 0), icon: Package, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+    { label: 'Pendentes', value: String(data?.pedidosPendentes || 0), icon: AlertTriangle, color: 'text-amber-600', bg: 'bg-amber-50' },
+    { label: 'Atrasados', value: String(data?.pedidosAtrasados || 0), icon: AlertTriangle, color: 'text-red-600', bg: 'bg-red-50' }
+  ], [data]);
 
   return (
-    <div className="fade-in">
-      <div className="flex flex-col gap-4 mb-6">
+    <div className="fade-in w-full">
+      <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 mb-6">
         <div>
           <h1 className="font-display text-2xl sm:text-3xl font-bold text-primary">Dashboard</h1>
-          <p className="text-gray-500">Os cartões abaixo obedecem ao filtro aplicado.</p>
+          <p className="text-gray-500 mt-1">Os filtros abaixo controlam os dados exibidos no dashboard.</p>
         </div>
-
-        <div className="card p-4 grid md:grid-cols-4 gap-3">
-          <label>
-            <span className="text-xs font-bold text-gray-500">Data inicial</span>
-            <input type="date" className="input mt-1" value={filters.from} onChange={(e) => setFilters({ ...filters, from: e.target.value })} />
-          </label>
-          <label>
-            <span className="text-xs font-bold text-gray-500">Data final</span>
-            <input type="date" className="input mt-1" value={filters.to} onChange={(e) => setFilters({ ...filters, to: e.target.value })} />
-          </label>
-          <label>
-            <span className="text-xs font-bold text-gray-500">Status</span>
-            <select className="input mt-1" value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })}>
-              <option value="todos">Todos</option>
-              <option value="pendente">Pedido pendente</option>
-              <option value="confirmado">Pedido ou pagamento confirmado</option>
-              <option value="em_producao">Em produção</option>
-              <option value="pronto">Pronto</option>
-              <option value="entregue">Entregue</option>
-              <option value="cancelado">Cancelado</option>
-              <option value="parcial">Pagamento parcial</option>
-              <option value="recusado">Pagamento recusado</option>
-            </select>
-          </label>
-          <button className="btn btn-primary self-end" onClick={load}>Filtrar dashboard</button>
+        <div className="card p-3 grid sm:grid-cols-4 gap-3 w-full lg:w-auto">
+          <input className="input" type="date" value={filters.date_from} onChange={(e) => setFilters({ ...filters, date_from: e.target.value })} />
+          <input className="input" type="date" value={filters.date_to} onChange={(e) => setFilters({ ...filters, date_to: e.target.value })} />
+          <select className="input" value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })}>
+            {statusOptions.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+          </select>
+          <button className="btn btn-primary" onClick={load}>Filtrar</button>
         </div>
       </div>
 
       {loading && <div className="card p-4 mb-5">Carregando dados do Supabase...</div>}
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
         {stats.map(({ label, value, icon: Icon, color, bg }) => (
           <div key={label} className="card p-5">
-            <div className={'w-10 h-10 rounded-xl ' + bg + ' flex items-center justify-center mb-4'}><Icon size={20} className={color} /></div>
+            <div className={`w-10 h-10 rounded-xl ${bg} flex items-center justify-center mb-4`}><Icon size={20} className={color} /></div>
             <p className="text-sm text-gray-500 mb-1">{label}</p>
             <p className="font-display text-xl sm:text-2xl font-bold text-primary">{value}</p>
           </div>
         ))}
       </div>
 
-      <div className="grid sm:grid-cols-4 gap-4 mb-8">
-        <div className="card p-5 border-l-4 border-red-500"><p className="text-sm text-gray-500">Atrasados</p><p className="text-2xl font-bold text-red-600">{data?.filtro?.atrasados || 0}</p></div>
-        <div className="card p-5 border-l-4 border-yellow-500"><p className="text-sm text-gray-500">Atenção</p><p className="text-2xl font-bold text-yellow-600">{data?.filtro?.atencao || 0}</p></div>
-        <div className="card p-5 border-l-4 border-green-500"><p className="text-sm text-gray-500">No prazo</p><p className="text-2xl font-bold text-green-600">{data?.filtro?.noPrazo || 0}</p></div>
-        <div className="card p-5 border-l-4 border-blue-500"><p className="text-sm text-gray-500">Recebido</p><p className="text-2xl font-bold text-blue-600">{formatMoney(data?.filtro?.valorRecebidoPeriodo || 0)}</p></div>
-      </div>
-
       <div className="card overflow-hidden">
         <div className="p-6 border-b border-gray-100 flex items-center justify-between">
-          <h2 className="font-display text-lg font-bold text-primary">Pedidos do filtro</h2>
+          <h2 className="font-display text-lg font-bold text-primary">Pedidos recentes do filtro</h2>
         </div>
         <div className="divide-y divide-gray-100">
-          {recent.length === 0 && <div className="p-6 text-gray-500">Nenhum pedido encontrado.</div>}
-          {recent.map((order: any) => (
+          {orders.length === 0 && <div className="p-6 text-gray-500">Nenhum pedido encontrado.</div>}
+          {orders.map((order) => (
             <div key={order.id} className="p-4 sm:p-6 flex items-center justify-between hover:bg-gray-50 transition-colors">
               <div className="flex items-center gap-4 min-w-0">
-                <div className={'w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ' + (order.prazo_status === 'atrasado' ? 'bg-red-100' : order.prazo_status === 'atenção' ? 'bg-yellow-100' : 'bg-green-100')}>
-                  {order.prazo_status === 'atrasado' ? <AlertTriangle size={18} className="text-red-600" /> : <ShoppingCart size={18} className="text-primary" />}
-                </div>
+                <div className="w-10 h-10 rounded-full bg-primary/5 flex items-center justify-center flex-shrink-0"><Package size={18} className="text-primary" /></div>
                 <div className="min-w-0">
                   <p className="font-semibold text-primary text-sm sm:text-base truncate">{order.numero_pedido}</p>
                   <p className="text-sm text-gray-500 truncate">{order.cliente_nome || order.cliente_email || 'Cliente'}</p>
-                  <p className="text-xs text-gray-400">Prazo: {order.prazo_entrega || order.data_entrega_estimada || 'não definido'}</p>
                 </div>
               </div>
               <div className="text-right">
                 <p className="font-bold text-primary">{formatMoney(order.total)}</p>
-                <p className="text-xs text-red-600">Resta: {formatMoney(order.valor_restante || 0)}</p>
+                <p className="text-xs text-red-600 font-bold">Resta {formatMoney(order.valor_restante || 0)}</p>
                 <span className="inline-block mt-1 px-2 py-0.5 rounded-full bg-gold/10 text-gold text-xs font-semibold">{order.status}</span>
               </div>
             </div>
@@ -120,5 +105,3 @@ export function Dashboard() {
     </div>
   );
 }
-
-export default Dashboard;

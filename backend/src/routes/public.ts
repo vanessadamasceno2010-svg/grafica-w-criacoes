@@ -2,68 +2,49 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { asyncHandler } from '../utils/http.js';
 import { restEq, supabaseRest } from '../lib/supabaseRest.js';
+import { sendMail } from '../services/mail.js';
 
 export const publicRoutes = Router();
 
-function prazoStatus(pedido: any) {
-  const raw = pedido.prazo_entrega || pedido.data_entrega_estimada;
-  if (!raw) return 'sem_prazo';
-
-  const prazo = new Date(raw);
-  if (Number.isNaN(prazo.getTime())) return 'sem_prazo';
-
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  prazo.setHours(0, 0, 0, 0);
-
-  const diff = Math.ceil((prazo.getTime() - today.getTime()) / 86400000);
-  if (diff < 0 && !['entregue', 'cancelado'].includes(String(pedido.status))) return 'atrasado';
-  if (diff <= 2) return 'atenção';
-  return 'no_prazo';
-}
-
 publicRoutes.get('/configuracoes', asyncHandler(async (_req, res) => {
-  const rows = await supabaseRest<any[]>('/configuracoes_site?select=chave,valor,tipo&order=chave.asc');
-  const config: Record<string, string> = {};
-
-  for (const item of rows || []) {
-    config[item.chave] = item.valor || '';
-  }
-
-  res.json(config);
+  const rows = await supabaseRest<any[]>('/configuracoes_site?select=chave,valor,tipo');
+  res.json(Object.fromEntries((rows || []).map((r: any) => [r.chave, r.valor])));
 }));
 
-publicRoutes.get('/pedidos/acompanhar', asyncHandler(async (req, res) => {
-  const numero = String(req.query.numero || '').trim();
+publicRoutes.get('/acompanhar/:numero', asyncHandler(async (req, res) => {
+  const numero = restEq(req.params.numero);
   const email = String(req.query.email || '').trim().toLowerCase();
 
-  if (!numero) {
-    return res.status(400).json({ message: 'Informe o código do pedido.' });
-  }
-
-  let path = `/pedidos?select=id,numero_pedido,status,status_pagamento,total,valor_entrada,valor_restante,cliente_nome,cliente_email,cliente_telefone,prazo_entrega,data_entrega_estimada,created_at&numero_pedido=eq.${restEq(numero)}&limit=1`;
+  let path = `/pedidos?select=*&numero_pedido=eq.${numero}&limit=1`;
+  if (email) path += `&cliente_email=eq.${restEq(email)}`;
 
   const rows = await supabaseRest<any[]>(path);
   const pedido = rows[0];
 
-  if (!pedido) {
-    return res.status(404).json({ message: 'Pedido não encontrado.' });
-  }
+  if (!pedido) return res.status(404).json({ message: 'Pedido não encontrado.' });
 
-  if (email && String(pedido.cliente_email || '').toLowerCase() !== email) {
-    return res.status(404).json({ message: 'Pedido não encontrado para este email.' });
-  }
-
-  res.json({ ...pedido, prazo_status: prazoStatus(pedido) });
+  res.json({
+    id: pedido.id,
+    numero_pedido: pedido.numero_pedido,
+    cliente_nome: pedido.cliente_nome,
+    status: pedido.status,
+    status_pagamento: pedido.status_pagamento,
+    total: pedido.total,
+    valor_entrada: pedido.valor_entrada || 0,
+    valor_restante: pedido.valor_restante || 0,
+    prazo_entrega: pedido.prazo_entrega || pedido.data_entrega_estimada || null,
+    created_at: pedido.created_at,
+    updated_at: pedido.updated_at
+  });
 }));
 
 publicRoutes.post('/contatos', asyncHandler(async (req, res) => {
   const d = z.object({
-    nome: z.string().min(2),
+    nome: z.string(),
     email: z.string().email(),
     telefone: z.string().optional(),
-    assunto: z.string().min(2),
-    mensagem: z.string().min(3)
+    assunto: z.string(),
+    mensagem: z.string()
   }).parse(req.body);
 
   const rows = await supabaseRest<any[]>('/contatos_formulario', {
@@ -79,6 +60,7 @@ publicRoutes.post('/contatos', asyncHandler(async (req, res) => {
     })
   });
 
+  await sendMail(d.email, 'Mensagem recebida', '<p>Recebemos sua mensagem e responderemos em breve.</p>').catch(() => null);
   res.status(201).json(rows[0]);
 }));
 

@@ -31,10 +31,12 @@ export function Login() {
       const payload = mode === 'login'
         ? { email: form.email.trim().toLowerCase(), senha: form.senha }
         : { nome: form.nome.trim(), telefone: form.telefone.trim(), email: form.email.trim().toLowerCase(), senha: form.senha };
+
       const data = await apiFetch<any>(mode === 'login' ? '/auth/login' : '/auth/register', {
         method: 'POST',
         body: JSON.stringify(payload)
       });
+
       setAuthSession(data.token, data.user);
       setUser(data.user);
       goByRole(data.user);
@@ -53,6 +55,7 @@ export function Login() {
             {mode === 'login' ? <ShieldCheck size={28} /> : <UserPlus size={28} />}
           </div>
         </div>
+
         <h1 className="text-3xl font-black text-center text-slate-950">{mode === 'login' ? 'Acessar Conta' : 'Criar Conta'}</h1>
         <p className="text-center text-slate-500 mt-2 mb-6">Login único para cliente, funcionário e administrador.</p>
 
@@ -63,37 +66,24 @@ export function Login() {
 
         {mode === 'cadastro' && (
           <>
-            <label className="block mb-4">
-              <span className="block text-sm font-bold text-slate-700 mb-2">Nome completo</span>
-              <input className="w-full h-12 rounded-2xl border border-slate-200 px-4 outline-none focus:ring-4 focus:ring-amber-100" value={form.nome} onChange={(e) => setField('nome', e.target.value)} placeholder="Seu nome" required />
-            </label>
-            <label className="block mb-4">
-              <span className="block text-sm font-bold text-slate-700 mb-2">Telefone / WhatsApp</span>
-              <input className="w-full h-12 rounded-2xl border border-slate-200 px-4 outline-none focus:ring-4 focus:ring-amber-100" value={form.telefone} onChange={(e) => setField('telefone', e.target.value)} placeholder="(88) 99999-0000" required />
-            </label>
+            <label className="block mb-4"><span className="block text-sm font-bold text-slate-700 mb-2">Nome completo</span><input className="w-full h-12 rounded-2xl border border-slate-200 px-4 outline-none focus:ring-4 focus:ring-amber-100" value={form.nome} onChange={(e) => setField('nome', e.target.value)} placeholder="Seu nome" required /></label>
+            <label className="block mb-4"><span className="block text-sm font-bold text-slate-700 mb-2">Telefone / WhatsApp</span><input className="w-full h-12 rounded-2xl border border-slate-200 px-4 outline-none focus:ring-4 focus:ring-amber-100" value={form.telefone} onChange={(e) => setField('telefone', e.target.value)} placeholder="(88) 99999-0000" required /></label>
           </>
         )}
 
         <label className="block mb-4">
           <span className="block text-sm font-bold text-slate-700 mb-2">Email</span>
-          <div className="relative">
-            <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input type="email" className="w-full h-12 rounded-2xl border border-slate-200 pl-12 pr-4 outline-none focus:ring-4 focus:ring-amber-100" value={form.email} onChange={(e) => setField('email', e.target.value)} placeholder="seuemail@email.com" required />
-          </div>
+          <div className="relative"><Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" /><input type="email" className="w-full h-12 rounded-2xl border border-slate-200 pl-12 pr-4 outline-none focus:ring-4 focus:ring-amber-100" value={form.email} onChange={(e) => setField('email', e.target.value)} placeholder="seuemail@email.com" required /></div>
         </label>
 
         <label className="block mb-5">
           <span className="block text-sm font-bold text-slate-700 mb-2">Senha</span>
-          <div className="relative">
-            <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input type="password" className="w-full h-12 rounded-2xl border border-slate-200 pl-12 pr-4 outline-none focus:ring-4 focus:ring-amber-100" value={form.senha} onChange={(e) => setField('senha', e.target.value)} placeholder="Digite sua senha" required minLength={6} />
-          </div>
+          <div className="relative"><Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" /><input type="password" className="w-full h-12 rounded-2xl border border-slate-200 pl-12 pr-4 outline-none focus:ring-4 focus:ring-amber-100" value={form.senha} onChange={(e) => setField('senha', e.target.value)} placeholder="Digite sua senha" required minLength={6} /></div>
         </label>
 
         {erro && <div className="mb-5 rounded-2xl bg-red-50 border border-red-100 text-red-700 p-4 font-semibold">{erro}</div>}
-        <button type="submit" disabled={loading} className="w-full min-h-[52px] rounded-2xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-black transition disabled:opacity-60">
-          {loading ? 'Aguarde...' : mode === 'login' ? 'Entrar' : 'Criar conta'}
-        </button>
+
+        <button type="submit" disabled={loading} className="w-full min-h-[52px] rounded-2xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-black transition disabled:opacity-60">{loading ? 'Aguarde...' : mode === 'login' ? 'Entrar' : 'Criar conta'}</button>
       </form>
     </main>
   );

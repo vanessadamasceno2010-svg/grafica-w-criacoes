@@ -3,12 +3,10 @@ import jwt from 'jsonwebtoken';
 import { config } from '../config.js';
 import { HttpError } from '../utils/http.js';
 
-export type AuthRole = 'user' | 'admin' | 'funcionario' | 'inactive' | string;
-
 export type AuthUser = {
   id: string;
   email: string;
-  role: AuthRole;
+  role: 'user' | 'admin' | 'funcionario' | 'inactive' | string;
   nome?: string;
   funcionario_permissoes?: string[];
 };
@@ -19,9 +17,7 @@ declare module 'express-serve-static-core' {
   }
 }
 
-const JWT_SECRET = String(
-  config.jwtSecret || process.env.JWT_SECRET || 'segredo-temporario-dev'
-);
+const JWT_SECRET = String(config.jwtSecret || process.env.JWT_SECRET || 'segredo-temporario-dev');
 
 export function signToken(user: AuthUser): string {
   const payload = {
@@ -29,14 +25,10 @@ export function signToken(user: AuthUser): string {
     email: user.email,
     role: user.role,
     nome: user.nome || '',
-    funcionario_permissoes: Array.isArray(user.funcionario_permissoes)
-      ? user.funcionario_permissoes
-      : []
+    funcionario_permissoes: Array.isArray(user.funcionario_permissoes) ? user.funcionario_permissoes : []
   };
 
-  return (jwt.sign as any)(payload, JWT_SECRET, {
-    expiresIn: 604800
-  });
+  return (jwt.sign as any)(payload, JWT_SECRET, { expiresIn: 604800 });
 }
 
 export function auth(req: Request, _res: Response, next: NextFunction) {
@@ -55,9 +47,7 @@ export function auth(req: Request, _res: Response, next: NextFunction) {
       email: decoded.email,
       role: decoded.role,
       nome: decoded.nome || '',
-      funcionario_permissoes: Array.isArray(decoded.funcionario_permissoes)
-        ? decoded.funcionario_permissoes
-        : []
+      funcionario_permissoes: Array.isArray(decoded.funcionario_permissoes) ? decoded.funcionario_permissoes : []
     };
 
     return next();
@@ -67,30 +57,19 @@ export function auth(req: Request, _res: Response, next: NextFunction) {
 }
 
 export function admin(req: Request, _res: Response, next: NextFunction) {
-  if (!req.user) {
-    throw new HttpError(401, 'Usuário não autenticado.');
-  }
-
-  if (req.user.role !== 'admin') {
-    throw new HttpError(403, 'Acesso restrito ao administrador.');
-  }
-
+  if (!req.user) throw new HttpError(401, 'Usuário não autenticado.');
+  if (req.user.role !== 'admin') throw new HttpError(403, 'Acesso restrito ao administrador.');
   return next();
 }
 
 export function staff(req: Request, _res: Response, next: NextFunction) {
-  if (!req.user) {
-    throw new HttpError(401, 'Usuário não autenticado.');
-  }
-
+  if (!req.user) throw new HttpError(401, 'Usuário não autenticado.');
   if (!['admin', 'funcionario', 'staff', 'employee'].includes(String(req.user.role))) {
     throw new HttpError(403, 'Acesso restrito.');
   }
-
   return next();
 }
 
 export const authMiddleware = auth;
 export const adminMiddleware = admin;
-export const staffMiddleware = staff;
 export const generateToken = signToken;
