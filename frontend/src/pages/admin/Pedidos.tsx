@@ -685,7 +685,20 @@ export function Pedidos() {
             <label className="block">
               <span className="text-sm font-bold text-primary mb-1 flex items-center gap-2">
                 <UserRound size={16} />
-                Cliente cadastrado
+                Nome do cliente
+              </span>
+              <input
+                className="input border-2 border-amber-300 focus:border-amber-500"
+                placeholder="Digite o nome do cliente"
+                value={newOrder.cliente_nome}
+                onChange={(e) => setNewOrder({ ...newOrder, cliente_nome: e.target.value })}
+              />
+            </label>
+
+            <label className="block">
+              <span className="text-sm font-bold text-primary mb-1 flex items-center gap-2">
+                <UserRound size={16} />
+                Selecionar cliente cadastrado
               </span>
               <select
                 className="input"
@@ -701,33 +714,7 @@ export function Pedidos() {
               </select>
             </label>
 
-            <label className="block">
-              <span className="text-sm font-bold text-primary mb-1 flex items-center gap-2">
-                <UserRound size={16} />
-                Nome do cliente
-              </span>
-              <input
-                className="input"
-                placeholder="Nome do cliente"
-                value={newOrder.cliente_nome}
-                onChange={(e) => setNewOrder({ ...newOrder, cliente_nome: e.target.value })}
-              />
-            </label>
-
             <div className="grid sm:grid-cols-2 gap-3">
-              <label className="block">
-                <span className="text-sm font-bold text-primary mb-1 flex items-center gap-2">
-                  <Mail size={16} />
-                  Email
-                </span>
-                <input
-                  className="input"
-                  placeholder="Email do cliente"
-                  value={newOrder.cliente_email}
-                  onChange={(e) => setNewOrder({ ...newOrder, cliente_email: e.target.value })}
-                />
-              </label>
-
               <label className="block">
                 <span className="text-sm font-bold text-primary mb-1 flex items-center gap-2">
                   <Phone size={16} />
@@ -738,6 +725,19 @@ export function Pedidos() {
                   placeholder="Telefone / WhatsApp"
                   value={newOrder.cliente_telefone}
                   onChange={(e) => setNewOrder({ ...newOrder, cliente_telefone: e.target.value })}
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-sm font-bold text-primary mb-1 flex items-center gap-2">
+                  <Mail size={16} />
+                  Email
+                </span>
+                <input
+                  className="input"
+                  placeholder="Email do cliente"
+                  value={newOrder.cliente_email}
+                  onChange={(e) => setNewOrder({ ...newOrder, cliente_email: e.target.value })}
                 />
               </label>
             </div>
