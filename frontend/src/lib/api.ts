@@ -302,3 +302,15 @@ export async function getPublicConfig(): Promise<Record<string, string>> {
 
 export const mockProducts: Product[] = [];
 export const mockCategories: Category[] = [];
+
+export function confirmAction(message: string) {
+  return window.confirm(message);
+}
+
+export function notifySuccess(message: string) {
+  window.alert(message);
+}
+
+export function notifyError(message: string) {
+  window.alert(message);
+}
