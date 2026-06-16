@@ -121,12 +121,18 @@ catalogRoutes.get('/produtos', asyncHandler(async (req, res) => {
 }));
 
 catalogRoutes.get('/produtos/:idOrSlug', asyncHandler(async (req, res) => {
-  const idOrSlug = req.params.idOrSlug;
+  const idOrSlug = decodeURIComponent(req.params.idOrSlug || '').trim();
   const categories = await supabaseRest<any[]>('/categorias?select=id,nome,slug');
 
-  const products = await supabaseRest<any[]>(
-    `/produtos?select=*&or=(id.eq.${restEq(idOrSlug)},slug.eq.${restEq(idOrSlug)})&limit=1`
-  );
+  let products = await supabaseRest<any[]>(
+    `/produtos?select=*&or=(id.eq.${restEq(idOrSlug)},slug.ilike.${restEq(idOrSlug)})&limit=1`
+  ).catch(() => []);
+
+  if (!products[0]) {
+    products = await supabaseRest<any[]>(
+      `/produtos?select=*&nome=ilike.${restEq(idOrSlug + '%')}&limit=1`
+    ).catch(() => []);
+  }
 
   const product = products[0];
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Search, Trash2, Copy, X } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Eye, Copy, X } from 'lucide-react';
 import { apiFetch, formatMoney, normalizeProduct, Product, ProductVariation, slugify } from '../../lib/api';
 import { BottomSheet } from '../../components/BottomSheet';
 
@@ -212,27 +212,16 @@ export function Produtos() {
     if (!confirm(`Deseja duplicar o produto ${product.nome}?`)) return;
 
     try {
-      const now = Date.now();
-      const categoriaId = product.categoria_id || categories.find((c) => c.id === product.categoria_id)?.id || categories[0]?.id || '';
-
-      if (!categoriaId) {
-        alert('Não foi possível duplicar: produto sem categoria válida.');
-        return;
-      }
-
       const body = payloadFromForm({
         ...product,
         id: '',
-        categoria_id: categoriaId,
         nome: `${product.nome} - Cópia`,
-        slug: `${slugify(product.nome)}-copia-${now}`,
-        sku: `${product.sku || 'SKU'}-COPIA-${now}`,
+        slug: `${slugify(product.nome)}-copia-${Date.now()}`,
+        sku: `${product.sku || 'SKU'}-COPIA-${Date.now()}`,
         destaque: false,
-        ativo: true,
         variacoes: normalizeVariations(product.variacoes).map((v, index) => ({
           ...v,
-          id: `var-${now}-${index}`,
-          nome: v.nome || `Variação ${index + 1}`
+          id: `VAR-${Date.now()}-${index}`
         }))
       });
 
@@ -270,8 +259,8 @@ export function Produtos() {
   const renderActions = (product: ProductForm) => (
     <>
       <button
-        onClick={(e) => {
-          e.stopPropagation();
+        onClick={(event) => {
+          event.stopPropagation();
           duplicateProduct(product);
         }}
         className="p-2 rounded-lg hover:bg-amber-50 text-amber-700"
@@ -280,8 +269,8 @@ export function Produtos() {
         <Copy size={16} />
       </button>
       <button
-        onClick={(e) => {
-          e.stopPropagation();
+        onClick={(event) => {
+          event.stopPropagation();
           deleteProduct(product);
         }}
         className="p-2 rounded-lg hover:bg-red-50 text-red-600"
@@ -295,7 +284,10 @@ export function Produtos() {
   return (
     <div className="fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-        <h1 className="font-display text-2xl sm:text-3xl font-bold text-primary">Gerenciador de Produtos</h1>
+        <div>
+          <h1 className="font-display text-2xl sm:text-3xl font-bold text-primary">Gerenciador de Produtos</h1>
+          <p className="text-gray-500 mt-1">Clique no produto para editar. Use Duplicar para criar uma cópia.</p>
+        </div>
         <button className="btn btn-primary" onClick={openNew}>
           <Plus size={18} />
           Novo Produto
@@ -332,7 +324,7 @@ export function Produtos() {
               {filtered.map((product) => {
                 const qtdVariacoes = normalizeVariations(product.variacoes).length;
                 return (
-                  <tr key={product.id} onClick={() => openView(product)} className="cursor-pointer hover:bg-gray-50 transition">
+                  <tr key={product.id} onClick={() => openEdit(product)} className="cursor-pointer hover:bg-amber-50/40 transition">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <img src={product.imagem_principal} alt="" className="w-10 h-10 rounded-lg object-cover bg-gray-100" />
@@ -359,7 +351,7 @@ export function Produtos() {
           {filtered.map((product) => {
             const qtdVariacoes = normalizeVariations(product.variacoes).length;
             return (
-              <div key={product.id} className="p-4 cursor-pointer active:bg-gray-50" onClick={() => openView(product)}>
+              <div key={product.id} className="p-4 cursor-pointer active:bg-amber-50" onClick={() => openEdit(product)}>
                 <div className="flex gap-3">
                   <img src={product.imagem_principal} alt="" className="w-16 h-16 rounded-xl object-cover bg-gray-100" />
                   <div className="flex-1 min-w-0">
@@ -371,7 +363,7 @@ export function Produtos() {
                     <p className="text-xs text-gray-500">{qtdVariacoes} variação(ões)</p>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-2 mt-4" onClick={(e) => e.stopPropagation()}>
+                <div className="grid grid-cols-2 gap-2 mt-4" onClick={(event) => event.stopPropagation()}>
                   <button onClick={() => duplicateProduct(product)} className="btn btn-outline px-2"><Copy size={16} />Duplicar</button>
                   <button onClick={() => deleteProduct(product)} className="btn btn-danger px-2"><Trash2 size={16} />Excluir</button>
                 </div>

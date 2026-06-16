@@ -11,7 +11,8 @@ import {
   Mail,
   Phone,
   FileText,
-  CalendarDays
+  CalendarDays,
+  Share2
 } from 'lucide-react';
 import { apiFetch, formatMoney } from '../../lib/api';
 import { BottomSheet } from '../../components/BottomSheet';
@@ -200,7 +201,7 @@ export function Pedidos() {
     if (!confirm('Confirmar criação deste pedido?')) return;
 
     try {
-      await apiFetch('/admin/pedidos/manual', {
+      const created = await apiFetch<any>('/admin/pedidos/manual', {
         method: 'POST',
         body: JSON.stringify({
           usuario_id: newOrder.usuario_id || null,
@@ -220,7 +221,8 @@ export function Pedidos() {
 
       setNewOrder(null);
       await load();
-      alert('Pedido salvo com sucesso.');
+      if (created?.id) await openOrder(created);
+      alert('Pedido salvo com sucesso. Use o botão Compartilhar pedido para enviar o resumo ao cliente.');
     } catch (err: any) {
       alert(err.message || 'Erro ao salvar pedido.');
     }
@@ -271,6 +273,43 @@ export function Pedidos() {
     } catch (err: any) {
       alert(err.message || 'Erro ao excluir pedido.');
     }
+  }
+
+
+  function shareOrder(order: any) {
+    const numero = order.numero_pedido || order.numero || order.id;
+    const prazo = order.prazo_entrega
+      ? new Date(order.prazo_entrega).toLocaleDateString('pt-BR')
+      : 'A combinar';
+    const link = window.location.origin + '/acompanhar?pedido=' + encodeURIComponent(numero);
+    const descricao = order.observacoes || order.descricao || 'Pedido registrado no painel.';
+
+    const message = [
+      `Pedido número *${numero}*`,
+      `Descrição: ${descricao}`,
+      '',
+      'Forma de Pagamento:',
+      '50% Pedido e 50% Entrega',
+      '',
+      'Chave Pix:',
+      'wcriacoesgrafica@gmail.com',
+      '',
+      `Prazo de Entrega dia ${prazo}`,
+      '',
+      'Após a confirmação do pedido seguiremos com a criação dos layouts e enviaremos para aprovação antes de iniciar a produção dos materiais.',
+      '',
+      'Você pode acompanhar o andamento do seu pedido pelo link abaixo:',
+      link,
+      '',
+      `Código do pedido: ${numero}`
+    ].join('\n');
+
+    const phone = String(order.cliente_telefone || '').replace(/\D/g, '');
+    const url = phone
+      ? 'https://wa.me/55' + phone.replace(/^55/, '') + '?text=' + encodeURIComponent(message)
+      : 'https://wa.me/?text=' + encodeURIComponent(message);
+
+    window.open(url, '_blank');
   }
 
   const printDocument = async (order: any) => {
@@ -383,8 +422,9 @@ export function Pedidos() {
               <select className="input" value={selectedOrder.status_pagamento || 'pendente'} onChange={(e) => setSelectedOrder({ ...selectedOrder, status_pagamento: e.target.value })}>{Object.entries(paymentLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select>
             </div>
             <textarea className="input min-h-24" placeholder="Observações" value={selectedOrder.observacoes || ''} onChange={(e) => setSelectedOrder({ ...selectedOrder, observacoes: e.target.value })} />
-            <div className="sticky bottom-0 -mx-5 -mb-5 bg-white border-t border-gray-100 p-4 grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div className="sticky bottom-0 -mx-5 -mb-5 bg-white border-t border-gray-100 p-4 grid grid-cols-1 sm:grid-cols-4 gap-2">
               <button className="btn btn-outline" onClick={() => printDocument(selectedOrder)}>Documento</button>
+              <button className="btn btn-outline" onClick={() => shareOrder(selectedOrder)}><Share2 size={16} /> Compartilhar</button>
               <button className="btn btn-outline text-red-700" onClick={() => deleteOrder(selectedOrder)}>Excluir</button>
               <button className="btn btn-primary" onClick={saveStatus}>Salvar</button>
             </div>

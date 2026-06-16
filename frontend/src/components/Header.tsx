@@ -108,7 +108,7 @@ export function Header() {
           <div className="h-px bg-gray-200 my-2" />
 
           <a
-            href={'https://wa.me/' + WHATSAPP_NUMBER}
+            href={'https://wa.me/' + WHATSAPP_NUMBER + '?text=' + encodeURIComponent('Olá vim do Site')}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl font-bold bg-success text-white active:bg-green-700 transition-colors"

@@ -89,6 +89,11 @@ async function findOrCreateClienteSimples(data: {
     if (byPhoneClean[0]) return byPhoneClean[0];
   }
 
+  if (String(data.nome || '').trim()) {
+    const byName = await supabaseRest<any[]>(`/users?select=id,nome,email,telefone&nome=ilike.${restEq(String(data.nome).trim())}&role=eq.user&limit=1`).catch(() => []);
+    if (byName[0]) return byName[0];
+  }
+
   const senhaHash = await bcrypt.hash(`cliente-${Date.now()}-${Math.random()}`, 10);
   const novoEmail = email || safeClienteEmail(data.nome, telefone);
 
@@ -178,6 +183,26 @@ adminRoutes.put('/clientes/:id/redefinir-senha', onlyAdmin, asyncHandler(async (
 adminRoutes.delete('/clientes/:id', onlyAdmin, asyncHandler(async (req, res) => {
   await supabaseRest(`/users?id=eq.${restEq(req.params.id)}`, { method: 'DELETE' });
   res.json({ ok: true });
+}));
+
+adminRoutes.get('/clientes/:id/pedidos', asyncHandler(async (req, res) => {
+  const clienteRows = await supabaseRest<any[]>(`/users?select=id,nome,email,telefone&id=eq.${restEq(req.params.id)}&limit=1`).catch(() => []);
+  const cliente = clienteRows[0];
+
+  if (!cliente) return res.status(404).json({ message: 'Cliente não encontrado.' });
+
+  let query = `/pedidos?select=*&usuario_id=eq.${restEq(cliente.id)}&order=created_at.desc&limit=500`;
+  let pedidos = await supabaseRest<any[]>(query).catch(() => []);
+
+  if (pedidos.length === 0 && cliente.email) {
+    pedidos = await supabaseRest<any[]>(`/pedidos?select=*&cliente_email=eq.${restEq(cliente.email)}&order=created_at.desc&limit=500`).catch(() => []);
+  }
+
+  if (pedidos.length === 0 && cliente.telefone) {
+    pedidos = await supabaseRest<any[]>(`/pedidos?select=*&cliente_telefone=eq.${restEq(cliente.telefone)}&order=created_at.desc&limit=500`).catch(() => []);
+  }
+
+  res.json({ cliente, pedidos });
 }));
 
 adminRoutes.get('/configuracoes', onlyAdmin, asyncHandler(async (_req, res) => {

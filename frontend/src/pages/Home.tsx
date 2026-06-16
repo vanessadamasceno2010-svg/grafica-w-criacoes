@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Sparkles, Clock, ShieldCheck, Truck, MessageCircle, ArrowRight, Search } from 'lucide-react';
 import { ProductCard } from '../components/ProductCard';
-import { BRAND, Category, Product, apiFetch, getPublicConfig, normalizeCategory, normalizeProduct } from '../lib/api';
+import { BRAND, Category, Product, apiFetch, getPublicConfig, normalizeCategory, normalizeProduct, whatsappUrl } from '../lib/api';
 
 export function Home() {
   const [config, setConfig] = useState<Record<string, string>>({});
@@ -59,7 +59,7 @@ export function Home() {
                 <Link to="/catalogo" className="btn btn-primary text-base">
                   Ver Catálogo <ArrowRight size={18} />
                 </Link>
-                <a href={'https://wa.me/' + BRAND.whatsappNumber} target="_blank" rel="noopener noreferrer" className="btn btn-whats text-base">
+                <a href={whatsappUrl('Olá vim do Site')} target="_blank" rel="noopener noreferrer" className="btn btn-whats text-base">
                   <MessageCircle size={18} />Falar no WhatsApp
                 </a>
               </div>

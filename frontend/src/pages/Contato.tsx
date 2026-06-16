@@ -14,7 +14,7 @@ export function Contato() {
   };
 
   const infoItems = [
-    { icon: Phone, label: 'WhatsApp', value: BRAND.whatsapp, link: `https://wa.me/${BRAND.whatsappNumber}` },
+    { icon: Phone, label: 'WhatsApp', value: BRAND.whatsapp, link: `https://wa.me/${BRAND.whatsappNumber}?text=${encodeURIComponent('Olá vim do Site')}` },
     { icon: Mail, label: 'Email', value: BRAND.email, link: `mailto:${BRAND.email}` },
     { icon: MapPin, label: 'Endereço', value: 'Rua Exemplo, 123 - Centro, Cidade/UF', link: '#' },
     { icon: Clock, label: 'Horário', value: 'Seg a Sex: 8h às 18h | Sáb: 8h às 12h', link: '#' },

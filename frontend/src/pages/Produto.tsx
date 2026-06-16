@@ -31,21 +31,39 @@ export function Produto() {
   useEffect(() => {
     if (!slug) return;
 
+    const applyProduct = (data: any) => {
+      const normalized = normalizeProduct(data);
+      setProduct(normalized);
+
+      const vars = activeVariations(normalized);
+      if (vars[0]?.id) setSelectedVariationId(String(vars[0].id));
+
+      const initial: Record<string, string> = {};
+      Object.entries(normalized.especificacoes || {}).forEach(([key, values]: any) => {
+        if (Array.isArray(values) && values[0]) initial[key] = values[0];
+      });
+      setSelectedSpecs(initial);
+    };
+
+    const findFallbackProduct = async () => {
+      const res = await apiFetch<{ data: any[] }>('/produtos?limit=100');
+      const term = decodeURIComponent(slug).trim().toLowerCase();
+      const found = (res.data || []).find((p: any) => {
+        return (
+          String(p.id || '').toLowerCase() === term ||
+          String(p.slug || '').toLowerCase() === term ||
+          String(p.nome || '').toLowerCase() === term ||
+          String(p.nome || '').toLowerCase().startsWith(term)
+        );
+      });
+      if (!found) throw new Error('Produto não encontrado.');
+      return found;
+    };
+
     setLoading(true);
     apiFetch<any>('/produtos/' + encodeURIComponent(slug))
-      .then((data) => {
-        const normalized = normalizeProduct(data);
-        setProduct(normalized);
-
-        const vars = activeVariations(normalized);
-        if (vars[0]?.id) setSelectedVariationId(String(vars[0].id));
-
-        const initial: Record<string, string> = {};
-        Object.entries(normalized.especificacoes || {}).forEach(([key, values]: any) => {
-          if (Array.isArray(values) && values[0]) initial[key] = values[0];
-        });
-        setSelectedSpecs(initial);
-      })
+      .catch(findFallbackProduct)
+      .then(applyProduct)
       .catch(() => setProduct(null))
       .finally(() => setLoading(false));
   }, [slug]);

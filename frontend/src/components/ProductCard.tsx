@@ -18,10 +18,15 @@ function minPrice(product: Product) {
   return Math.min(...vars.map((v) => Number(v.preco || 0)));
 }
 
+function safeProductPath(product: Product) {
+  const raw = product.slug || product.id || product.nome || '';
+  return encodeURIComponent(String(raw).trim());
+}
+
 export function ProductCard({ product }: ProductCardProps) {
   const vars = activeVariations(product);
   const price = minPrice(product);
-  const target = product.slug || product.id;
+  const target = safeProductPath(product);
 
   return (
     <Link
