@@ -11,7 +11,8 @@ import {
   Mail,
   Phone,
   FileText,
-  CalendarDays
+  CalendarDays,
+  X
 } from 'lucide-react';
 import { apiFetch, formatMoney } from '../../lib/api';
 import { BottomSheet } from '../../components/BottomSheet';
@@ -192,9 +193,9 @@ export function Pedidos() {
   };
 
   function setNewClient(id: string) {
-    const c = clientes.find((x) => x.id === id);
-
     if (!newOrder) return;
+
+    const c = clientes.find((x) => x.id === id);
 
     if (!c) {
       setNewOrder({
@@ -412,7 +413,7 @@ export function Pedidos() {
   };
 
   return (
-    <div className="fade-in w-full max-w-full overflow-hidden px-1 sm:px-0">
+    <div className="fade-in w-full max-w-full overflow-hidden px-3 sm:px-0">
       <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 mb-6">
         <div>
           <h1 className="font-display text-2xl sm:text-3xl font-bold text-primary">
@@ -672,135 +673,165 @@ export function Pedidos() {
         )}
       </BottomSheet>
 
-      <BottomSheet isOpen={!!newOrder} onClose={() => setNewOrder(null)} title="Novo Pedido Manual">
-        {newOrder && (
-          <div className="space-y-4">
-            <div className="rounded-2xl bg-amber-50 border border-amber-100 p-4">
-              <p className="font-bold text-primary">Cliente do pedido</p>
-              <p className="text-sm text-gray-600">
-                Escolha um cliente já cadastrado ou preencha os dados manualmente.
-              </p>
-            </div>
+      {newOrder && (
+        <div className="fixed inset-0 z-[9999] bg-slate-950/70 flex items-stretch sm:items-center justify-center">
+          <div className="w-full sm:max-w-2xl bg-white sm:rounded-3xl shadow-2xl flex flex-col max-h-[100dvh] sm:max-h-[92vh]">
+            <div className="sticky top-0 z-10 bg-white border-b border-gray-100 px-5 py-4 flex items-center justify-between">
+              <div>
+                <h2 className="font-display text-xl font-bold text-primary">Novo Pedido Manual</h2>
+                <p className="text-sm text-gray-500">Preencha os dados do cliente e do pedido.</p>
+              </div>
 
-            <label className="block">
-              <span className="text-sm font-bold text-primary mb-1 flex items-center gap-2">
-                <UserRound size={16} />
-                Nome do cliente
-              </span>
-              <input
-                className="input border-2 border-amber-300 focus:border-amber-500"
-                placeholder="Digite o nome do cliente"
-                value={newOrder.cliente_nome}
-                onChange={(e) => setNewOrder({ ...newOrder, cliente_nome: e.target.value })}
-              />
-            </label>
-
-            <label className="block">
-              <span className="text-sm font-bold text-primary mb-1 flex items-center gap-2">
-                <UserRound size={16} />
-                Selecionar cliente cadastrado
-              </span>
-              <select
-                className="input"
-                value={newOrder.usuario_id || ''}
-                onChange={(e) => setNewClient(e.target.value)}
+              <button
+                type="button"
+                onClick={() => setNewOrder(null)}
+                className="w-11 h-11 rounded-full bg-gray-100 flex items-center justify-center text-primary"
+                aria-label="Fechar"
               >
-                <option value="">Selecionar cliente cadastrado ou preencher manualmente</option>
-                {clientes.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.nome} - {c.email || c.telefone || 'sem contato'}
-                  </option>
-                ))}
-              </select>
-            </label>
+                <X size={22} />
+              </button>
+            </div>
 
-            <div className="grid sm:grid-cols-2 gap-3">
+            <div className="flex-1 overflow-y-auto px-5 py-5 pb-28 sm:pb-6 space-y-4">
+              <div className="rounded-2xl bg-amber-50 border border-amber-100 p-4">
+                <p className="font-bold text-primary">Cliente do pedido</p>
+                <p className="text-sm text-gray-600">
+                  Escolha um cliente já cadastrado ou preencha os dados manualmente.
+                </p>
+              </div>
+
               <label className="block">
                 <span className="text-sm font-bold text-primary mb-1 flex items-center gap-2">
-                  <Phone size={16} />
-                  Telefone
+                  <UserRound size={16} />
+                  Nome do cliente
                 </span>
                 <input
-                  className="input"
-                  placeholder="Telefone / WhatsApp"
-                  value={newOrder.cliente_telefone}
-                  onChange={(e) => setNewOrder({ ...newOrder, cliente_telefone: e.target.value })}
+                  className="input border-2 border-amber-300 focus:border-amber-500"
+                  placeholder="Digite o nome do cliente"
+                  value={newOrder.cliente_nome}
+                  onChange={(e) => setNewOrder({ ...newOrder, cliente_nome: e.target.value })}
                 />
               </label>
 
               <label className="block">
                 <span className="text-sm font-bold text-primary mb-1 flex items-center gap-2">
-                  <Mail size={16} />
-                  Email
+                  <UserRound size={16} />
+                  Selecionar cliente cadastrado
+                </span>
+                <select
+                  className="input"
+                  value={newOrder.usuario_id || ''}
+                  onChange={(e) => setNewClient(e.target.value)}
+                >
+                  <option value="">Selecionar cliente cadastrado ou preencher manualmente</option>
+                  {clientes.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.nome} - {c.email || c.telefone || 'sem contato'}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <div className="grid sm:grid-cols-2 gap-3">
+                <label className="block">
+                  <span className="text-sm font-bold text-primary mb-1 flex items-center gap-2">
+                    <Phone size={16} />
+                    Telefone
+                  </span>
+                  <input
+                    className="input"
+                    placeholder="Telefone / WhatsApp"
+                    value={newOrder.cliente_telefone}
+                    onChange={(e) => setNewOrder({ ...newOrder, cliente_telefone: e.target.value })}
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="text-sm font-bold text-primary mb-1 flex items-center gap-2">
+                    <Mail size={16} />
+                    Email
+                  </span>
+                  <input
+                    className="input"
+                    placeholder="Email do cliente"
+                    value={newOrder.cliente_email}
+                    onChange={(e) => setNewOrder({ ...newOrder, cliente_email: e.target.value })}
+                  />
+                </label>
+              </div>
+
+              <label className="block">
+                <span className="text-sm font-bold text-primary mb-1 flex items-center gap-2">
+                  <FileText size={16} />
+                  Descrição do pedido
+                </span>
+                <textarea
+                  className="input min-h-28"
+                  placeholder="Descreva o pedido, produto, tamanho, material, observações..."
+                  value={newOrder.descricao}
+                  onChange={(e) => setNewOrder({ ...newOrder, descricao: e.target.value })}
+                />
+              </label>
+
+              <div className="grid sm:grid-cols-3 gap-3">
+                <label className="block">
+                  <span className="text-sm font-bold text-primary mb-1">Total R$</span>
+                  <input
+                    className="input"
+                    placeholder="Total R$"
+                    value={newOrder.total}
+                    onChange={(e) => updateNewOrderMoney('total', e.target.value)}
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="text-sm font-bold text-primary mb-1">Entrada R$</span>
+                  <input
+                    className="input"
+                    placeholder="Entrada R$"
+                    value={newOrder.valor_entrada}
+                    onChange={(e) => updateNewOrderMoney('valor_entrada', e.target.value)}
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="text-sm font-bold text-primary mb-1">Resta</span>
+                  <input className="input bg-gray-50" readOnly value={formatMoney(newOrder.valor_restante || 0)} />
+                </label>
+              </div>
+
+              <label className="block">
+                <span className="text-sm font-bold text-primary mb-1 flex items-center gap-2">
+                  <CalendarDays size={16} />
+                  Prazo de entrega
                 </span>
                 <input
                   className="input"
-                  placeholder="Email do cliente"
-                  value={newOrder.cliente_email}
-                  onChange={(e) => setNewOrder({ ...newOrder, cliente_email: e.target.value })}
+                  type="date"
+                  value={newOrder.prazo_entrega}
+                  onChange={(e) => setNewOrder({ ...newOrder, prazo_entrega: e.target.value })}
                 />
               </label>
             </div>
 
-            <label className="block">
-              <span className="text-sm font-bold text-primary mb-1 flex items-center gap-2">
-                <FileText size={16} />
-                Descrição do pedido
-              </span>
-              <textarea
-                className="input min-h-28"
-                placeholder="Descreva o pedido, produto, tamanho, material, observações..."
-                value={newOrder.descricao}
-                onChange={(e) => setNewOrder({ ...newOrder, descricao: e.target.value })}
-              />
-            </label>
+            <div className="fixed sm:static bottom-0 left-0 right-0 z-20 bg-white border-t border-gray-100 p-4">
+              <div className="grid grid-cols-2 gap-3 sm:max-w-2xl sm:mx-auto">
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  onClick={() => setNewOrder(null)}
+                >
+                  Cancelar
+                </button>
 
-            <div className="grid sm:grid-cols-3 gap-3">
-              <label className="block">
-                <span className="text-sm font-bold text-primary mb-1">Total R$</span>
-                <input
-                  className="input"
-                  placeholder="Total R$"
-                  value={newOrder.total}
-                  onChange={(e) => updateNewOrderMoney('total', e.target.value)}
-                />
-              </label>
-
-              <label className="block">
-                <span className="text-sm font-bold text-primary mb-1">Entrada R$</span>
-                <input
-                  className="input"
-                  placeholder="Entrada R$"
-                  value={newOrder.valor_entrada}
-                  onChange={(e) => updateNewOrderMoney('valor_entrada', e.target.value)}
-                />
-              </label>
-
-              <label className="block">
-                <span className="text-sm font-bold text-primary mb-1">Resta</span>
-                <input className="input bg-gray-50" readOnly value={formatMoney(newOrder.valor_restante || 0)} />
-              </label>
+                <button className="btn btn-primary" onClick={createOrder}>
+                  Salvar pedido
+                </button>
+              </div>
             </div>
-
-            <label className="block">
-              <span className="text-sm font-bold text-primary mb-1 flex items-center gap-2">
-                <CalendarDays size={16} />
-                Prazo de entrega
-              </span>
-              <input
-                className="input"
-                type="date"
-                value={newOrder.prazo_entrega}
-                onChange={(e) => setNewOrder({ ...newOrder, prazo_entrega: e.target.value })}
-              />
-            </label>
-
-            <button className="btn btn-primary w-full" onClick={createOrder}>
-              Salvar pedido no Supabase
-            </button>
           </div>
-        )}
-      </BottomSheet>
+        </div>
+      )}
     </div>
   );
 }
