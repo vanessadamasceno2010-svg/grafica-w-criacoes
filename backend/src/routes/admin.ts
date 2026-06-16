@@ -202,7 +202,17 @@ adminRoutes.get('/clientes/:id/pedidos', asyncHandler(async (req, res) => {
     pedidos = await supabaseRest<any[]>(`/pedidos?select=*&cliente_telefone=eq.${restEq(cliente.telefone)}&order=created_at.desc&limit=500`).catch(() => []);
   }
 
-  res.json({ cliente, pedidos });
+  let orcamentos = await supabaseRest<any[]>(`/orcamentos?select=*&usuario_id=eq.${restEq(cliente.id)}&order=created_at.desc&limit=500`).catch(() => []);
+
+  if (orcamentos.length === 0 && cliente.email) {
+    orcamentos = await supabaseRest<any[]>(`/orcamentos?select=*&cliente_email=eq.${restEq(cliente.email)}&order=created_at.desc&limit=500`).catch(() => []);
+  }
+
+  if (orcamentos.length === 0 && cliente.telefone) {
+    orcamentos = await supabaseRest<any[]>(`/orcamentos?select=*&cliente_telefone=eq.${restEq(cliente.telefone)}&order=created_at.desc&limit=500`).catch(() => []);
+  }
+
+  res.json({ cliente, pedidos, orcamentos });
 }));
 
 adminRoutes.get('/configuracoes', onlyAdmin, asyncHandler(async (_req, res) => {
@@ -362,6 +372,169 @@ adminRoutes.get('/pedidos/:id/recibo', asyncHandler(async (req, res) => {
     return res.status(400).json({ message: 'Recibo disponível somente após confirmação do pagamento. Gere uma Ordem de Serviço.' });
   }
   res.json({ pedido, itens: [], recibo: { empresa: 'Gráfica W Criações', emitido_em: new Date().toISOString() } });
+}));
+
+
+const orcamentoSchema = z.object({
+  usuario_id: z.string().uuid().optional().nullable(),
+  cliente_nome: z.string().min(2),
+  cliente_email: z.string().optional().default(''),
+  cliente_telefone: z.string().optional().default(''),
+  descricao: z.string().min(3),
+  valor_total: z.number().min(0),
+  validade: z.string().optional().nullable(),
+  status: z.string().optional().default('rascunho'),
+  observacoes: z.string().optional().default('')
+});
+
+adminRoutes.get('/orcamentos', asyncHandler(async (req, res) => {
+  const status = String(req.query.status || 'todos');
+  const busca = String(req.query.busca || '').trim();
+
+  let path = '/orcamentos?select=*&order=created_at.desc&limit=1000';
+  if (status && status !== 'todos') path += `&status=eq.${restEq(status)}`;
+
+  const rows = await supabaseRest<any[]>(path).catch(() => []);
+
+  if (!busca) return res.json(rows);
+
+  const q = busca.toLowerCase();
+  res.json(rows.filter((o) => [o.numero_orcamento, o.cliente_nome, o.cliente_email, o.cliente_telefone, o.descricao].join(' ').toLowerCase().includes(q)));
+}));
+
+adminRoutes.post('/orcamentos', asyncHandler(async (req, res) => {
+  const d = orcamentoSchema.parse(req.body);
+  const cliente = await findOrCreateClienteSimples({
+    usuario_id: d.usuario_id,
+    nome: d.cliente_nome,
+    email: d.cliente_email,
+    telefone: d.cliente_telefone
+  });
+
+  const numero = `ORC${Date.now()}`;
+  const rows = await supabaseRest<any[]>('/orcamentos', {
+    method: 'POST',
+    body: JSON.stringify({
+      numero_orcamento: numero,
+      usuario_id: cliente?.id || null,
+      cliente_nome: cliente?.nome || d.cliente_nome,
+      cliente_email: d.cliente_email || cliente?.email || '',
+      cliente_telefone: d.cliente_telefone || cliente?.telefone || '',
+      descricao: d.descricao,
+      valor_total: d.valor_total,
+      validade: d.validade || null,
+      status: d.status || 'rascunho',
+      observacoes: d.observacoes || '',
+      virou_pedido: false,
+      pedido_id: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    })
+  });
+
+  res.status(201).json(rows[0]);
+}));
+
+adminRoutes.put('/orcamentos/:id', asyncHandler(async (req, res) => {
+  const d = orcamentoSchema.partial().parse(req.body);
+  let cliente: any = null;
+
+  if (d.cliente_nome) {
+    cliente = await findOrCreateClienteSimples({
+      usuario_id: d.usuario_id,
+      nome: d.cliente_nome,
+      email: d.cliente_email || '',
+      telefone: d.cliente_telefone || ''
+    });
+  }
+
+  const payload: any = {
+    ...d,
+    updated_at: new Date().toISOString()
+  };
+
+  if (cliente?.id) {
+    payload.usuario_id = cliente.id;
+    payload.cliente_nome = cliente.nome || d.cliente_nome;
+    payload.cliente_email = d.cliente_email || cliente.email || '';
+    payload.cliente_telefone = d.cliente_telefone || cliente.telefone || '';
+  }
+
+  const rows = await supabaseRest<any[]>(`/orcamentos?id=eq.${restEq(req.params.id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload)
+  });
+
+  res.json(rows[0] || { ok: true });
+}));
+
+adminRoutes.delete('/orcamentos/:id', asyncHandler(async (req, res) => {
+  await supabaseRest(`/orcamentos?id=eq.${restEq(req.params.id)}`, { method: 'DELETE' });
+  res.json({ ok: true });
+}));
+
+adminRoutes.post('/orcamentos/:id/virar-pedido', asyncHandler(async (req, res) => {
+  const rows = await supabaseRest<any[]>(`/orcamentos?select=*&id=eq.${restEq(req.params.id)}&limit=1`).catch(() => []);
+  const orcamento = rows[0];
+
+  if (!orcamento) return res.status(404).json({ message: 'Orçamento não encontrado.' });
+
+  if (orcamento.virou_pedido && orcamento.pedido_id) {
+    const existing = await supabaseRest<any[]>(`/pedidos?select=*&id=eq.${restEq(orcamento.pedido_id)}&limit=1`).catch(() => []);
+    if (existing[0]) return res.json(existing[0]);
+  }
+
+  const cliente = await findOrCreateClienteSimples({
+    usuario_id: orcamento.usuario_id,
+    nome: orcamento.cliente_nome,
+    email: orcamento.cliente_email || '',
+    telefone: orcamento.cliente_telefone || ''
+  });
+
+  const total = asNumber(orcamento.valor_total);
+  const numero = `MAN${Date.now()}`;
+  const pedidos = await supabaseRest<any[]>('/pedidos', {
+    method: 'POST',
+    body: JSON.stringify({
+      usuario_id: cliente?.id || null,
+      numero_pedido: numero,
+      status: 'pendente',
+      subtotal: total,
+      frete: 0,
+      desconto: 0,
+      total,
+      valor_entrada: 0,
+      valor_restante: total,
+      metodo_pagamento: 'orcamento',
+      status_pagamento: 'pendente',
+      endereco_entrega: 'A combinar',
+      observacoes: orcamento.descricao || 'Pedido criado a partir de orçamento.',
+      prazo_entrega: null,
+      data_entrega_estimada: null,
+      cliente_nome: cliente?.nome || orcamento.cliente_nome,
+      cliente_email: orcamento.cliente_email || cliente?.email || '',
+      cliente_telefone: orcamento.cliente_telefone || cliente?.telefone || '',
+      origem: 'orcamento',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    })
+  });
+
+  const pedido = pedidos[0];
+
+  await supabaseRest(`/orcamentos?id=eq.${restEq(orcamento.id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      status: 'aprovado',
+      virou_pedido: true,
+      pedido_id: pedido.id,
+      updated_at: new Date().toISOString()
+    })
+  });
+
+  await registrarHistorico(pedido.id, req.user, 'criou pedido', 'orçamento aprovado', orcamento.numero_orcamento, numero);
+
+  res.status(201).json(pedido);
 }));
 
 adminRoutes.get('/cupons', onlyAdmin, asyncHandler(async (_req, res) => {

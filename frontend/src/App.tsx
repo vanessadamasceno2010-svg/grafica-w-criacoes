@@ -23,6 +23,7 @@ import { Cupons } from './pages/admin/Cupons';
 import { Avaliacoes } from './pages/admin/Avaliacoes';
 import { Relatorios } from './pages/admin/Relatorios';
 import { Usuarios } from './pages/admin/Usuarios';
+import { Orcamentos } from './pages/admin/Orcamentos';
 
 function App() {
   return (
@@ -46,6 +47,7 @@ function App() {
             <Route index element={<Dashboard />} />
             <Route path="produtos" element={<Produtos />} />
             <Route path="pedidos" element={<Pedidos />} />
+            <Route path="orcamentos" element={<Orcamentos />} />
             <Route path="clientes" element={<Clientes />} />
             <Route path="categorias" element={<Categorias />} />
             <Route path="cupons" element={<Cupons />} />

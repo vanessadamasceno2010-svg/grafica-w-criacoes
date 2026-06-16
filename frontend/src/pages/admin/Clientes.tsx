@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Edit, KeyRound, Trash2, UserPlus, Printer, X, ClipboardList } from 'lucide-react';
+import { ClipboardList, Edit, FileText, KeyRound, ReceiptText, Trash2, UserPlus, X } from 'lucide-react';
 import { apiFetch, formatMoney } from '../../lib/api';
 
 type Cliente = {
@@ -29,15 +29,24 @@ const paymentLabels: Record<string, string> = {
   recusado: 'Pagamento recusado'
 };
 
+const budgetStatusLabels: Record<string, string> = {
+  rascunho: 'Rascunho',
+  enviado: 'Enviado',
+  aprovado: 'Aprovado',
+  recusado: 'Recusado',
+  vencido: 'Vencido'
+};
+
 export function Clientes() {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState<'novo' | 'editar' | 'senha' | null>(null);
   const [selecionado, setSelecionado] = useState<Cliente | null>(null);
   const [form, setForm] = useState({ nome: '', email: '', telefone: '', senha: '' });
-  const [pedidosModal, setPedidosModal] = useState(false);
+  const [historicoModal, setHistoricoModal] = useState(false);
   const [clientePedidos, setClientePedidos] = useState<any[]>([]);
-  const [loadingPedidos, setLoadingPedidos] = useState(false);
+  const [clienteOrcamentos, setClienteOrcamentos] = useState<any[]>([]);
+  const [loadingHistorico, setLoadingHistorico] = useState(false);
 
   async function carregar() {
     setLoading(true);
@@ -73,18 +82,20 @@ export function Clientes() {
     setModal('senha');
   }
 
-  async function abrirPedidos(cliente: Cliente) {
+  async function abrirHistorico(cliente: Cliente) {
     setSelecionado(cliente);
-    setPedidosModal(true);
-    setLoadingPedidos(true);
+    setHistoricoModal(true);
+    setLoadingHistorico(true);
     try {
-      const data = await apiFetch<{ cliente: Cliente; pedidos: any[] }>('/admin/clientes/' + cliente.id + '/pedidos');
+      const data = await apiFetch<{ cliente: Cliente; pedidos: any[]; orcamentos: any[] }>('/admin/clientes/' + cliente.id + '/pedidos');
       setClientePedidos(Array.isArray(data.pedidos) ? data.pedidos : []);
+      setClienteOrcamentos(Array.isArray(data.orcamentos) ? data.orcamentos : []);
     } catch (error: any) {
       setClientePedidos([]);
-      alert(error.message || 'Erro ao carregar pedidos do cliente.');
+      setClienteOrcamentos([]);
+      alert(error.message || 'Erro ao carregar histórico do cliente.');
     } finally {
-      setLoadingPedidos(false);
+      setLoadingHistorico(false);
     }
   }
 
@@ -148,7 +159,7 @@ export function Clientes() {
             <div style="text-align:right"><h1 style="margin:0">${titulo}</h1><p style="margin:4px 0">${data.empresa?.nome || 'Gráfica W Criações'}</p></div>
           </div>
           <p><b>Pedido:</b> ${p.numero_pedido}</p>
-          <p><b>Cliente:</b> ${p.cliente_nome || p.cliente_email || selecionado?.nome || ''}</p>
+          <p><b>Cliente:</b> ${p.cliente_nome || selecionado?.nome || ''}</p>
           <p><b>Telefone:</b> ${p.cliente_telefone || selecionado?.telefone || '-'}</p>
           <p><b>Email:</b> ${p.cliente_email || selecionado?.email || '-'}</p>
           <p><b>Status:</b> ${statusLabels[p.status] || p.status}</p>
@@ -174,12 +185,23 @@ export function Clientes() {
     }
   }
 
+  async function virarPedido(orcamento: any) {
+    if (!confirm('Transformar este orçamento em pedido?')) return;
+    try {
+      const pedido = await apiFetch<any>('/admin/orcamentos/' + orcamento.id + '/virar-pedido', { method: 'POST' });
+      alert('Pedido criado com sucesso: ' + (pedido?.numero_pedido || ''));
+      if (selecionado) await abrirHistorico(selecionado);
+    } catch (error: any) {
+      alert(error.message || 'Erro ao transformar orçamento em pedido.');
+    }
+  }
+
   return (
     <div className="p-4 md:p-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div>
           <h1 className="text-3xl font-black text-slate-950">Clientes</h1>
-          <p className="text-slate-500">Clique em um cliente para ver os pedidos, recibos e ordens de serviço.</p>
+          <p className="text-slate-500">Clique em um cliente para ver pedidos e orçamentos.</p>
         </div>
         <button onClick={abrirNovo} className="h-12 px-5 rounded-2xl bg-amber-400 text-slate-950 font-black flex items-center justify-center gap-2">
           <UserPlus size={18} /> Novo Cliente
@@ -191,7 +213,7 @@ export function Clientes() {
       ) : (
         <div className="grid gap-4">
           {clientes.map((cliente) => (
-            <button key={cliente.id} onClick={() => abrirPedidos(cliente)} className="text-left bg-white rounded-3xl border border-slate-100 shadow-sm p-5 hover:ring-2 hover:ring-amber-300 transition">
+            <button key={cliente.id} onClick={() => abrirHistorico(cliente)} className="text-left bg-white rounded-3xl border border-slate-100 shadow-sm p-5 hover:ring-2 hover:ring-amber-300 transition">
               <div className="grid md:grid-cols-[1fr_auto] gap-4">
                 <div>
                   <h3 className="font-black text-lg text-slate-950">{cliente.nome}</h3>
@@ -215,58 +237,90 @@ export function Clientes() {
         </div>
       )}
 
-      {pedidosModal && selecionado && (
+      {historicoModal && selecionado && (
         <div className="fixed inset-0 z-[99999] bg-slate-950/70 flex items-center justify-center p-3 sm:p-6">
-          <div className="bg-white w-full max-w-4xl max-h-[92dvh] rounded-3xl shadow-2xl overflow-hidden flex flex-col">
+          <div className="bg-white w-full max-w-5xl max-h-[92dvh] rounded-3xl shadow-2xl overflow-hidden flex flex-col">
             <div className="p-5 border-b border-slate-100 flex items-center justify-between gap-4">
               <div>
-                <h2 className="text-2xl font-black text-slate-950">Pedidos de {selecionado.nome}</h2>
-                <p className="text-slate-500">Recibo aparece quando pagamento integral; caso contrário, gera Ordem de Serviço.</p>
+                <h2 className="text-2xl font-black text-slate-950">Histórico de {selecionado.nome}</h2>
+                <p className="text-slate-500">Pedidos, recibos, ordens de serviço e orçamentos vinculados ao cliente.</p>
               </div>
-              <button onClick={() => setPedidosModal(false)} className="w-11 h-11 rounded-full bg-slate-100 flex items-center justify-center"><X size={20} /></button>
+              <button onClick={() => setHistoricoModal(false)} className="w-11 h-11 rounded-full bg-slate-100 flex items-center justify-center"><X size={20} /></button>
             </div>
 
-            <div className="p-5 overflow-y-auto space-y-3">
-              {loadingPedidos && <div className="rounded-2xl bg-slate-50 p-4">Carregando pedidos...</div>}
-              {!loadingPedidos && clientePedidos.length === 0 && (
-                <div className="rounded-2xl bg-slate-50 p-6 text-center text-slate-500">Nenhum pedido encontrado para este cliente.</div>
-              )}
-              {clientePedidos.map((pedido) => {
-                const integral = pedido.status_pagamento === 'confirmado' || Number(pedido.valor_restante || 0) <= 0;
-                return (
-                  <div key={pedido.id} className="rounded-2xl border border-slate-100 p-4 grid md:grid-cols-[1fr_auto] gap-3 items-center">
-                    <div>
-                      <p className="font-black text-slate-950">{pedido.numero_pedido}</p>
-                      <p className="text-sm text-slate-500">{statusLabels[pedido.status] || pedido.status} • {paymentLabels[pedido.status_pagamento] || pedido.status_pagamento}</p>
-                      <p className="text-sm text-slate-600">Total {formatMoney(pedido.total)} • Pago {formatMoney(pedido.valor_entrada || 0)} • Resta {formatMoney(pedido.valor_restante || 0)}</p>
+            <div className="flex-1 overflow-y-auto p-5 space-y-6">
+              {loadingHistorico ? (
+                <p className="text-slate-500">Carregando histórico...</p>
+              ) : (
+                <>
+                  <section>
+                    <h3 className="font-black text-xl text-slate-950 mb-3 flex items-center gap-2"><ReceiptText size={20} /> Pedidos</h3>
+                    <div className="grid gap-3">
+                      {clientePedidos.map((pedido) => {
+                        const pago = pedido.status_pagamento === 'confirmado' || Number(pedido.valor_restante || 0) <= 0;
+                        return (
+                          <div key={pedido.id} className="rounded-2xl border border-slate-100 bg-slate-50 p-4 grid md:grid-cols-[1fr_auto] gap-3">
+                            <div>
+                              <p className="font-black text-slate-950">{pedido.numero_pedido}</p>
+                              <p className="text-slate-600 text-sm">{pedido.observacoes || 'Sem descrição'}</p>
+                              <p className="text-sm mt-1"><b>Total:</b> {formatMoney(pedido.total || 0)} • <b>Pago:</b> {formatMoney(pedido.valor_entrada || 0)} • <b>Resta:</b> {formatMoney(pedido.valor_restante || 0)}</p>
+                              <span className={`inline-flex mt-2 px-3 py-1 rounded-full text-sm font-black ${pago ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>{pago ? 'Recibo disponível' : 'Ordem de Serviço'}</span>
+                            </div>
+                            <button onClick={() => imprimirDocumento(pedido)} className="h-11 px-4 rounded-xl bg-amber-400 text-slate-950 font-black flex items-center justify-center gap-2"><FileText size={16} /> Emitir</button>
+                          </div>
+                        );
+                      })}
+                      {clientePedidos.length === 0 && <p className="text-slate-500">Nenhum pedido para este cliente.</p>}
                     </div>
-                    <button onClick={() => imprimirDocumento(pedido)} className="h-11 px-4 rounded-xl bg-amber-400 text-slate-950 font-black flex items-center justify-center gap-2">
-                      {integral ? <Printer size={16} /> : <ClipboardList size={16} />}
-                      {integral ? 'Emitir recibo' : 'Ordem de serviço'}
-                    </button>
-                  </div>
-                );
-              })}
+                  </section>
+
+                  <section>
+                    <h3 className="font-black text-xl text-slate-950 mb-3 flex items-center gap-2"><ClipboardList size={20} /> Orçamentos</h3>
+                    <div className="grid gap-3">
+                      {clienteOrcamentos.map((orc) => (
+                        <div key={orc.id} className="rounded-2xl border border-slate-100 bg-slate-50 p-4 grid md:grid-cols-[1fr_auto] gap-3">
+                          <div>
+                            <p className="font-black text-slate-950">{orc.numero_orcamento}</p>
+                            <p className="text-slate-600 text-sm">{orc.descricao}</p>
+                            <p className="text-sm mt-1"><b>Valor:</b> {formatMoney(orc.valor_total || 0)} • <b>Status:</b> {budgetStatusLabels[orc.status] || orc.status}</p>
+                            {orc.virou_pedido && <span className="inline-flex mt-2 px-3 py-1 rounded-full text-sm font-black bg-emerald-50 text-emerald-700">Virou pedido</span>}
+                          </div>
+                          <button disabled={orc.virou_pedido} onClick={() => virarPedido(orc)} className="h-11 px-4 rounded-xl bg-emerald-500 disabled:bg-slate-200 disabled:text-slate-500 text-white font-black flex items-center justify-center gap-2">Virar Pedido</button>
+                        </div>
+                      ))}
+                      {clienteOrcamentos.length === 0 && <p className="text-slate-500">Nenhum orçamento para este cliente.</p>}
+                    </div>
+                  </section>
+                </>
+              )}
             </div>
           </div>
         </div>
       )}
 
       {modal && (
-        <div className="fixed inset-0 z-[99999] bg-black/50 flex items-center justify-center p-4">
-          <div className="w-full max-w-lg bg-white rounded-3xl p-6 shadow-2xl max-h-[92dvh] overflow-y-auto">
-            <h2 className="text-2xl font-black mb-4">{modal === 'novo' ? 'Novo Cliente' : modal === 'editar' ? 'Editar Cliente' : 'Redefinir Senha'}</h2>
-            {modal !== 'senha' && (
-              <>
-                <label className="block mb-3"><span className="text-sm font-bold text-slate-700">Nome</span><input className="mt-1 w-full h-12 rounded-2xl border px-4" value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} /></label>
-                <label className="block mb-3"><span className="text-sm font-bold text-slate-700">Email para login</span><input type="email" className="mt-1 w-full h-12 rounded-2xl border px-4" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></label>
-                <label className="block mb-3"><span className="text-sm font-bold text-slate-700">Telefone</span><input className="mt-1 w-full h-12 rounded-2xl border px-4" value={form.telefone} onChange={(e) => setForm({ ...form, telefone: e.target.value })} /></label>
-              </>
-            )}
-            {modal === 'novo' && <label className="block mb-3"><span className="text-sm font-bold text-slate-700">Senha inicial</span><input type="password" className="mt-1 w-full h-12 rounded-2xl border px-4" value={form.senha} onChange={(e) => setForm({ ...form, senha: e.target.value })} placeholder="Opcional: padrão 12345678" /></label>}
-            {modal === 'senha' && <label className="block mb-3"><span className="text-sm font-bold text-slate-700">Nova senha para {selecionado?.nome}</span><input type="password" className="mt-1 w-full h-12 rounded-2xl border px-4" value={form.senha} onChange={(e) => setForm({ ...form, senha: e.target.value })} placeholder="Digite a nova senha" /></label>}
-            <div className="grid grid-cols-2 gap-3 mt-5">
-              <button onClick={() => setModal(null)} className="h-12 rounded-2xl bg-slate-100 font-black">Cancelar</button>
+        <div className="fixed inset-0 z-[99999] bg-slate-950/70 flex items-center justify-center p-3 sm:p-6">
+          <div className="bg-white w-full max-w-xl max-h-[92dvh] rounded-3xl shadow-2xl overflow-hidden flex flex-col">
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between gap-4">
+              <h2 className="text-2xl font-black text-slate-950">{modal === 'novo' ? 'Novo cliente' : modal === 'editar' ? 'Editar cliente' : 'Redefinir senha'}</h2>
+              <button onClick={() => setModal(null)} className="w-11 h-11 rounded-full bg-slate-100 flex items-center justify-center"><X size={20} /></button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-5 space-y-4">
+              {modal !== 'senha' && (
+                <>
+                  <label className="block"><span className="text-sm font-black text-slate-800">Nome</span><input className="input mt-1" value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} /></label>
+                  <label className="block"><span className="text-sm font-black text-slate-800">Email</span><input className="input mt-1" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></label>
+                  <label className="block"><span className="text-sm font-black text-slate-800">Telefone</span><input className="input mt-1" value={form.telefone} onChange={(e) => setForm({ ...form, telefone: e.target.value })} /></label>
+                </>
+              )}
+              {(modal === 'novo' || modal === 'senha') && (
+                <label className="block"><span className="text-sm font-black text-slate-800">Senha</span><input className="input mt-1" type="password" value={form.senha} onChange={(e) => setForm({ ...form, senha: e.target.value })} placeholder={modal === 'novo' ? 'Opcional: padrão 12345678' : 'Nova senha'} /></label>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-slate-100 grid grid-cols-2 gap-3">
+              <button onClick={() => setModal(null)} className="h-12 rounded-2xl border border-slate-200 font-black">Cancelar</button>
               <button onClick={salvar} className="h-12 rounded-2xl bg-amber-400 text-slate-950 font-black">Salvar</button>
             </div>
           </div>
@@ -275,5 +329,3 @@ export function Clientes() {
     </div>
   );
 }
-
-export default Clientes;

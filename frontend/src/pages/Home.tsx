@@ -14,8 +14,11 @@ export function Home() {
   useEffect(() => {
     getPublicConfig().then(setConfig);
 
-    apiFetch<{ data: any[] }>('/produtos?limit=6')
-      .then((res) => setProducts((res.data || []).map(normalizeProduct)))
+    apiFetch<{ data: any[] }>('/produtos?limit=12')
+      .then((res) => {
+        const list = (res.data || []).map(normalizeProduct);
+        setProducts(list.sort((a, b) => Number(b.destaque) - Number(a.destaque)));
+      })
       .catch(() => setProducts([]));
 
     apiFetch<any[]>('/categorias')
