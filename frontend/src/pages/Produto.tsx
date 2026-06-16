@@ -1,56 +1,171 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Star, Clock, ChevronLeft, ChevronRight, ShoppingCart, Zap } from 'lucide-react';
-import { mockProducts, formatMoney } from '../lib/api';
+import {
+  Star,
+  Clock,
+  ChevronLeft,
+  ChevronRight,
+  ShoppingCart,
+  Zap,
+  Loader2
+} from 'lucide-react';
+import { apiFetch, formatMoney, Product, ProductVariation } from '../lib/api';
 import { useApp } from '../contexts/AppContext';
 import { BottomSheet } from '../components/BottomSheet';
+
+function activeVariations(product?: Product | null) {
+  if (!product || !Array.isArray(product.variacoes)) return [];
+
+  return product.variacoes.filter((v) => v && v.ativo !== false && Number(v.preco || 0) > 0);
+}
+
+function variationLabel(v: ProductVariation) {
+  const parts = [v.nome, v.quantidade].filter(Boolean);
+  return parts.join(' • ') || 'Variação';
+}
 
 export function Produto() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const { addToCart } = useApp();
-  
-  const product = mockProducts.find((p) => p.slug === slug) || mockProducts[0];
-  
+
+  const [product, setProduct] = useState<Product | null>(null);
+  const [loading, setLoading] = useState(true);
   const [quantity, setQuantity] = useState(1);
-  const [selectedSpecs, setSelectedSpecs] = useState<Record<string, string>>(() => {
-    const initial: Record<string, string> = {};
-    Object.entries(product.especificacoes || {}).forEach(([key, values]) => {
-      initial[key] = values[0];
-    });
-    return initial;
-  });
-  
+  const [selectedSpecs, setSelectedSpecs] = useState<Record<string, string>>({});
+  const [selectedVariationIndex, setSelectedVariationIndex] = useState(0);
   const [imageIndex, setImageIndex] = useState(0);
   const [showCartSheet, setShowCartSheet] = useState(false);
 
-  const allImages = [product.imagem_principal, ...(product.imagens_adicionais || [])];
-  const totalPrice = product.preco * quantity;
+  useEffect(() => {
+    let active = true;
+
+    async function load() {
+      setLoading(true);
+
+      try {
+        const data = await apiFetch<Product>('/produtos/' + encodeURIComponent(slug || ''));
+
+        if (!active) return;
+
+        setProduct(data);
+
+        const initial: Record<string, string> = {};
+        Object.entries(data.especificacoes || {}).forEach(([key, values]: any) => {
+          if (Array.isArray(values) && values[0]) initial[key] = values[0];
+        });
+
+        const vars = activeVariations(data);
+
+        if (vars[0]) {
+          initial['Variação'] = variationLabel(vars[0]);
+
+          Object.entries(vars[0].opcoes || {}).forEach(([key, value]) => {
+            initial[key] = String(value);
+          });
+        }
+
+        setSelectedSpecs(initial);
+        setSelectedVariationIndex(0);
+      } catch (err: any) {
+        alert(err.message || 'Produto não encontrado.');
+        navigate('/catalogo');
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    load();
+
+    return () => {
+      active = false;
+    };
+  }, [slug, navigate]);
+
+  const variations = activeVariations(product);
+
+  const selectedVariation = variations[selectedVariationIndex] || null;
+
+  const unitPrice = selectedVariation ? Number(selectedVariation.preco || 0) : Number(product?.preco || 0);
+
+  const totalPrice = unitPrice * quantity;
+
+  const allImages = useMemo(() => {
+    if (!product) return [];
+
+    return [product.imagem_principal, ...(product.imagens_adicionais || [])].filter(Boolean);
+  }, [product]);
+
+  function selectVariation(index: number) {
+    const v = variations[index];
+
+    setSelectedVariationIndex(index);
+
+    if (!v) return;
+
+    setSelectedSpecs((prev) => {
+      const next = {
+        ...prev,
+        Variação: variationLabel(v)
+      };
+
+      Object.entries(v.opcoes || {}).forEach(([key, value]) => {
+        next[key] = String(value);
+      });
+
+      return next;
+    });
+  }
+
+  const productForCart = () => {
+    if (!product) return null;
+
+    return {
+      ...product,
+      preco: unitPrice,
+      estoque: selectedVariation ? Number(selectedVariation.estoque || product.estoque || 0) : product.estoque
+    };
+  };
 
   const handleAddToCart = () => {
-    addToCart(product, quantity, selectedSpecs);
+    const p = productForCart();
+    if (!p) return;
+
+    addToCart(p, quantity, selectedSpecs);
     setShowCartSheet(false);
     navigate('/carrinho');
   };
 
   const handleBuyNow = () => {
-    addToCart(product, quantity, selectedSpecs);
+    const p = productForCart();
+    if (!p) return;
+
+    addToCart(p, quantity, selectedSpecs);
     navigate('/checkout');
   };
 
-  const nextImage = () => setImageIndex((prev) => (prev + 1) % allImages.length);
-  const prevImage = () => setImageIndex((prev) => (prev - 1 + allImages.length) % allImages.length);
+  const nextImage = () => setImageIndex((prev) => (prev + 1) % Math.max(allImages.length, 1));
+  const prevImage = () => setImageIndex((prev) => (prev - 1 + Math.max(allImages.length, 1)) % Math.max(allImages.length, 1));
+
+  if (loading || !product) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center text-primary">
+        <Loader2 className="animate-spin mb-3" size={32} />
+        <p className="font-bold">Carregando produto...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="fade-in max-w-5xl mx-auto pb-24 sm:pb-8">
-      {/* Mobile Image Gallery */}
       <div className="relative bg-gray-100 sm:hidden">
         <div className="aspect-square relative overflow-hidden">
           <img
-            src={allImages[imageIndex]}
+            src={allImages[imageIndex] || product.imagem_principal}
             alt={product.nome}
             className="w-full h-full object-cover"
           />
+
           {allImages.length > 1 && (
             <>
               <button
@@ -59,6 +174,7 @@ export function Produto() {
               >
                 <ChevronLeft size={20} className="text-primary" />
               </button>
+
               <button
                 onClick={nextImage}
                 className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/80 backdrop-blur flex items-center justify-center shadow-lg active:scale-90 transition-transform"
@@ -68,6 +184,7 @@ export function Produto() {
             </>
           )}
         </div>
+
         <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-1.5">
           {allImages.map((_, idx) => (
             <button
@@ -79,6 +196,7 @@ export function Produto() {
             />
           ))}
         </div>
+
         <Link
           to="/catalogo"
           className="absolute top-4 left-4 w-10 h-10 rounded-full bg-white/80 backdrop-blur flex items-center justify-center shadow-lg"
@@ -88,11 +206,15 @@ export function Produto() {
       </div>
 
       <div className="px-4 sm:px-0 sm:grid sm:grid-cols-2 sm:gap-10 sm:mt-8">
-        {/* Desktop Image Gallery */}
         <div className="hidden sm:block">
           <div className="aspect-square rounded-3xl overflow-hidden bg-gray-100 mb-4">
-            <img src={allImages[imageIndex]} alt={product.nome} className="w-full h-full object-cover" />
+            <img
+              src={allImages[imageIndex] || product.imagem_principal}
+              alt={product.nome}
+              className="w-full h-full object-cover"
+            />
           </div>
+
           {allImages.length > 1 && (
             <div className="grid grid-cols-4 gap-3">
               {allImages.map((img, idx) => (
@@ -100,7 +222,7 @@ export function Produto() {
                   key={idx}
                   onClick={() => setImageIndex(idx)}
                   className={`aspect-square rounded-2xl overflow-hidden border-2 transition-all ${
-                    idx === imageIndex ? 'border-gold' : 'border-transparent hover:border-gray-300'
+                    idx === imageIndex ? 'border-gold' : 'border-transparent'
                   }`}
                 >
                   <img src={img} alt="" className="w-full h-full object-cover" />
@@ -110,180 +232,207 @@ export function Produto() {
           )}
         </div>
 
-        {/* Product Info */}
-        <div className="sm:py-4">
-          <Link to="/catalogo" className="sm:hidden inline-flex items-center gap-1 text-sm text-gray-500 mb-4">
-            <ChevronLeft size={16} /> Voltar ao catálogo
+        <div className="pt-6 sm:pt-0">
+          <Link to="/catalogo" className="hidden sm:inline-flex items-center gap-1 text-gray-500 hover:text-primary mb-6">
+            <ChevronLeft size={16} />
+            Voltar ao catálogo
           </Link>
 
-          <span className="inline-block px-3 py-1 rounded-full bg-gold/10 text-gold text-xs font-bold uppercase tracking-wider mb-3">
+          <p className="text-sm font-bold text-gold uppercase tracking-wider mb-2">
             {product.categoria_nome}
-          </span>
+          </p>
 
-          <h1 className="font-display text-3xl sm:text-4xl font-bold text-primary mb-4">
+          <h1 className="font-display text-3xl sm:text-4xl font-bold text-primary mb-3">
             {product.nome}
           </h1>
 
-          <div className="flex items-center gap-3 mb-6">
+          <div className="flex items-center gap-3 mb-4">
             <div className="flex items-center gap-1">
-              <Star size={16} className="text-gold fill-current" />
-              <span className="font-bold text-primary">{product.avaliacao_media.toFixed(1)}</span>
+              <Star size={18} className="text-gold fill-current" />
+              <span className="font-bold text-primary">{Number(product.avaliacao_media || 5).toFixed(1)}</span>
             </div>
-            <span className="text-gray-300">|</span>
-            <div className="flex items-center gap-1 text-gray-500 text-sm">
+
+            <span className="text-gray-300">•</span>
+
+            <div className="flex items-center gap-1 text-gray-500">
               <Clock size={16} />
-              {product.tempo_producao} dias úteis para produção
+              <span>{product.tempo_producao} dias úteis</span>
             </div>
           </div>
 
-          <div className="mb-6">
-            {product.preco_original && product.preco_original > product.preco && (
-              <span className="text-lg text-gray-400 line-through mr-3">
-                {formatMoney(product.preco_original)}
-              </span>
-            )}
-            <span className="font-display text-4xl font-bold text-primary">
-              {formatMoney(product.preco)}
-            </span>
-          </div>
-
-          <p className="text-gray-600 leading-relaxed mb-8">
-            {product.descricao}
+          <p className="text-gray-600 leading-relaxed mb-6">
+            {product.descricao_longa || product.descricao}
           </p>
 
-          {/* Specifications */}
-          <div className="space-y-4 mb-8">
-            {Object.entries(product.especificacoes || {}).map(([key, values]) => (
-              <div key={key}>
-                <label className="block text-sm font-bold text-gray-700 mb-2">{key}</label>
-                <div className="flex flex-wrap gap-2">
-                  {values.map((value) => (
-                    <button
-                      key={value}
-                      onClick={() => setSelectedSpecs((prev) => ({ ...prev, [key]: value }))}
-                      className={`px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ${
-                        selectedSpecs[key] === value
-                          ? 'bg-primary text-white shadow-lg shadow-primary/20'
-                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      }`}
-                    >
-                      {value}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ))}
+          <div className="mb-6">
+            {product.preco_original && product.preco_original > unitPrice && (
+              <p className="text-gray-400 line-through text-lg">
+                {formatMoney(product.preco_original)}
+              </p>
+            )}
+
+            {variations.length > 0 && (
+              <p className="text-sm font-bold text-gray-500 mb-1">Preço da opção selecionada</p>
+            )}
+
+            <p className="font-display text-4xl font-bold text-primary">
+              {formatMoney(unitPrice)}
+            </p>
+
+            <p className="text-sm text-gray-500 mt-1">
+              Total: {formatMoney(totalPrice)}
+            </p>
           </div>
 
-          {/* Quantity */}
-          <div className="mb-8">
-            <label className="block text-sm font-bold text-gray-700 mb-2">Quantidade</label>
-            <div className="flex items-center gap-4">
+          {variations.length > 0 && (
+            <div className="mb-6">
+              <h3 className="font-bold text-primary mb-3">Escolha a variação</h3>
+
+              <div className="grid gap-3">
+                {variations.map((v, index) => (
+                  <button
+                    key={v.id || index}
+                    type="button"
+                    onClick={() => selectVariation(index)}
+                    className={`text-left rounded-2xl border p-4 transition ${
+                      index === selectedVariationIndex
+                        ? 'border-gold bg-amber-50 ring-2 ring-gold/20'
+                        : 'border-gray-200 bg-white'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-bold text-primary">{variationLabel(v)}</p>
+                        {Object.keys(v.opcoes || {}).length > 0 && (
+                          <p className="text-sm text-gray-500 mt-1">
+                            {Object.entries(v.opcoes || {})
+                              .map(([key, value]) => `${key}: ${value}`)
+                              .join(' | ')}
+                          </p>
+                        )}
+                        <p className="text-xs text-gray-400 mt-1">
+                          Estoque: {Number(v.estoque || 0)}
+                        </p>
+                      </div>
+
+                      <p className="font-bold text-primary">{formatMoney(v.preco)}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {Object.entries(product.especificacoes || {}).map(([key, values]: any) => (
+            <div key={key} className="mb-5">
+              <h3 className="font-bold text-primary mb-3">{key}</h3>
+
+              <div className="flex flex-wrap gap-2">
+                {(Array.isArray(values) ? values : []).map((value: string) => (
+                  <button
+                    key={value}
+                    onClick={() => setSelectedSpecs({ ...selectedSpecs, [key]: value })}
+                    className={`px-4 py-2 rounded-xl border-2 font-medium transition-all ${
+                      selectedSpecs[key] === value
+                        ? 'border-gold bg-gold/10 text-primary'
+                        : 'border-gray-200 text-gray-600 active:border-gray-300'
+                    }`}
+                  >
+                    {value}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+
+          <div className="mb-6">
+            <h3 className="font-bold text-primary mb-3">Quantidade</h3>
+
+            <div className="inline-flex items-center rounded-2xl border-2 border-gray-200 overflow-hidden">
               <button
-                onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                className="w-12 h-12 rounded-xl bg-gray-100 flex items-center justify-center text-primary font-bold text-xl active:bg-gray-200 transition-colors"
+                onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                className="w-12 h-12 flex items-center justify-center text-xl font-bold active:bg-gray-100"
               >
                 -
               </button>
-              <span className="font-display text-2xl font-bold text-primary w-12 text-center">
-                {quantity}
-              </span>
+
+              <span className="w-16 text-center font-bold text-primary">{quantity}</span>
+
               <button
-                onClick={() => setQuantity((q) => q + 1)}
-                className="w-12 h-12 rounded-xl bg-gray-100 flex items-center justify-center text-primary font-bold text-xl active:bg-gray-200 transition-colors"
+                onClick={() => setQuantity(quantity + 1)}
+                className="w-12 h-12 flex items-center justify-center text-xl font-bold active:bg-gray-100"
               >
                 +
               </button>
             </div>
           </div>
 
-          {/* Desktop Actions */}
-          <div className="hidden sm:flex gap-4">
-            <button
-              onClick={() => {
-                addToCart(product, quantity, selectedSpecs);
-                setShowCartSheet(true);
-              }}
-              className="btn btn-outline flex-1 text-base"
-            >
+          <div className="hidden sm:grid grid-cols-2 gap-3">
+            <button onClick={() => setShowCartSheet(true)} className="btn btn-outline text-base">
               <ShoppingCart size={20} />
-              Adicionar ao Carrinho
+              Adicionar
             </button>
-            <button onClick={handleBuyNow} className="btn btn-primary flex-1 text-base">
+
+            <button onClick={handleBuyNow} className="btn btn-primary text-base">
               <Zap size={20} />
-              Comprar Agora
+              Comprar agora
             </button>
           </div>
         </div>
       </div>
 
-      {/* Description */}
-      <div className="px-4 sm:px-0 sm:mt-12">
-        <div className="card p-6">
-          <h2 className="font-display text-xl font-bold text-primary mb-4">Descrição Completa</h2>
-          <p className="text-gray-600 leading-relaxed whitespace-pre-line">
-            {product.descricao_completa}
-          </p>
-        </div>
-      </div>
-
-      {/* Mobile Sticky Bottom Bar */}
-      <div className="sm:hidden fixed bottom-16 left-0 right-0 bg-white border-t border-gray-100 p-4 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] z-30">
-        <div className="flex items-center justify-between mb-3">
-          <div>
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 p-4 sm:hidden z-40">
+        <div className="flex items-center gap-3">
+          <div className="flex-1">
             <p className="text-xs text-gray-500">Total</p>
-            <p className="font-display text-2xl font-bold text-primary">{formatMoney(totalPrice)}</p>
+            <p className="font-display font-bold text-xl text-primary">
+              {formatMoney(totalPrice)}
+            </p>
           </div>
-          <div className="flex items-center gap-3 bg-gray-100 rounded-xl p-1">
-            <button
-              onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-              className="w-9 h-9 rounded-lg bg-white flex items-center justify-center text-primary font-bold shadow-sm"
-            >
-              -
-            </button>
-            <span className="font-bold text-primary w-8 text-center">{quantity}</span>
-            <button
-              onClick={() => setQuantity((q) => q + 1)}
-              className="w-9 h-9 rounded-lg bg-white flex items-center justify-center text-primary font-bold shadow-sm"
-            >
-              +
-            </button>
-          </div>
-        </div>
-        <div className="flex gap-3">
-          <button
-            onClick={() => {
-              addToCart(product, quantity, selectedSpecs);
-              setShowCartSheet(true);
-            }}
-            className="btn btn-outline flex-1"
-          >
-            <ShoppingCart size={18} />
+
+          <button onClick={() => setShowCartSheet(true)} className="btn btn-outline px-4">
+            <ShoppingCart size={20} />
           </button>
-          <button onClick={handleBuyNow} className="btn btn-primary flex-[2]">
-            <Zap size={18} />
-            Comprar Agora
+
+          <button onClick={handleBuyNow} className="btn btn-primary px-6">
+            Comprar
           </button>
         </div>
       </div>
 
-      {/* Cart Added Bottom Sheet */}
-      <BottomSheet isOpen={showCartSheet} onClose={() => setShowCartSheet(false)} title="Adicionado ao Carrinho!">
-        <div className="text-center py-4">
-          <div className="w-16 h-16 rounded-full bg-success/10 flex items-center justify-center mx-auto mb-4">
-            <ShoppingCart size={32} className="text-success" />
+      <BottomSheet isOpen={showCartSheet} onClose={() => setShowCartSheet(false)} title="Confirmar item">
+        <div className="space-y-4">
+          <div className="flex gap-4">
+            <img
+              src={product.imagem_principal}
+              alt={product.nome}
+              className="w-20 h-20 rounded-2xl object-cover"
+            />
+
+            <div>
+              <h3 className="font-bold text-primary">{product.nome}</h3>
+              <p className="text-sm text-gray-500">{quantity} unidade(s)</p>
+              <p className="font-bold text-primary">{formatMoney(totalPrice)}</p>
+            </div>
           </div>
-          <p className="text-gray-600 mb-6">
-            <span className="font-bold text-primary">{product.nome}</span> foi adicionado ao seu carrinho.
-          </p>
-          <div className="space-y-3">
-            <Link to="/carrinho" className="btn btn-primary w-full" onClick={() => setShowCartSheet(false)}>
-              Ver Carrinho
-            </Link>
-            <button onClick={() => setShowCartSheet(false)} className="btn btn-outline w-full">
-              Continuar Comprando
-            </button>
-          </div>
+
+          {Object.keys(selectedSpecs).length > 0 && (
+            <div className="bg-gray-50 rounded-2xl p-4">
+              <p className="font-bold text-primary mb-2">Opções selecionadas</p>
+
+              <div className="space-y-1">
+                {Object.entries(selectedSpecs).map(([key, value]) => (
+                  <p key={key} className="text-sm text-gray-600">
+                    <b>{key}:</b> {value}
+                  </p>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <button onClick={handleAddToCart} className="btn btn-primary w-full">
+            Adicionar ao carrinho
+          </button>
         </div>
       </BottomSheet>
     </div>

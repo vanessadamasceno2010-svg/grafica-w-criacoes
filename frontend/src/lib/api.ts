@@ -14,6 +14,18 @@ export const BRAND = {
   slogan: 'Pequeno por fora, gigante na divulgação!'
 };
 
+export type ProductVariation = {
+  id?: string;
+  nome: string;
+  preco: number;
+  preco_original?: number | null;
+  estoque?: number;
+  sku?: string;
+  quantidade?: string;
+  opcoes?: Record<string, string>;
+  ativo?: boolean;
+};
+
 export type Product = {
   id: string;
   nome: string;
@@ -26,6 +38,7 @@ export type Product = {
   imagem_principal: string;
   imagens_adicionais?: string[];
   especificacoes?: Record<string, any>;
+  variacoes?: ProductVariation[];
   destaque?: boolean;
   tempo_producao: number;
   categoria_id?: string;
@@ -209,6 +222,22 @@ export function normalizeProduct(product: any): Product {
       product?.especificacoes && typeof product.especificacoes === 'object'
         ? product.especificacoes
         : {},
+    variacoes: Array.isArray(product?.variacoes)
+      ? product.variacoes.map((v: any, index: number) => ({
+          id: v?.id || String(index + 1),
+          nome: v?.nome || 'Variação ' + String(index + 1),
+          preco: Number(v?.preco || 0),
+          preco_original:
+            v?.preco_original !== undefined && v?.preco_original !== null
+              ? Number(v.preco_original)
+              : null,
+          estoque: Number(v?.estoque || 0),
+          sku: v?.sku || '',
+          quantidade: v?.quantidade || '',
+          opcoes: v?.opcoes && typeof v.opcoes === 'object' ? v.opcoes : {},
+          ativo: v?.ativo !== false
+        }))
+      : [],
     destaque: Boolean(product?.destaque),
     tempo_producao: Number(product?.tempo_producao || 3),
     categoria_id: product?.categoria_id || '',
