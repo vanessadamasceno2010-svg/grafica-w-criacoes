@@ -31,30 +31,6 @@ function dateOnly(value: any) {
   return String(value).slice(0, 10);
 }
 
-function calcularPagamento(totalValue: any, entradaValue: any, statusPagamento?: string) {
-  const total = asNumber(totalValue);
-  let entrada = asNumber(entradaValue);
-  let status = String(statusPagamento || '').trim() || 'pendente';
-
-  if (status === 'confirmado') entrada = total;
-  if (status === 'pendente') entrada = 0;
-
-  if (!statusPagamento) {
-    if (total > 0 && entrada >= total) status = 'confirmado';
-    else if (entrada > 0) status = 'parcial';
-    else status = 'pendente';
-  }
-
-  if (entrada >= total && total > 0) status = 'confirmado';
-
-  return {
-    total,
-    entrada,
-    restante: Math.max(total - entrada, 0),
-    status_pagamento: status
-  };
-}
-
 async function registrarHistorico(pedidoId: string, usuario: any, acao: string, campo: string, valorAnterior: any, valorNovo: any) {
   await supabaseRest('/pedido_historico', {
     method: 'POST',
@@ -288,7 +264,7 @@ adminRoutes.post('/pedidos/manual', asyncHandler(async (req, res) => {
     status_pagamento: z.string().optional().default('pendente'),
     prazo_entrega: z.string().optional().nullable(),
     endereco_entrega: z.string().optional().default('A combinar'),
-    observacoes: z.string().optional().default('Pedido registrado manualmente no painel administrativo.')
+    observacoes: z.string().optional().default('')
   }).parse(req.body);
 
   const cliente = await findOrCreateClienteSimples({
@@ -298,8 +274,7 @@ adminRoutes.post('/pedidos/manual', asyncHandler(async (req, res) => {
     telefone: d.cliente_telefone
   });
 
-  const pagamento = calcularPagamento(d.total, d.valor_entrada, d.status_pagamento);
-  const restante = pagamento.restante;
+  const restante = Math.max(asNumber(d.total) - asNumber(d.valor_entrada), 0);
   const numero = `MAN${Date.now()}`;
 
   const pedidos = await supabaseRest<any[]>('/pedidos', {
@@ -311,13 +286,13 @@ adminRoutes.post('/pedidos/manual', asyncHandler(async (req, res) => {
       subtotal: d.total,
       frete: 0,
       desconto: 0,
-      total: pagamento.total,
-      valor_entrada: pagamento.entrada,
+      total: d.total,
+      valor_entrada: d.valor_entrada,
       valor_restante: restante,
       metodo_pagamento: 'manual',
-      status_pagamento: pagamento.status_pagamento,
+      status_pagamento: restante <= 0 ? 'confirmado' : asNumber(d.valor_entrada) > 0 ? 'parcial' : d.status_pagamento,
       endereco_entrega: d.endereco_entrega,
-      observacoes: d.descricao || d.observacoes,
+      observacoes: d.descricao || d.observacoes || 'Pedido registrado manualmente no painel administrativo.',
       prazo_entrega: d.prazo_entrega || null,
       data_entrega_estimada: d.prazo_entrega || null,
       cliente_nome: cliente?.nome || d.cliente_nome,

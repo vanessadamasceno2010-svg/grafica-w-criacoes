@@ -13,6 +13,8 @@ import {
   FileText,
   CalendarDays,
   Share2,
+  Copy,
+  MessageCircle,
   X
 } from 'lucide-react';
 import { apiFetch, formatMoney } from '../../lib/api';
@@ -58,39 +60,6 @@ function moneyToNumber(value: any) {
     .replace(',', '.');
 
   return Number(normalized) || 0;
-}
-
-function calcularPagamento(totalValue: any, entradaValue: any, statusPagamento?: string) {
-  const total = moneyToNumber(totalValue);
-  let entrada = moneyToNumber(entradaValue);
-  let status = String(statusPagamento || '').trim() || 'pendente';
-
-  if (status === 'confirmado') entrada = total;
-  if (status === 'pendente') entrada = 0;
-
-  if (!statusPagamento) {
-    if (total > 0 && entrada >= total) status = 'confirmado';
-    else if (entrada > 0) status = 'parcial';
-    else status = 'pendente';
-  }
-
-  if (entrada >= total && total > 0) status = 'confirmado';
-
-  return {
-    total,
-    entrada,
-    restante: Math.max(total - entrada, 0),
-    status_pagamento: status
-  };
-}
-
-function formatDateBR(value: any) {
-  if (!value) return 'A combinar';
-  try {
-    return new Date(value).toLocaleDateString('pt-BR');
-  } catch {
-    return String(value);
-  }
 }
 
 function dateOnly(value: any) {
@@ -211,16 +180,16 @@ export function Pedidos() {
   function updateNewOrderMoney(field: 'total' | 'valor_entrada', value: string) {
     if (!newOrder) return;
 
-    const totalValue = field === 'total' ? value : newOrder.total;
-    const entradaValue = field === 'valor_entrada' ? value : newOrder.valor_entrada;
-    const pagamento = calcularPagamento(totalValue, entradaValue);
+    const next = { ...newOrder, [field]: value };
+    const total = moneyToNumber(field === 'total' ? value : newOrder.total);
+    const entrada = moneyToNumber(field === 'valor_entrada' ? value : newOrder.valor_entrada);
+    next.valor_restante = Math.max(total - entrada, 0);
 
-    setNewOrder({
-      ...newOrder,
-      [field]: value,
-      valor_restante: pagamento.restante,
-      status_pagamento: pagamento.status_pagamento
-    });
+    if (total > 0 && next.valor_restante <= 0) next.status_pagamento = 'confirmado';
+    else if (entrada > 0) next.status_pagamento = 'parcial';
+    else next.status_pagamento = 'pendente';
+
+    setNewOrder(next);
   }
 
   const createOrder = async () => {
@@ -230,10 +199,9 @@ export function Pedidos() {
     if (!newOrder.cliente_telefone.trim() && !newOrder.cliente_email.trim()) return alert('Informe telefone ou email do cliente.');
     if (!newOrder.descricao.trim()) return alert('Informe a descrição do pedido.');
 
-    const pagamento = calcularPagamento(newOrder.total, newOrder.valor_entrada, newOrder.status_pagamento);
-    const total = pagamento.total;
-    const entrada = pagamento.entrada;
-    const restante = pagamento.restante;
+    const total = moneyToNumber(newOrder.total);
+    const entrada = moneyToNumber(newOrder.valor_entrada);
+    const restante = Math.max(total - entrada, 0);
 
     if (!confirm('Confirmar criação deste pedido?')) return;
 
@@ -250,19 +218,16 @@ export function Pedidos() {
           valor_entrada: entrada,
           valor_restante: restante,
           status: newOrder.status,
-          status_pagamento: pagamento.status_pagamento,
+          status_pagamento: restante <= 0 ? 'confirmado' : entrada > 0 ? 'parcial' : newOrder.status_pagamento,
           prazo_entrega: newOrder.prazo_entrega || null,
-          endereco_entrega: 'A combinar',
-          observacoes: newOrder.descricao
+          endereco_entrega: 'A combinar'
         })
       });
 
       setNewOrder(null);
       await load();
-      const pedidoCriado = { ...created, observacoes: created?.observacoes || newOrder.descricao };
-      if (created?.id) await openOrder(pedidoCriado);
-      prepareShareOrder(pedidoCriado);
-      alert('Pedido salvo com sucesso. Confira o texto e compartilhe com o cliente.');
+      if (created?.id) await openOrder(created);
+      alert('Pedido salvo com sucesso. Use o botão Compartilhar pedido para enviar o resumo ao cliente.');
     } catch (err: any) {
       alert(err.message || 'Erro ao salvar pedido.');
     }
@@ -272,17 +237,16 @@ export function Pedidos() {
     if (!selectedOrder) return;
     if (!confirm('Confirmar alteração deste pedido?')) return;
 
-    const pagamento = calcularPagamento(selectedOrder.total, selectedOrder.valor_entrada, selectedOrder.status_pagamento);
-    const total = pagamento.total;
-    const entrada = pagamento.entrada;
-    const restante = pagamento.restante;
+    const total = moneyToNumber(selectedOrder.total);
+    const entrada = moneyToNumber(selectedOrder.valor_entrada);
+    const restante = Math.max(total - entrada, 0);
 
     try {
       await apiFetch('/pedidos/' + selectedOrder.id, {
         method: 'PUT',
         body: JSON.stringify({
           status: selectedOrder.status,
-          status_pagamento: pagamento.status_pagamento,
+          status_pagamento: restante <= 0 ? 'confirmado' : entrada > 0 ? 'parcial' : selectedOrder.status_pagamento,
           observacoes: selectedOrder.observacoes || '',
           total,
           valor_entrada: entrada,
@@ -319,20 +283,35 @@ export function Pedidos() {
 
   function buildShareMessage(order: any) {
     const numero = order.numero_pedido || order.numero || order.id;
-    const prazo = formatDateBR(order.prazo_entrega);
+    const prazo = order.prazo_entrega
+      ? new Date(order.prazo_entrega).toLocaleDateString('pt-BR')
+      : 'A combinar';
     const link = window.location.origin + '/acompanhar?pedido=' + encodeURIComponent(numero);
-    const descricao = order.observacoes || order.descricao || 'Pedido registrado no painel.';
+    const descricao = String(order.observacoes || order.descricao || 'Pedido registrado no painel.').trim();
+    const total = moneyToNumber(order.total);
+    const entrada = moneyToNumber(order.valor_entrada);
+    const restante = Math.max(total - entrada, 0);
+    const formaPagamento = restante <= 0
+      ? 'Pagamento integral confirmado'
+      : entrada > 0
+        ? '50% Pedido e 50% Entrega'
+        : 'A combinar na confirmação do pedido';
 
     return [
       `*Pedido número:* ${numero}`,
       '',
+      `*Cliente:* ${order.cliente_nome || 'Cliente'}`,
       `*Descrição:*`,
       descricao,
       '',
-      '*Forma de pagamento:*',
-      '50% Pedido e 50% Entrega',
+      `*Valor total:* ${formatMoney(total)}`,
+      `*Valor pago/entrada:* ${formatMoney(entrada)}`,
+      `*Valor restante:* ${formatMoney(restante)}`,
       '',
-      '*Chave Pix:*',
+      `*Forma de pagamento:*`,
+      formaPagamento,
+      '',
+      `*Chave Pix:*`,
       'wcriacoesgrafica@gmail.com',
       '',
       `*Prazo de entrega:* ${prazo}`,
@@ -346,15 +325,29 @@ export function Pedidos() {
     ].join('\n');
   }
 
-  function prepareShareOrder(order: any) {
+  function shareOrder(order: any) {
+    setSelectedOrder(null);
     setShareOrderData(order);
     setShareText(buildShareMessage(order));
   }
 
-  function sendShareOrder() {
-    if (!shareOrderData) return;
+  async function copyShareText() {
+    try {
+      await navigator.clipboard.writeText(shareText);
+      alert('Texto copiado para a área de transferência.');
+    } catch {
+      const area = document.createElement('textarea');
+      area.value = shareText;
+      document.body.appendChild(area);
+      area.select();
+      document.execCommand('copy');
+      area.remove();
+      alert('Texto copiado para a área de transferência.');
+    }
+  }
 
-    const phone = String(shareOrderData.cliente_telefone || '').replace(/\D/g, '');
+  function sendShareWhatsApp() {
+    const phone = String(shareOrderData?.cliente_telefone || '').replace(/\D/g, '');
     const url = phone
       ? 'https://wa.me/55' + phone.replace(/^55/, '') + '?text=' + encodeURIComponent(shareText)
       : 'https://wa.me/?text=' + encodeURIComponent(shareText);
@@ -463,18 +456,18 @@ export function Pedidos() {
               <input className="input" type="date" value={selectedOrder.prazo_entrega || ''} onChange={(e) => setSelectedOrder({ ...selectedOrder, prazo_entrega: e.target.value })} />
             </div>
             <div className="grid sm:grid-cols-3 gap-3">
-              <input className="input" type="number" step="0.01" value={selectedOrder.total || 0} onChange={(e) => { const pagamento = calcularPagamento(e.target.value, selectedOrder.valor_entrada); setSelectedOrder({ ...selectedOrder, total: pagamento.total, valor_entrada: pagamento.entrada, valor_restante: pagamento.restante, status_pagamento: pagamento.status_pagamento }); }} placeholder="Total" />
-              <input className="input" type="number" step="0.01" value={selectedOrder.valor_entrada || 0} onChange={(e) => { const pagamento = calcularPagamento(selectedOrder.total, e.target.value); setSelectedOrder({ ...selectedOrder, total: pagamento.total, valor_entrada: pagamento.entrada, valor_restante: pagamento.restante, status_pagamento: pagamento.status_pagamento }); }} placeholder="Pago/entrada" />
+              <input className="input" type="number" step="0.01" value={selectedOrder.total || 0} onChange={(e) => { const total = moneyToNumber(e.target.value); const entrada = moneyToNumber(selectedOrder.valor_entrada); setSelectedOrder({ ...selectedOrder, total, valor_restante: Math.max(total - entrada, 0) }); }} placeholder="Total" />
+              <input className="input" type="number" step="0.01" value={selectedOrder.valor_entrada || 0} onChange={(e) => { const entrada = moneyToNumber(e.target.value); const total = moneyToNumber(selectedOrder.total); setSelectedOrder({ ...selectedOrder, valor_entrada: entrada, valor_restante: Math.max(total - entrada, 0) }); }} placeholder="Pago/entrada" />
               <input className="input bg-gray-50" readOnly value={formatMoney(selectedOrder.valor_restante || 0)} placeholder="Resta" />
             </div>
             <div className="grid sm:grid-cols-2 gap-3">
               <select className="input" value={selectedOrder.status} onChange={(e) => setSelectedOrder({ ...selectedOrder, status: e.target.value })}>{Object.entries(statusLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select>
-              <select className="input" value={selectedOrder.status_pagamento || 'pendente'} onChange={(e) => { const pagamento = calcularPagamento(selectedOrder.total, selectedOrder.valor_entrada, e.target.value); setSelectedOrder({ ...selectedOrder, valor_entrada: pagamento.entrada, valor_restante: pagamento.restante, status_pagamento: pagamento.status_pagamento }); }}>{Object.entries(paymentLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select>
+              <select className="input" value={selectedOrder.status_pagamento || 'pendente'} onChange={(e) => setSelectedOrder({ ...selectedOrder, status_pagamento: e.target.value })}>{Object.entries(paymentLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select>
             </div>
             <textarea className="input min-h-24" placeholder="Observações" value={selectedOrder.observacoes || ''} onChange={(e) => setSelectedOrder({ ...selectedOrder, observacoes: e.target.value })} />
             <div className="sticky bottom-0 -mx-5 -mb-5 bg-white border-t border-gray-100 p-4 grid grid-cols-1 sm:grid-cols-4 gap-2">
               <button className="btn btn-outline" onClick={() => printDocument(selectedOrder)}>Documento</button>
-              <button className="btn btn-outline" onClick={() => prepareShareOrder(selectedOrder)}><Share2 size={16} /> Compartilhar</button>
+              <button className="btn btn-outline" onClick={() => shareOrder(selectedOrder)}><Share2 size={16} /> Compartilhar</button>
               <button className="btn btn-outline text-red-700" onClick={() => deleteOrder(selectedOrder)}>Excluir</button>
               <button className="btn btn-primary" onClick={saveStatus}>Salvar</button>
             </div>
@@ -505,29 +498,46 @@ export function Pedidos() {
       </BottomSheet>
 
       {shareOrderData && (
-        <div className="fixed inset-0 z-[9999] bg-slate-950/70 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
-            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+        <div className="fixed inset-0 z-[9999] bg-slate-950/70 px-3 py-4 sm:p-6 flex items-center justify-center">
+          <div className="w-full max-w-3xl max-h-[94dvh] bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col">
+            <div className="px-5 sm:px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-3">
               <div>
-                <h2 className="font-display text-xl font-bold text-primary">Compartilhar pedido</h2>
-                <p className="text-sm text-gray-500">Revise e edite a mensagem antes de enviar.</p>
+                <h2 className="font-display text-xl sm:text-2xl font-bold text-primary">Compartilhar pedido</h2>
+                <p className="text-sm text-gray-500">Confira, edite, copie ou envie o texto pelo WhatsApp.</p>
               </div>
-              <button className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center" onClick={() => setShareOrderData(null)}>
-                <X size={20} />
+
+              <button
+                type="button"
+                onClick={() => setShareOrderData(null)}
+                className="w-11 h-11 rounded-full bg-gray-100 flex items-center justify-center text-primary shrink-0"
+                aria-label="Fechar"
+              >
+                <X size={22} />
               </button>
             </div>
 
-            <div className="p-5 overflow-y-auto flex-1">
+            <div className="flex-1 overflow-y-auto p-5 sm:p-6">
               <textarea
-                className="input min-h-[360px] whitespace-pre-wrap font-mono text-sm leading-relaxed"
+                className="input min-h-[420px] sm:min-h-[520px] font-mono text-sm leading-relaxed resize-none"
                 value={shareText}
                 onChange={(e) => setShareText(e.target.value)}
               />
             </div>
 
-            <div className="p-4 border-t border-gray-100 grid grid-cols-1 sm:grid-cols-2 gap-3 bg-white">
-              <button className="btn btn-outline" onClick={() => setShareOrderData(null)}>Fechar</button>
-              <button className="btn btn-primary" onClick={sendShareOrder}>Enviar pelo WhatsApp</button>
+            <div className="border-t border-gray-100 bg-white p-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <button type="button" className="btn btn-outline" onClick={copyShareText}>
+                <Copy size={17} />
+                Copiar texto
+              </button>
+
+              <button type="button" className="btn btn-whats" onClick={sendShareWhatsApp}>
+                <MessageCircle size={17} />
+                Enviar WhatsApp
+              </button>
+
+              <button type="button" className="btn btn-primary" onClick={() => setShareOrderData(null)}>
+                Fechar
+              </button>
             </div>
           </div>
         </div>
