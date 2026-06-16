@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ClipboardList, Plus, Search, Send, Copy, CheckCircle2, ShoppingCart, Trash2, X } from 'lucide-react';
-import { apiFetch, formatMoney } from '../../lib/api';
+import { apiFetch, confirmAction, formatMoney, formatPhoneDigits } from '../../lib/api';
 
 type Cliente = {
   id: string;
@@ -214,7 +214,7 @@ export function Orcamentos() {
   }
 
   async function remove(orc: Orcamento) {
-    if (!confirm('Deseja excluir este orçamento?')) return;
+    if (!confirmAction('Deseja excluir este orçamento?')) return;
     try {
       await apiFetch('/admin/orcamentos/' + orc.id, { method: 'DELETE' });
       await load();
@@ -224,7 +224,7 @@ export function Orcamentos() {
   }
 
   async function virarPedido(orc: Orcamento) {
-    if (!confirm('Transformar este orçamento em pedido?')) return;
+    if (!confirmAction('Transformar este orçamento em pedido?')) return;
     try {
       const pedido = await apiFetch<any>('/admin/orcamentos/' + orc.id + '/virar-pedido', { method: 'POST' });
       await load();
@@ -236,10 +236,23 @@ export function Orcamentos() {
 
   async function copyText(text: string) {
     try {
-      await navigator.clipboard.writeText(text);
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        throw new Error('clipboard indisponível');
+      }
       alert('Texto copiado.');
     } catch {
-      alert('Não foi possível copiar automaticamente.');
+      const area = document.createElement('textarea');
+      area.value = text;
+      area.style.position = 'fixed';
+      area.style.left = '-9999px';
+      document.body.appendChild(area);
+      area.focus();
+      area.select();
+      document.execCommand('copy');
+      area.remove();
+      alert('Texto copiado.');
     }
   }
 
@@ -345,7 +358,7 @@ export function Orcamentos() {
                 </label>
                 <label className="block">
                   <span className="text-sm font-black text-slate-800">Telefone</span>
-                  <input className="input mt-1" value={form.cliente_telefone} onChange={(e) => setForm({ ...form, cliente_telefone: e.target.value })} placeholder="WhatsApp" />
+                  <input className="input mt-1" value={form.cliente_telefone} onChange={(e) => setForm({ ...form, cliente_telefone: formatPhoneDigits(e.target.value) })} placeholder="Somente números. Ex: 5588996240470" inputMode="numeric" />
                 </label>
                 <label className="block">
                   <span className="text-sm font-black text-slate-800">Email</span>

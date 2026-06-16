@@ -241,11 +241,11 @@ adminRoutes.get('/clientes/:id/pedidos', asyncHandler(async (req, res) => {
   res.json({ cliente, pedidos, orcamentos });
 }));
 
-adminRoutes.get('/configuracoes', onlyAdmin, asyncHandler(async (_req, res) => {
+adminRoutes.get('/configuracoes', asyncHandler(async (_req, res) => {
   res.json(await supabaseRest<any[]>('/configuracoes_site?select=*&order=chave.asc'));
 }));
 
-adminRoutes.put('/configuracoes/:chave', onlyAdmin, asyncHandler(async (req, res) => {
+adminRoutes.put('/configuracoes/:chave', asyncHandler(async (req, res) => {
   const d = z.object({ valor: z.string().optional().default(''), tipo: z.string().optional().default('texto') }).parse(req.body);
   const chave = req.params.chave;
   const existing = await supabaseRest<any[]>(`/configuracoes_site?select=id&chave=eq.${restEq(chave)}&limit=1`);

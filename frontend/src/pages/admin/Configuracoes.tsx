@@ -72,7 +72,6 @@ export function Configuracoes() {
   }
 
   async function salvarTudo() {
-    if (!confirm('Confirmar alteração das configurações do site?')) return;
     setSalvando(true);
     try {
       for (const campo of allCampos) {

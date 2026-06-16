@@ -17,7 +17,7 @@ import {
   MessageCircle,
   X
 } from 'lucide-react';
-import { apiFetch, formatMoney } from '../../lib/api';
+import { apiFetch, confirmAction, formatMoney, formatPhoneDigits } from '../../lib/api';
 import { BottomSheet } from '../../components/BottomSheet';
 
 const statusLabels: Record<string, string> = {
@@ -203,7 +203,7 @@ export function Pedidos() {
     const entrada = moneyToNumber(newOrder.valor_entrada);
     const restante = Math.max(total - entrada, 0);
 
-    if (!confirm('Confirmar criação deste pedido?')) return;
+    if (!confirmAction('Confirmar criação deste pedido?')) return;
 
     try {
       const created = await apiFetch<any>('/admin/pedidos/manual', {
@@ -235,7 +235,7 @@ export function Pedidos() {
 
   const saveStatus = async () => {
     if (!selectedOrder) return;
-    if (!confirm('Confirmar alteração deste pedido?')) return;
+    if (!confirmAction('Confirmar alteração deste pedido?')) return;
 
     const total = moneyToNumber(selectedOrder.total);
     const entrada = moneyToNumber(selectedOrder.valor_entrada);
@@ -268,7 +268,7 @@ export function Pedidos() {
   };
 
   async function deleteOrder(order: any) {
-    if (!confirm('Deseja excluir este pedido? Essa ação não pode ser desfeita.')) return;
+    if (!confirmAction('Deseja excluir este pedido? Essa ação não pode ser desfeita.')) return;
 
     try {
       await apiFetch('/pedidos/' + order.id, { method: 'DELETE' });
@@ -451,7 +451,7 @@ export function Pedidos() {
           <div className="space-y-4">
             <div className="grid sm:grid-cols-2 gap-3">
               <input className="input" value={selectedOrder.cliente_nome || ''} onChange={(e) => setSelectedOrder({ ...selectedOrder, cliente_nome: e.target.value })} placeholder="Cliente" />
-              <input className="input" value={selectedOrder.cliente_telefone || ''} onChange={(e) => setSelectedOrder({ ...selectedOrder, cliente_telefone: e.target.value })} placeholder="Telefone" />
+              <input className="input" value={selectedOrder.cliente_telefone || ''} onChange={(e) => setSelectedOrder({ ...selectedOrder, cliente_telefone: formatPhoneDigits(e.target.value) })} placeholder="Telefone" inputMode="numeric" />
               <input className="input" value={selectedOrder.cliente_email || ''} onChange={(e) => setSelectedOrder({ ...selectedOrder, cliente_email: e.target.value })} placeholder="Email" />
               <input className="input" type="date" value={selectedOrder.prazo_entrega || ''} onChange={(e) => setSelectedOrder({ ...selectedOrder, prazo_entrega: e.target.value })} />
             </div>
@@ -488,7 +488,7 @@ export function Pedidos() {
             <div className="rounded-2xl bg-amber-50 border border-amber-100 p-4"><p className="font-bold text-primary">Cliente do pedido</p><p className="text-sm text-gray-600">Escolha um cliente já cadastrado ou preencha os dados manualmente.</p></div>
             <label className="block"><span className="text-sm font-bold text-primary mb-1 flex items-center gap-2"><UserRound size={16} />Nome do cliente</span><input className="input border-2 border-amber-300 focus:border-amber-500" placeholder="Digite o nome do cliente" value={newOrder.cliente_nome} onChange={(e) => setNewOrder({ ...newOrder, cliente_nome: e.target.value })} /></label>
             <label className="block"><span className="text-sm font-bold text-primary mb-1 flex items-center gap-2"><UserRound size={16} />Selecionar cliente cadastrado</span><select className="input" value={newOrder.usuario_id || ''} onChange={(e) => setNewClient(e.target.value)}><option value="">Selecionar cliente cadastrado ou preencher manualmente</option>{clientes.map((c) => <option key={c.id} value={c.id}>{c.nome} - {c.email || c.telefone || 'sem contato'}</option>)}</select></label>
-            <div className="grid sm:grid-cols-2 gap-3"><label className="block"><span className="text-sm font-bold text-primary mb-1 flex items-center gap-2"><Phone size={16} />Telefone</span><input className="input" placeholder="Telefone / WhatsApp" value={newOrder.cliente_telefone} onChange={(e) => setNewOrder({ ...newOrder, cliente_telefone: e.target.value })} /></label><label className="block"><span className="text-sm font-bold text-primary mb-1 flex items-center gap-2"><Mail size={16} />Email</span><input className="input" placeholder="Email do cliente" value={newOrder.cliente_email} onChange={(e) => setNewOrder({ ...newOrder, cliente_email: e.target.value })} /></label></div>
+            <div className="grid sm:grid-cols-2 gap-3"><label className="block"><span className="text-sm font-bold text-primary mb-1 flex items-center gap-2"><Phone size={16} />Telefone</span><input className="input" placeholder="Somente números. Ex: 5588996240470" inputMode="numeric" value={newOrder.cliente_telefone} onChange={(e) => setNewOrder({ ...newOrder, cliente_telefone: formatPhoneDigits(e.target.value) })} /></label><label className="block"><span className="text-sm font-bold text-primary mb-1 flex items-center gap-2"><Mail size={16} />Email</span><input className="input" placeholder="Email do cliente" value={newOrder.cliente_email} onChange={(e) => setNewOrder({ ...newOrder, cliente_email: e.target.value })} /></label></div>
             <label className="block"><span className="text-sm font-bold text-primary mb-1 flex items-center gap-2"><FileText size={16} />Descrição do pedido</span><textarea className="input min-h-28" placeholder="Descreva o pedido, produto, tamanho, material, observações..." value={newOrder.descricao} onChange={(e) => setNewOrder({ ...newOrder, descricao: e.target.value })} /></label>
             <div className="grid sm:grid-cols-3 gap-3"><label className="block"><span className="text-sm font-bold text-primary mb-1">Total R$</span><input className="input" placeholder="Total R$" value={newOrder.total} onChange={(e) => updateNewOrderMoney('total', e.target.value)} /></label><label className="block"><span className="text-sm font-bold text-primary mb-1">Entrada R$</span><input className="input" placeholder="Entrada R$" value={newOrder.valor_entrada} onChange={(e) => updateNewOrderMoney('valor_entrada', e.target.value)} /></label><label className="block"><span className="text-sm font-bold text-primary mb-1">Resta</span><input className="input bg-gray-50" readOnly value={formatMoney(newOrder.valor_restante || 0)} /></label></div>
             <label className="block"><span className="text-sm font-bold text-primary mb-1 flex items-center gap-2"><CalendarDays size={16} />Prazo de entrega</span><input className="input" type="date" value={newOrder.prazo_entrega} onChange={(e) => setNewOrder({ ...newOrder, prazo_entrega: e.target.value })} /></label>
