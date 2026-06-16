@@ -20,7 +20,14 @@ function minPrice(product: Product) {
 
 function safeProductPath(product: Product) {
   const raw = product.slug || product.id || product.nome || '';
-  return encodeURIComponent(String(raw).trim());
+  const cleaned = String(raw || '')
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9-_]+/g, '-')
+    .replace(/(^-|-$)/g, '');
+
+  return encodeURIComponent(cleaned || product.id || product.nome);
 }
 
 export function ProductCard({ product }: ProductCardProps) {

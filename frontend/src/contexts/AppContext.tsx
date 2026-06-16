@@ -75,7 +75,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           slug: product.slug,
           imagem_principal: product.imagem_principal,
           quantidade,
-          preco_unitario: product.preco,
+          preco_unitario: Number(product.preco || 0),
           especificacoes_selecionadas: specs
         }
       ];

@@ -23,7 +23,7 @@ export function Checkout() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const subtotal = cart.reduce((sum, item) => sum + item.preco * item.quantidade, 0);
+  const subtotal = cart.reduce((sum, item) => sum + (Number(item.preco_unitario || (item as any).preco || 0) * item.quantidade), 0);
   const frete = 0;
   const total = subtotal + frete;
 
@@ -248,7 +248,7 @@ export function Checkout() {
                     </p>
                   </div>
                   <span className="font-semibold text-gray-700 flex-shrink-0">
-                    {formatMoney(item.preco * item.quantidade)}
+                    {formatMoney((Number(item.preco_unitario || (item as any).preco || 0) * item.quantidade))}
                   </span>
                 </div>
               ))}

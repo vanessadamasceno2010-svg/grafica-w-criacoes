@@ -28,6 +28,14 @@ function normalizeProduct(product: any, categories: any[] = []) {
   };
 }
 
+function normalizeLookup(value: any) {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+}
+
 catalogRoutes.get('/categorias', asyncHandler(async (_req, res) => {
   const rows = await supabaseRest<any[]>('/categorias?select=*&ativo=eq.true&order=ordem.asc,nome.asc');
   res.json(rows);
@@ -132,6 +140,19 @@ catalogRoutes.get('/produtos/:idOrSlug', asyncHandler(async (req, res) => {
     products = await supabaseRest<any[]>(
       `/produtos?select=*&nome=ilike.${restEq(idOrSlug + '%')}&limit=1`
     ).catch(() => []);
+  }
+
+  if (!products[0]) {
+    const all = await supabaseRest<any[]>('/produtos?select=*&ativo=eq.true&limit=500').catch(() => []);
+    const term = normalizeLookup(idOrSlug);
+    products = all.filter((p) => {
+      return (
+        normalizeLookup(p.id) === term ||
+        normalizeLookup(p.slug) === term ||
+        normalizeLookup(p.nome) === term ||
+        normalizeLookup(p.nome).startsWith(term)
+      );
+    });
   }
 
   const product = products[0];

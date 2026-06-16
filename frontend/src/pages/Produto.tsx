@@ -15,6 +15,14 @@ function variationLabel(v: ProductVariation) {
   return [v.nome, v.quantidade, v.modelo, v.acabamento, v.tamanho].filter(Boolean).join(' • ') || 'Variação';
 }
 
+function normalizeSearchText(value: any) {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-');
+}
+
 export function Produto() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
@@ -47,13 +55,24 @@ export function Produto() {
 
     const findFallbackProduct = async () => {
       const res = await apiFetch<{ data: any[] }>('/produtos?limit=100');
-      const term = decodeURIComponent(slug).trim().toLowerCase();
+      const rawTerm = decodeURIComponent(slug).trim();
+      const term = rawTerm.toLowerCase();
+      const normalizedTerm = normalizeSearchText(rawTerm);
       const found = (res.data || []).find((p: any) => {
+        const id = String(p.id || '').toLowerCase();
+        const slugValue = String(p.slug || '').toLowerCase();
+        const nome = String(p.nome || '').toLowerCase();
+        const normalizedName = normalizeSearchText(p.nome);
+        const normalizedSlug = normalizeSearchText(p.slug);
+
         return (
-          String(p.id || '').toLowerCase() === term ||
-          String(p.slug || '').toLowerCase() === term ||
-          String(p.nome || '').toLowerCase() === term ||
-          String(p.nome || '').toLowerCase().startsWith(term)
+          id === term ||
+          slugValue === term ||
+          nome === term ||
+          nome.startsWith(term) ||
+          normalizedSlug === normalizedTerm ||
+          normalizedName === normalizedTerm ||
+          normalizedName.startsWith(normalizedTerm)
         );
       });
       if (!found) throw new Error('Produto não encontrado.');
@@ -94,15 +113,27 @@ export function Produto() {
 
   const handleAddToCart = () => {
     if (!cartProduct) return;
-    addToCart(cartProduct, quantity, specsForCart);
-    setShowCartSheet(false);
-    navigate('/carrinho');
+
+    try {
+      addToCart(cartProduct, quantity, specsForCart);
+      setShowCartSheet(false);
+      navigate('/carrinho');
+    } catch (error) {
+      console.error(error);
+      alert('Não foi possível adicionar ao carrinho. Recarregue a página e tente novamente.');
+    }
   };
 
   const handleBuyNow = () => {
     if (!cartProduct) return;
-    addToCart(cartProduct, quantity, specsForCart);
-    navigate('/checkout');
+
+    try {
+      addToCart(cartProduct, quantity, specsForCart);
+      navigate('/checkout');
+    } catch (error) {
+      console.error(error);
+      alert('Não foi possível continuar para a compra. Recarregue a página e tente novamente.');
+    }
   };
 
   const nextImage = () => setImageIndex((prev) => (prev + 1) % allImages.length);
@@ -214,7 +245,7 @@ export function Produto() {
           </div>
 
           <div className="hidden sm:flex gap-4">
-            <button onClick={() => { if (cartProduct) addToCart(cartProduct, quantity, specsForCart); setShowCartSheet(true); }} className="btn btn-outline flex-1 text-base"><ShoppingCart size={20} />Adicionar ao Carrinho</button>
+            <button onClick={handleAddToCart} className="btn btn-outline flex-1 text-base"><ShoppingCart size={20} />Adicionar ao Carrinho</button>
             <button onClick={handleBuyNow} className="btn btn-primary flex-1 text-base"><Zap size={20} />Comprar Agora</button>
           </div>
         </div>
@@ -232,7 +263,7 @@ export function Produto() {
           <div><p className="text-xs text-gray-500">Total</p><p className="font-display text-2xl font-bold text-primary">{formatMoney(totalPrice)}</p></div>
           <div className="flex items-center gap-3 bg-gray-100 rounded-xl p-1"><button onClick={() => setQuantity((q) => Math.max(1, q - 1))} className="w-9 h-9 rounded-lg bg-white flex items-center justify-center text-primary font-bold shadow-sm">-</button><span className="font-bold text-primary w-8 text-center">{quantity}</span><button onClick={() => setQuantity((q) => q + 1)} className="w-9 h-9 rounded-lg bg-white flex items-center justify-center text-primary font-bold shadow-sm">+</button></div>
         </div>
-        <div className="flex gap-3"><button onClick={() => { if (cartProduct) addToCart(cartProduct, quantity, specsForCart); setShowCartSheet(true); }} className="btn btn-outline flex-1"><ShoppingCart size={18} /></button><button onClick={handleBuyNow} className="btn btn-primary flex-[2]"><Zap size={18} />Comprar Agora</button></div>
+        <div className="flex gap-3"><button onClick={handleAddToCart} className="btn btn-outline flex-1"><ShoppingCart size={18} /></button><button onClick={handleBuyNow} className="btn btn-primary flex-[2]"><Zap size={18} />Comprar Agora</button></div>
       </div>
 
       <BottomSheet isOpen={showCartSheet} onClose={() => setShowCartSheet(false)} title="Adicionado ao Carrinho!">

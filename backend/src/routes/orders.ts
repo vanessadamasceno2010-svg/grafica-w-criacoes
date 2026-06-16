@@ -15,6 +15,31 @@ function asNumber(value: any) {
   return Number.isFinite(n) ? n : 0;
 }
 
+function calcularPagamento(totalValue: any, entradaValue: any, statusPagamento?: string) {
+  const total = asNumber(totalValue);
+  let entrada = asNumber(entradaValue);
+  let status = String(statusPagamento || '').trim() || 'pendente';
+
+  if (status === 'confirmado') {
+    entrada = total;
+  }
+
+  if (status === 'pendente') {
+    entrada = 0;
+  }
+
+  if (!statusPagamento) {
+    if (total > 0 && entrada >= total) status = 'confirmado';
+    else if (entrada > 0) status = 'parcial';
+    else status = 'pendente';
+  }
+
+  if (entrada >= total && total > 0) status = 'confirmado';
+  const restante = Math.max(total - entrada, 0);
+
+  return { total, entrada, restante, status_pagamento: status };
+}
+
 async function registrarHistorico(pedidoId: string, usuario: any, acao: string, campo: string, valorAnterior: any, valorNovo: any) {
   await supabaseRest('/pedido_historico', {
     method: 'POST',
@@ -68,9 +93,10 @@ orderRoutes.post('/pedidos', auth, asyncHandler(async (req, res) => {
   }).parse(req.body);
 
   const numero = `WC${Date.now()}`;
-  const total = asNumber(d.total || d.subtotal);
-  const valorEntrada = asNumber(d.valor_entrada);
-  const valorRestante = Math.max(total - valorEntrada, 0);
+  const pagamento = calcularPagamento(d.total || d.subtotal, d.valor_entrada, d.status_pagamento);
+  const total = pagamento.total;
+  const valorEntrada = pagamento.entrada;
+  const valorRestante = pagamento.restante;
 
   const pedidos = await supabaseRest<any[]>('/pedidos', {
     method: 'POST',
@@ -85,7 +111,7 @@ orderRoutes.post('/pedidos', auth, asyncHandler(async (req, res) => {
       valor_entrada: valorEntrada,
       valor_restante: valorRestante,
       metodo_pagamento: d.metodo_pagamento,
-      status_pagamento: d.status_pagamento,
+      status_pagamento: pagamento.status_pagamento,
       endereco_entrega: d.endereco_entrega,
       observacoes: d.observacoes,
       cliente_nome: d.cliente_nome || req.user!.nome || '',
@@ -136,19 +162,20 @@ orderRoutes.put('/pedidos/:id', auth, asyncHandler(async (req, res) => {
   const oldRows = await supabaseRest<any[]>(`/pedidos?select=*&id=eq.${restEq(req.params.id)}&limit=1`);
   const oldOrder = oldRows[0];
 
-  const total = d.total !== undefined ? asNumber(d.total) : asNumber(oldOrder?.total);
-  const entrada = d.valor_entrada !== undefined ? asNumber(d.valor_entrada) : asNumber(oldOrder?.valor_entrada);
+  const pagamento = calcularPagamento(
+    d.total !== undefined ? d.total : oldOrder?.total,
+    d.valor_entrada !== undefined ? d.valor_entrada : oldOrder?.valor_entrada,
+    d.status_pagamento
+  );
+
   const payload: any = {
     ...d,
-    total,
-    valor_entrada: entrada,
-    valor_restante: Math.max(total - entrada, 0),
+    total: pagamento.total,
+    valor_entrada: pagamento.entrada,
+    valor_restante: pagamento.restante,
+    status_pagamento: pagamento.status_pagamento,
     updated_at: new Date().toISOString()
   };
-
-  if (payload.valor_restante <= 0 && !payload.status_pagamento) {
-    payload.status_pagamento = 'confirmado';
-  }
 
   const rows = await supabaseRest<any[]>(`/pedidos?id=eq.${restEq(req.params.id)}`, {
     method: 'PATCH',

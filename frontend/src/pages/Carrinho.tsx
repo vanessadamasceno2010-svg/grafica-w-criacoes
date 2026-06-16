@@ -7,7 +7,7 @@ export function Carrinho() {
   const { cart, removeFromCart, updateQuantity, clearCart } = useApp();
   const navigate = useNavigate();
 
-  const subtotal = cart.reduce((sum, item) => sum + item.preco * item.quantidade, 0);
+  const subtotal = cart.reduce((sum, item) => sum + (Number(item.preco_unitario || (item as any).preco || 0) * item.quantidade), 0);
   const cartCount = cart.reduce((sum, item) => sum + item.quantidade, 0);
 
   const handlePedidoRapido = () => {
@@ -57,7 +57,7 @@ export function Carrinho() {
         {/* Cart Items */}
         <div className="lg:col-span-2 space-y-4 mb-6 lg:mb-0">
           {cart.map((item) => {
-            const itemTotal = item.preco * item.quantidade;
+            const itemTotal = (Number(item.preco_unitario || (item as any).preco || 0) * item.quantidade);
             const specsString = Object.entries(item.especificacoes_selecionadas)
               .map(([k, v]) => `${k}: ${v}`)
               .join(' · ');
