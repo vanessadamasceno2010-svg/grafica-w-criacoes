@@ -589,6 +589,108 @@ adminRoutes.get('/avaliacoes', asyncHandler(async (_req, res) => {
   res.json(await supabaseRest<any[]>('/contatos_formulario?select=*&order=created_at.desc&limit=1000').catch(() => []));
 }));
 
+
+
+const caixaSchema = z.object({
+  data_movimento: z.string().min(8),
+  descricao: z.string().min(2),
+  valor: z.coerce.number().positive(),
+  forma_pagamento: z.string().optional().default('pix'),
+  origem: z.string().optional().default('manual'),
+  observacoes: z.string().optional().default(''),
+  pedido_id: z.string().uuid().optional().nullable()
+});
+
+adminRoutes.get('/fluxo-caixa', asyncHandler(async (req, res) => {
+  const dateFrom = String(req.query.date_from || '');
+  const dateTo = String(req.query.date_to || '');
+  const formaPagamento = String(req.query.forma_pagamento || 'todos');
+  const origem = String(req.query.origem || 'todos');
+  const q = String(req.query.q || '').trim().toLowerCase();
+
+  let path = '/caixa_movimentacoes?select=*&order=data_movimento.desc,created_at.desc&limit=3000';
+  if (dateFrom) path += `&data_movimento=gte.${restEq(dateFrom)}`;
+  if (dateTo) path += `&data_movimento=lte.${restEq(dateTo)}`;
+  if (formaPagamento && formaPagamento !== 'todos') path += `&forma_pagamento=eq.${restEq(formaPagamento)}`;
+  if (origem && origem !== 'todos') path += `&origem=eq.${restEq(origem)}`;
+
+  let movimentos = await supabaseRest<any[]>(path).catch(() => []);
+
+  if (q) {
+    movimentos = movimentos.filter((m) => [
+      m.descricao,
+      m.forma_pagamento,
+      m.origem,
+      m.usuario_nome,
+      m.observacoes
+    ].join(' ').toLowerCase().includes(q));
+  }
+
+  const totalEntradas = movimentos.reduce((sum, m) => sum + asNumber(m.valor), 0);
+  const map = new Map<string, { data: string; total: number; quantidade: number }>();
+
+  for (const m of movimentos) {
+    const key = dateOnly(m.data_movimento || m.created_at);
+    if (!key) continue;
+    const item = map.get(key) || { data: key, total: 0, quantidade: 0 };
+    item.total += asNumber(m.valor);
+    item.quantidade += 1;
+    map.set(key, item);
+  }
+
+  const resumoPorDia = Array.from(map.values()).sort((a, b) => b.data.localeCompare(a.data));
+
+  res.json({
+    movimentos,
+    resumoPorDia,
+    totalEntradas,
+    quantidade: movimentos.length
+  });
+}));
+
+adminRoutes.post('/fluxo-caixa', asyncHandler(async (req, res) => {
+  const d = caixaSchema.parse(req.body);
+
+  const rows = await supabaseRest<any[]>('/caixa_movimentacoes', {
+    method: 'POST',
+    body: JSON.stringify({
+      data_movimento: d.data_movimento.slice(0, 10),
+      descricao: d.descricao,
+      valor: d.valor,
+      forma_pagamento: d.forma_pagamento,
+      origem: d.origem,
+      observacoes: d.observacoes || '',
+      pedido_id: d.pedido_id || null,
+      usuario_id: req.user?.id || null,
+      usuario_nome: req.user?.nome || req.user?.email || 'Sistema',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    })
+  });
+
+  res.status(201).json(rows[0]);
+}));
+
+adminRoutes.put('/fluxo-caixa/:id', asyncHandler(async (req, res) => {
+  const d = caixaSchema.partial().parse(req.body);
+
+  const rows = await supabaseRest<any[]>(`/caixa_movimentacoes?id=eq.${restEq(req.params.id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      ...d,
+      data_movimento: d.data_movimento ? d.data_movimento.slice(0, 10) : undefined,
+      updated_at: new Date().toISOString()
+    })
+  });
+
+  res.json(rows[0] || { ok: true });
+}));
+
+adminRoutes.delete('/fluxo-caixa/:id', onlyAdmin, asyncHandler(async (req, res) => {
+  await supabaseRest(`/caixa_movimentacoes?id=eq.${restEq(req.params.id)}`, { method: 'DELETE' });
+  res.json({ ok: true });
+}));
+
 adminRoutes.get('/relatorios/vendas', onlyAdmin, asyncHandler(async (_req, res) => {
   const rows = await supabaseRest<any[]>('/pedidos?select=created_at,total&order=created_at.desc&limit=90');
   res.json(rows.map((r) => ({ data: new Date(r.created_at).toLocaleDateString('pt-BR'), vendas: asNumber(r.total), pedidos: 1 })));
