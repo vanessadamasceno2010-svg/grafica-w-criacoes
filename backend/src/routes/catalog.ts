@@ -130,11 +130,28 @@ catalogRoutes.get('/produtos', asyncHandler(async (req, res) => {
 
 catalogRoutes.get('/produtos/:idOrSlug', asyncHandler(async (req, res) => {
   const idOrSlug = decodeURIComponent(req.params.idOrSlug || '').trim();
-  const categories = await supabaseRest<any[]>('/categorias?select=id,nome,slug');
 
-  let products = await supabaseRest<any[]>(
-    `/produtos?select=*&or=(id.eq.${restEq(idOrSlug)},slug.ilike.${restEq(idOrSlug)})&limit=1`
-  ).catch(() => []);
+  if (!idOrSlug) {
+    throw new HttpError(404, 'Produto não encontrado.');
+  }
+
+  const categories = await supabaseRest<any[]>('/categorias?select=id,nome,slug');
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idOrSlug);
+
+  let products: any[] = [];
+
+  // Busca por ID apenas quando for UUID válido. Isso evita erro no Supabase quando a URL vem como /produto/Cartao.
+  if (isUuid) {
+    products = await supabaseRest<any[]>(
+      `/produtos?select=*&id=eq.${restEq(idOrSlug)}&limit=1`
+    ).catch(() => []);
+  }
+
+  if (!products[0]) {
+    products = await supabaseRest<any[]>(
+      `/produtos?select=*&slug=ilike.${restEq(idOrSlug)}&limit=1`
+    ).catch(() => []);
+  }
 
   if (!products[0]) {
     products = await supabaseRest<any[]>(
@@ -145,19 +162,27 @@ catalogRoutes.get('/produtos/:idOrSlug', asyncHandler(async (req, res) => {
   if (!products[0]) {
     const all = await supabaseRest<any[]>('/produtos?select=*&ativo=eq.true&limit=500').catch(() => []);
     const term = normalizeLookup(idOrSlug);
+
     products = all.filter((p) => {
+      const id = normalizeLookup(p.id);
+      const slug = normalizeLookup(p.slug);
+      const nome = normalizeLookup(p.nome);
+
       return (
-        normalizeLookup(p.id) === term ||
-        normalizeLookup(p.slug) === term ||
-        normalizeLookup(p.nome) === term ||
-        normalizeLookup(p.nome).startsWith(term)
+        id === term ||
+        slug === term ||
+        nome === term ||
+        nome.startsWith(term) ||
+        term.startsWith(nome)
       );
     });
   }
 
   const product = products[0];
 
-  if (!product) throw new HttpError(404, 'Produto não encontrado.');
+  if (!product) {
+    throw new HttpError(404, 'Produto não encontrado.');
+  }
 
   res.json(normalizeProduct(product, categories));
 }));

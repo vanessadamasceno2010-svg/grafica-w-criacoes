@@ -117,7 +117,7 @@ export function Produto() {
     try {
       addToCart(cartProduct, quantity, specsForCart);
       setShowCartSheet(false);
-      navigate('/carrinho');
+      window.setTimeout(() => navigate('/carrinho'), 80);
     } catch (error) {
       console.error(error);
       alert('Não foi possível adicionar ao carrinho. Recarregue a página e tente novamente.');
@@ -129,7 +129,7 @@ export function Produto() {
 
     try {
       addToCart(cartProduct, quantity, specsForCart);
-      navigate('/checkout');
+      window.setTimeout(() => navigate('/checkout'), 80);
     } catch (error) {
       console.error(error);
       alert('Não foi possível continuar para a compra. Recarregue a página e tente novamente.');
@@ -156,7 +156,7 @@ export function Produto() {
     <div className="fade-in max-w-5xl mx-auto pb-24 sm:pb-8">
       <div className="relative bg-gray-100 sm:hidden">
         <div className="aspect-square relative overflow-hidden">
-          <img src={allImages[imageIndex] || product.imagem_principal} alt={product.nome} className="w-full h-full object-cover" />
+          <img src={allImages[imageIndex] || product.imagem_principal} alt={product.nome} className="w-full h-full object-cover" onError={(event) => { event.currentTarget.src = '/assets/chaveiros-personalizados.jpeg'; }} />
           {allImages.length > 1 && (
             <>
               <button onClick={prevImage} className="absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/80 backdrop-blur flex items-center justify-center shadow-lg active:scale-90 transition-transform"><ChevronLeft size={20} className="text-primary" /></button>
@@ -173,13 +173,13 @@ export function Produto() {
       <div className="px-4 sm:px-0 sm:grid sm:grid-cols-2 sm:gap-10 sm:mt-8">
         <div className="hidden sm:block">
           <div className="aspect-square rounded-3xl overflow-hidden bg-gray-100 mb-4">
-            <img src={allImages[imageIndex] || product.imagem_principal} alt={product.nome} className="w-full h-full object-cover" />
+            <img src={allImages[imageIndex] || product.imagem_principal} alt={product.nome} className="w-full h-full object-cover" onError={(event) => { event.currentTarget.src = '/assets/chaveiros-personalizados.jpeg'; }} />
           </div>
           {allImages.length > 1 && (
             <div className="grid grid-cols-4 gap-3">
               {allImages.map((img, idx) => (
                 <button key={idx} onClick={() => setImageIndex(idx)} className={`aspect-square rounded-2xl overflow-hidden border-2 transition-all ${idx === imageIndex ? 'border-gold' : 'border-transparent hover:border-gray-300'}`}>
-                  <img src={img} alt="" className="w-full h-full object-cover" />
+                  <img src={img} alt="" className="w-full h-full object-cover" onError={(event) => { event.currentTarget.src = '/assets/chaveiros-personalizados.jpeg'; }} />
                 </button>
               ))}
             </div>

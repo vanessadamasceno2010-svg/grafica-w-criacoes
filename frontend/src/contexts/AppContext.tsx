@@ -5,35 +5,61 @@ type AppContextType = {
   user: User | null;
   setUser: (user: User | null) => void;
   cart: CartItem[];
-  addToCart: (product: Product, quantity: number, specs: Record<string, string>) => void;
-  removeFromCart: (productId: string, specs: Record<string, string>) => void;
-  updateQuantity: (productId: string, specs: Record<string, string>, quantity: number) => void;
+  addToCart: (product: Product, quantity?: number, specs?: Record<string, string>) => void;
+  removeFromCart: (productId: string, specs?: Record<string, string>) => void;
+  updateQuantity: (productId: string, specs: Record<string, string> | undefined, quantity: number) => void;
   clearCart: () => void;
 };
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
+function readJson<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function normalizeSpecs(specs?: Record<string, string>) {
+  return Object.keys(specs || {})
+    .sort()
+    .reduce((acc, key) => {
+      acc[key] = String((specs || {})[key] || '');
+      return acc;
+    }, {} as Record<string, string>);
+}
+
+function sameSpecs(a?: Record<string, string>, b?: Record<string, string>) {
+  return JSON.stringify(normalizeSpecs(a)) === JSON.stringify(normalizeSpecs(b));
+}
+
+function normalizeCartItem(item: any): CartItem {
+  return {
+    id: String(item?.id || item?.produto_id || ''),
+    produto_id: String(item?.produto_id || item?.id || ''),
+    nome: String(item?.nome || 'Produto'),
+    slug: String(item?.slug || item?.produto_id || item?.id || ''),
+    imagem_principal: String(item?.imagem_principal || '/assets/chaveiros-personalizados.jpeg'),
+    quantidade: Math.max(Number(item?.quantidade || item?.quantity || 1), 1),
+    preco_unitario: Number(item?.preco_unitario || item?.preco || 0),
+    especificacoes_selecionadas: normalizeSpecs(item?.especificacoes_selecionadas || item?.specs || {})
+  };
+}
+
+function saveCart(cart: CartItem[]) {
+  localStorage.setItem('gp_cart', JSON.stringify(cart.map(normalizeCartItem)));
+}
+
 export function AppProvider({ children }: { children: ReactNode }) {
   const [user, setUserState] = useState<User | null>(() => {
-    const saved = localStorage.getItem('gp_user') || localStorage.getItem('user');
-    if (!saved) return null;
-
-    try {
-      return JSON.parse(saved);
-    } catch {
-      return null;
-    }
+    return readJson<User | null>('gp_user', readJson<User | null>('user', null));
   });
 
   const [cart, setCart] = useState<CartItem[]>(() => {
-    const saved = localStorage.getItem('gp_cart');
-    if (!saved) return [];
-
-    try {
-      return JSON.parse(saved);
-    } catch {
-      return [];
-    }
+    const saved = readJson<any[]>('gp_cart', []);
+    return Array.isArray(saved) ? saved.map(normalizeCartItem).filter((item) => item.produto_id) : [];
   });
 
   const setUser = (nextUser: User | null) => {
@@ -51,61 +77,88 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   useEffect(() => {
-    localStorage.setItem('gp_cart', JSON.stringify(cart));
+    saveCart(cart);
   }, [cart]);
 
-  const addToCart = (product: Product, quantity: number, specs: Record<string, string>) => {
+  const addToCart = (product: Product, quantity = 1, specs: Record<string, string> = {}) => {
+    if (!product?.id) {
+      alert('Produto inválido. Recarregue a página e tente novamente.');
+      return;
+    }
+
+    const safeQuantity = Math.max(Number(quantity || 1), 1);
+    const safeSpecs = normalizeSpecs(specs);
+    const productId = String(product.id);
+
     setCart((prev) => {
-      const existingIndex = prev.findIndex(
-        (item) => item.id === product.id && JSON.stringify(item.especificacoes_selecionadas) === JSON.stringify(specs)
+      const normalizedPrev = Array.isArray(prev) ? prev.map(normalizeCartItem) : [];
+      const existingIndex = normalizedPrev.findIndex(
+        (item) => item.produto_id === productId && sameSpecs(item.especificacoes_selecionadas, safeSpecs)
       );
 
+      let updated: CartItem[];
+
       if (existingIndex >= 0) {
-        const updated = [...prev];
-        updated[existingIndex].quantidade += quantity;
-        return updated;
+        updated = [...normalizedPrev];
+        updated[existingIndex] = {
+          ...updated[existingIndex],
+          quantidade: Number(updated[existingIndex].quantidade || 0) + safeQuantity
+        };
+      } else {
+        updated = [
+          ...normalizedPrev,
+          {
+            id: productId,
+            produto_id: productId,
+            nome: product.nome || 'Produto',
+            slug: product.slug || productId,
+            imagem_principal: product.imagem_principal || '/assets/chaveiros-personalizados.jpeg',
+            quantidade: safeQuantity,
+            preco_unitario: Number(product.preco || 0),
+            especificacoes_selecionadas: safeSpecs
+          }
+        ];
       }
 
-      return [
-        ...prev,
-        {
-          id: product.id,
-          produto_id: product.id,
-          nome: product.nome,
-          slug: product.slug,
-          imagem_principal: product.imagem_principal,
-          quantidade,
-          preco_unitario: Number(product.preco || 0),
-          especificacoes_selecionadas: specs
-        }
-      ];
+      saveCart(updated);
+      return updated;
     });
   };
 
-  const removeFromCart = (productId: string, specs: Record<string, string>) => {
-    setCart((prev) =>
-      prev.filter(
-        (item) => !(item.id === productId && JSON.stringify(item.especificacoes_selecionadas) === JSON.stringify(specs))
-      )
-    );
+  const removeFromCart = (productId: string, specs: Record<string, string> = {}) => {
+    setCart((prev) => {
+      const updated = prev
+        .map(normalizeCartItem)
+        .filter((item) => !(item.produto_id === productId && sameSpecs(item.especificacoes_selecionadas, specs)));
+      saveCart(updated);
+      return updated;
+    });
   };
 
-  const updateQuantity = (productId: string, specs: Record<string, string>, quantity: number) => {
-    if (quantity <= 0) {
+  const updateQuantity = (productId: string, specs: Record<string, string> = {}, quantity: number) => {
+    const safeQuantity = Number(quantity || 0);
+
+    if (safeQuantity <= 0) {
       removeFromCart(productId, specs);
       return;
     }
 
-    setCart((prev) =>
-      prev.map((item) =>
-        item.id === productId && JSON.stringify(item.especificacoes_selecionadas) === JSON.stringify(specs)
-          ? { ...item, quantidade }
-          : item
-      )
-    );
+    setCart((prev) => {
+      const updated = prev.map((item) => {
+        const normalized = normalizeCartItem(item);
+        return normalized.produto_id === productId && sameSpecs(normalized.especificacoes_selecionadas, specs)
+          ? { ...normalized, quantidade: safeQuantity }
+          : normalized;
+      });
+      saveCart(updated);
+      return updated;
+    });
   };
 
-  const clearCart = () => setCart([]);
+  const clearCart = () => {
+    setCart([]);
+    saveCart([]);
+  };
 
   return (
     <AppContext.Provider value={{ user, setUser, cart, addToCart, removeFromCart, updateQuantity, clearCart }}>
@@ -116,8 +169,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
 export function useApp() {
   const context = useContext(AppContext);
+
   if (!context) {
     throw new Error('useApp must be used within an AppProvider');
   }
+
   return context;
 }

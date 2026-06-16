@@ -28,8 +28,13 @@ export function Checkout() {
   const total = subtotal + frete;
 
   if (cart.length === 0) {
-    navigate('/carrinho');
-    return null;
+    return (
+      <div className="fade-in max-w-5xl mx-auto px-4 py-12 text-center">
+        <h1 className="font-display text-2xl font-bold text-primary mb-3">Carrinho vazio</h1>
+        <p className="text-gray-500 mb-6">Adicione um produto ao carrinho antes de finalizar o pedido.</p>
+        <button onClick={() => navigate('/catalogo')} className="btn btn-primary">Ver Catálogo</button>
+      </div>
+    );
   }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -58,8 +63,7 @@ export function Checkout() {
       frete,
       desconto: 0,
       total,
-      created_at: new Date().toISOString(),
-      status: 'pendente',
+      created_at: new Date().toISOString()
     };
 
     localStorage.setItem('gp_last_order', JSON.stringify(order));
