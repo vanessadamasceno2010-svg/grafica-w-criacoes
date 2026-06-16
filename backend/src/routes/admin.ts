@@ -47,6 +47,67 @@ async function registrarHistorico(pedidoId: string, usuario: any, acao: string, 
   }).catch(() => null);
 }
 
+
+function normalizePhone(value: string) {
+  return String(value || '').replace(/\D/g, '');
+}
+
+function safeClienteEmail(nome: string, telefone: string) {
+  const phone = normalizePhone(telefone);
+  const base = phone || String(nome || 'cliente').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'cliente';
+  return `cliente-${base}-${Date.now()}@grafica.local`;
+}
+
+async function findOrCreateClienteSimples(data: {
+  usuario_id?: string | null;
+  nome: string;
+  email?: string;
+  telefone?: string;
+}) {
+  if (data.usuario_id) {
+    const rows = await supabaseRest<any[]>(`/users?select=id,nome,email,telefone&id=eq.${restEq(data.usuario_id)}&limit=1`).catch(() => []);
+    if (rows[0]) return rows[0];
+    return { id: data.usuario_id, nome: data.nome, email: data.email || '', telefone: data.telefone || '' };
+  }
+
+  const email = String(data.email || '').trim().toLowerCase();
+  const telefone = String(data.telefone || '').trim();
+  const telefoneLimpo = normalizePhone(telefone);
+
+  if (email) {
+    const byEmail = await supabaseRest<any[]>(`/users?select=id,nome,email,telefone&email=eq.${restEq(email)}&limit=1`).catch(() => []);
+    if (byEmail[0]) return byEmail[0];
+  }
+
+  if (telefone) {
+    const byPhone = await supabaseRest<any[]>(`/users?select=id,nome,email,telefone&telefone=eq.${restEq(telefone)}&limit=1`).catch(() => []);
+    if (byPhone[0]) return byPhone[0];
+  }
+
+  if (telefoneLimpo && telefoneLimpo !== telefone) {
+    const byPhoneClean = await supabaseRest<any[]>(`/users?select=id,nome,email,telefone&telefone=ilike.${restEq('%' + telefoneLimpo.slice(-8) + '%')}&limit=1`).catch(() => []);
+    if (byPhoneClean[0]) return byPhoneClean[0];
+  }
+
+  const senhaHash = await bcrypt.hash(`cliente-${Date.now()}-${Math.random()}`, 10);
+  const novoEmail = email || safeClienteEmail(data.nome, telefone);
+
+  const created = await supabaseRest<any[]>('/users', {
+    method: 'POST',
+    body: JSON.stringify({
+      nome: data.nome,
+      email: novoEmail,
+      telefone,
+      senha: senhaHash,
+      role: 'user',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    })
+  });
+
+  return created[0];
+}
+
 adminRoutes.use(auth);
 adminRoutes.use(requireStaff);
 
@@ -181,13 +242,20 @@ adminRoutes.post('/pedidos/manual', asyncHandler(async (req, res) => {
     observacoes: z.string().optional().default('Pedido registrado manualmente no painel administrativo.')
   }).parse(req.body);
 
+  const cliente = await findOrCreateClienteSimples({
+    usuario_id: d.usuario_id,
+    nome: d.cliente_nome,
+    email: d.cliente_email,
+    telefone: d.cliente_telefone
+  });
+
   const restante = Math.max(asNumber(d.total) - asNumber(d.valor_entrada), 0);
   const numero = `MAN${Date.now()}`;
 
   const pedidos = await supabaseRest<any[]>('/pedidos', {
     method: 'POST',
     body: JSON.stringify({
-      usuario_id: d.usuario_id || null,
+      usuario_id: cliente?.id || null,
       numero_pedido: numero,
       status: d.status,
       subtotal: d.total,
@@ -197,14 +265,14 @@ adminRoutes.post('/pedidos/manual', asyncHandler(async (req, res) => {
       valor_entrada: d.valor_entrada,
       valor_restante: restante,
       metodo_pagamento: 'manual',
-      status_pagamento: d.status_pagamento,
+      status_pagamento: restante <= 0 ? 'confirmado' : asNumber(d.valor_entrada) > 0 ? 'parcial' : d.status_pagamento,
       endereco_entrega: d.endereco_entrega,
-      observacoes: d.observacoes,
+      observacoes: d.observacoes || d.descricao,
       prazo_entrega: d.prazo_entrega || null,
       data_entrega_estimada: d.prazo_entrega || null,
-      cliente_nome: d.cliente_nome,
-      cliente_email: d.cliente_email,
-      cliente_telefone: d.cliente_telefone,
+      cliente_nome: cliente?.nome || d.cliente_nome,
+      cliente_email: d.cliente_email || cliente?.email || '',
+      cliente_telefone: d.cliente_telefone || cliente?.telefone || '',
       origem: 'manual',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
@@ -213,6 +281,11 @@ adminRoutes.post('/pedidos/manual', asyncHandler(async (req, res) => {
 
   const pedido = pedidos[0];
   await registrarHistorico(pedido.id, req.user, 'criou pedido', 'pedido', '', numero);
+
+  if (cliente?.id && !d.usuario_id) {
+    await registrarHistorico(pedido.id, req.user, 'vinculou cliente', 'cliente', '', cliente.nome || cliente.email || cliente.id);
+  }
+
   res.status(201).json(pedido);
 }));
 

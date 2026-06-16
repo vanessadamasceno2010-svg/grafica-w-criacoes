@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { auth, admin } from '../middleware/auth.js';
+import { auth } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/http.js';
 import { restEq, supabaseRest } from '../lib/supabaseRest.js';
 
@@ -119,7 +119,8 @@ orderRoutes.post('/pedidos', auth, asyncHandler(async (req, res) => {
   res.status(201).json(pedido);
 }));
 
-orderRoutes.put('/pedidos/:id', auth, admin, asyncHandler(async (req, res) => {
+orderRoutes.put('/pedidos/:id', auth, asyncHandler(async (req, res) => {
+  if (!canSeeAll(req)) return res.status(403).json({ message: 'Acesso restrito.' });
   const d = z.object({
     status: z.string().optional(),
     status_pagamento: z.string().optional(),
@@ -176,7 +177,8 @@ orderRoutes.put('/pedidos/:id', auth, admin, asyncHandler(async (req, res) => {
   res.json(rows[0] || { ok: true });
 }));
 
-orderRoutes.delete('/pedidos/:id', auth, admin, asyncHandler(async (req, res) => {
+orderRoutes.delete('/pedidos/:id', auth, asyncHandler(async (req, res) => {
+  if (!canSeeAll(req)) return res.status(403).json({ message: 'Acesso restrito.' });
   await registrarHistorico(req.params.id, req.user, 'excluiu pedido', 'pedido', req.params.id, 'excluído');
   await supabaseRest(`/itens_pedido?pedido_id=eq.${restEq(req.params.id)}`, { method: 'DELETE' }).catch(() => null);
   await supabaseRest(`/pedido_historico?pedido_id=eq.${restEq(req.params.id)}`, { method: 'DELETE' }).catch(() => null);

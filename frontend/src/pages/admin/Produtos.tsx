@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Search, Edit2, Trash2, Eye, Copy, X } from 'lucide-react';
+import { Plus, Search, Trash2, Copy, X } from 'lucide-react';
 import { apiFetch, formatMoney, normalizeProduct, Product, ProductVariation, slugify } from '../../lib/api';
 import { BottomSheet } from '../../components/BottomSheet';
 
@@ -212,14 +212,28 @@ export function Produtos() {
     if (!confirm(`Deseja duplicar o produto ${product.nome}?`)) return;
 
     try {
+      const now = Date.now();
+      const categoriaId = product.categoria_id || categories.find((c) => c.id === product.categoria_id)?.id || categories[0]?.id || '';
+
+      if (!categoriaId) {
+        alert('Não foi possível duplicar: produto sem categoria válida.');
+        return;
+      }
+
       const body = payloadFromForm({
         ...product,
         id: '',
+        categoria_id: categoriaId,
         nome: `${product.nome} - Cópia`,
-        slug: `${slugify(product.nome)}-copia-${Date.now()}`,
-        sku: `${product.sku || 'SKU'}-COPIA-${Date.now()}`,
+        slug: `${slugify(product.nome)}-copia-${now}`,
+        sku: `${product.sku || 'SKU'}-COPIA-${now}`,
         destaque: false,
-        variacoes: normalizeVariations(product.variacoes)
+        ativo: true,
+        variacoes: normalizeVariations(product.variacoes).map((v, index) => ({
+          ...v,
+          id: `var-${now}-${index}`,
+          nome: v.nome || `Variação ${index + 1}`
+        }))
       });
 
       await apiFetch('/produtos', { method: 'POST', body: JSON.stringify(body) });
@@ -255,16 +269,24 @@ export function Produtos() {
 
   const renderActions = (product: ProductForm) => (
     <>
-      <button onClick={() => openView(product)} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500" title="Ver">
-        <Eye size={16} />
-      </button>
-      <button onClick={() => openEdit(product)} className="p-2 rounded-lg hover:bg-blue-50 text-blue-600" title="Editar">
-        <Edit2 size={16} />
-      </button>
-      <button onClick={() => duplicateProduct(product)} className="p-2 rounded-lg hover:bg-amber-50 text-amber-700" title="Duplicar">
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          duplicateProduct(product);
+        }}
+        className="p-2 rounded-lg hover:bg-amber-50 text-amber-700"
+        title="Duplicar"
+      >
         <Copy size={16} />
       </button>
-      <button onClick={() => deleteProduct(product)} className="p-2 rounded-lg hover:bg-red-50 text-red-600" title="Deletar">
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          deleteProduct(product);
+        }}
+        className="p-2 rounded-lg hover:bg-red-50 text-red-600"
+        title="Deletar"
+      >
         <Trash2 size={16} />
       </button>
     </>
@@ -310,7 +332,7 @@ export function Produtos() {
               {filtered.map((product) => {
                 const qtdVariacoes = normalizeVariations(product.variacoes).length;
                 return (
-                  <tr key={product.id}>
+                  <tr key={product.id} onClick={() => openView(product)} className="cursor-pointer hover:bg-gray-50 transition">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <img src={product.imagem_principal} alt="" className="w-10 h-10 rounded-lg object-cover bg-gray-100" />
@@ -337,7 +359,7 @@ export function Produtos() {
           {filtered.map((product) => {
             const qtdVariacoes = normalizeVariations(product.variacoes).length;
             return (
-              <div key={product.id} className="p-4">
+              <div key={product.id} className="p-4 cursor-pointer active:bg-gray-50" onClick={() => openView(product)}>
                 <div className="flex gap-3">
                   <img src={product.imagem_principal} alt="" className="w-16 h-16 rounded-xl object-cover bg-gray-100" />
                   <div className="flex-1 min-w-0">
@@ -349,9 +371,7 @@ export function Produtos() {
                     <p className="text-xs text-gray-500">{qtdVariacoes} variação(ões)</p>
                   </div>
                 </div>
-                <div className="grid grid-cols-4 gap-2 mt-4">
-                  <button onClick={() => openView(product)} className="btn btn-outline px-2"><Eye size={16} />Ver</button>
-                  <button onClick={() => openEdit(product)} className="btn btn-outline px-2"><Edit2 size={16} />Editar</button>
+                <div className="grid grid-cols-2 gap-2 mt-4" onClick={(e) => e.stopPropagation()}>
                   <button onClick={() => duplicateProduct(product)} className="btn btn-outline px-2"><Copy size={16} />Duplicar</button>
                   <button onClick={() => deleteProduct(product)} className="btn btn-danger px-2"><Trash2 size={16} />Excluir</button>
                 </div>
