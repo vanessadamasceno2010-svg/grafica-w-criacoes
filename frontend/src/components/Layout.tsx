@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Link, Outlet } from 'react-router-dom';
 import { Header } from './Header';
 import { BottomNav } from './BottomNav';
 import { apiFetch } from '../lib/api';
@@ -29,9 +29,11 @@ export function Layout() {
           <div>
             <div className="flex items-center gap-2.5 mb-4">
               {config.logo_site_url ? (
-                <img src={config.logo_site_url} className="w-10 h-10 rounded-xl object-contain bg-white/10" />
+                <img src={config.logo_site_url} className="w-10 h-10 rounded-xl object-contain bg-white/10" alt={nome} />
               ) : (
-                <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center"><span className="text-gold font-display font-bold text-xl">W</span></div>
+                <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
+                  <span className="text-gold font-display font-bold text-xl">W</span>
+                </div>
               )}
               <span className="font-display font-bold text-xl">{nome}</span>
             </div>
@@ -43,9 +45,9 @@ export function Layout() {
           <div>
             <h4 className="font-display font-bold mb-4">Loja</h4>
             <ul className="space-y-2 text-sm text-gray-400">
-              <li><a href="/catalogo" className="hover:text-gold transition-colors">Catálogo</a></li>
-              <li><a href="/carrinho" className="hover:text-gold transition-colors">Carrinho</a></li>
-              <li><a href="/acompanhar" className="hover:text-gold transition-colors">Acompanhar Pedido</a></li>
+              <li><Link to="/catalogo" className="hover:text-gold transition-colors">Catálogo</Link></li>
+              <li><Link to="/carrinho" className="hover:text-gold transition-colors">Carrinho</Link></li>
+              <li><Link to="/acompanhar" className="hover:text-gold transition-colors">Acompanhar pedido</Link></li>
             </ul>
           </div>
 
@@ -59,10 +61,12 @@ export function Layout() {
           </div>
 
           <div>
-            <h4 className="font-display font-bold mb-4">Legal</h4>
+            <h4 className="font-display font-bold mb-4">Institucional</h4>
             <ul className="space-y-2 text-sm text-gray-400">
-              <li><a href="/sobre" className="hover:text-gold transition-colors">Sobre</a></li>
-              <li><a href="/contato" className="hover:text-gold transition-colors">Contato</a></li>
+              <li><Link to="/" className="hover:text-gold transition-colors">Tela inicial</Link></li>
+              <li><Link to="/sobre" className="hover:text-gold transition-colors">Sobre</Link></li>
+              <li><Link to="/contato" className="hover:text-gold transition-colors">Contato</Link></li>
+              <li><Link to="/login" className="hover:text-gold transition-colors">Entrar</Link></li>
             </ul>
           </div>
         </div>

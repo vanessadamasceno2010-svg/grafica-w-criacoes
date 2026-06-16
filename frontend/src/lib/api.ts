@@ -17,12 +17,12 @@ export const BRAND = {
 export type ProductVariation = {
   id?: string;
   nome: string;
-  preco: number;
-  preco_original?: number | null;
-  estoque?: number;
-  sku?: string;
   quantidade?: string;
-  opcoes?: Record<string, string>;
+  modelo?: string;
+  acabamento?: string;
+  tamanho?: string;
+  preco: number;
+  estoque?: number;
   ativo?: boolean;
 };
 
@@ -38,7 +38,6 @@ export type Product = {
   imagem_principal: string;
   imagens_adicionais?: string[];
   especificacoes?: Record<string, any>;
-  variacoes?: ProductVariation[];
   destaque?: boolean;
   tempo_producao: number;
   categoria_id?: string;
@@ -50,6 +49,7 @@ export type Product = {
   sku?: string;
   peso?: number;
   dimensoes?: any;
+  variacoes?: ProductVariation[];
 };
 
 export type Category = {
@@ -222,22 +222,6 @@ export function normalizeProduct(product: any): Product {
       product?.especificacoes && typeof product.especificacoes === 'object'
         ? product.especificacoes
         : {},
-    variacoes: Array.isArray(product?.variacoes)
-      ? product.variacoes.map((v: any, index: number) => ({
-          id: v?.id || String(index + 1),
-          nome: v?.nome || 'Variação ' + String(index + 1),
-          preco: Number(v?.preco || 0),
-          preco_original:
-            v?.preco_original !== undefined && v?.preco_original !== null
-              ? Number(v.preco_original)
-              : null,
-          estoque: Number(v?.estoque || 0),
-          sku: v?.sku || '',
-          quantidade: v?.quantidade || '',
-          opcoes: v?.opcoes && typeof v.opcoes === 'object' ? v.opcoes : {},
-          ativo: v?.ativo !== false
-        }))
-      : [],
     destaque: Boolean(product?.destaque),
     tempo_producao: Number(product?.tempo_producao || 3),
     categoria_id: product?.categoria_id || '',
@@ -248,7 +232,20 @@ export function normalizeProduct(product: any): Product {
     ativo: product?.ativo !== false,
     sku: product?.sku || '',
     peso: Number(product?.peso || 0),
-    dimensoes: product?.dimensoes || {}
+    dimensoes: product?.dimensoes || {},
+    variacoes: Array.isArray(product?.variacoes)
+      ? product.variacoes.map((v: any) => ({
+          id: v?.id || String(Date.now() + Math.random()),
+          nome: v?.nome || '',
+          quantidade: v?.quantidade || '',
+          modelo: v?.modelo || '',
+          acabamento: v?.acabamento || '',
+          tamanho: v?.tamanho || '',
+          preco: Number(v?.preco || 0),
+          estoque: Number(v?.estoque || 0),
+          ativo: v?.ativo !== false
+        }))
+      : []
   };
 }
 

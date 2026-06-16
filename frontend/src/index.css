@@ -67,18 +67,17 @@
     @apply bg-gradient-to-br from-secondary via-primary to-[#020713];
   }
 
-  /* Bottom Sheet Modal */
+  /* Modal padrão do painel */
   .bottom-sheet-backdrop {
-    @apply fixed inset-0 z-50 bg-black/50 backdrop-blur-sm transition-opacity;
+    @apply fixed inset-0 z-[99999] bg-slate-950/70 backdrop-blur-sm;
   }
 
   .bottom-sheet {
-    @apply fixed bottom-0 left-0 right-0 z-50 max-h-[90vh] overflow-y-auto bg-white rounded-t-3xl shadow-2xl transition-transform duration-300 ease-out;
-    padding-bottom: env(safe-area-inset-bottom);
+    @apply relative mx-auto my-4 flex w-[calc(100%-24px)] max-w-3xl max-h-[calc(100dvh-32px)] flex-col overflow-hidden rounded-3xl bg-white shadow-2xl;
   }
 
   .bottom-sheet-handle {
-    @apply mx-auto my-3 h-1.5 w-12 rounded-full bg-gray-300;
+    @apply hidden;
   }
 
   /* Mobile Table Alternative */

@@ -1,13 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Search, Edit2, Trash2, Eye, X, Copy, Layers } from 'lucide-react';
-import {
-  apiFetch,
-  formatMoney,
-  normalizeProduct,
-  Product,
-  ProductVariation,
-  slugify
-} from '../../lib/api';
+import { Plus, Search, Edit2, Trash2, Eye, Copy, X } from 'lucide-react';
+import { apiFetch, formatMoney, normalizeProduct, Product, ProductVariation, slugify } from '../../lib/api';
 import { BottomSheet } from '../../components/BottomSheet';
 
 type Category = {
@@ -21,18 +14,9 @@ type Category = {
 
 type ProductForm = Product & {
   categoria_id: string;
-};
-
-const emptyVariation: ProductVariation = {
-  id: '',
-  nome: '',
-  quantidade: '',
-  preco: 0,
-  preco_original: null,
-  estoque: 0,
-  sku: '',
-  opcoes: {},
-  ativo: true
+  preco_original?: number | null;
+  ativo?: boolean;
+  variacoes: ProductVariation[];
 };
 
 const emptyProduct: ProductForm = {
@@ -41,7 +25,6 @@ const emptyProduct: ProductForm = {
   nome: '',
   slug: '',
   sku: '',
-  categoria_nome: '',
   descricao: '',
   descricao_longa: '',
   preco: 0,
@@ -51,50 +34,47 @@ const emptyProduct: ProductForm = {
   imagem_principal: '/assets/chaveiros-personalizados.jpeg',
   imagens_adicionais: [],
   especificacoes: {},
-  variacoes: [],
   destaque: false,
-  ativo: true
+  ativo: true,
+  peso: 0,
+  dimensoes: {},
+  variacoes: []
 };
 
-function activeVariations(product: ProductForm | Product) {
-  return Array.isArray(product.variacoes)
-    ? product.variacoes.filter((v) => v && v.ativo !== false && Number(v.preco || 0) > 0)
-    : [];
+function makeVariation(): ProductVariation {
+  return {
+    id: String(Date.now() + Math.random()),
+    nome: '',
+    quantidade: '',
+    modelo: '',
+    acabamento: '',
+    tamanho: '',
+    preco: 0,
+    estoque: 0,
+    ativo: true
+  };
 }
 
-function lowestPrice(product: ProductForm | Product) {
-  const vars = activeVariations(product);
+function normalizeVariations(value: any): ProductVariation[] {
+  if (!Array.isArray(value)) return [];
 
-  if (vars.length === 0) return Number(product.preco || 0);
-
-  return Math.min(...vars.map((v) => Number(v.preco || 0)));
+  return value.map((v) => ({
+    id: v?.id || String(Date.now() + Math.random()),
+    nome: v?.nome || '',
+    quantidade: v?.quantidade || '',
+    modelo: v?.modelo || '',
+    acabamento: v?.acabamento || '',
+    tamanho: v?.tamanho || '',
+    preco: Number(v?.preco || 0),
+    estoque: Number(v?.estoque || 0),
+    ativo: v?.ativo !== false
+  }));
 }
 
-function textToOptions(text: string): Record<string, string> {
-  const options: Record<string, string> = {};
-
-  String(text || '')
-    .split('|')
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .forEach((item) => {
-      const [key, ...rest] = item.split(':');
-      const value = rest.join(':').trim();
-
-      if (key?.trim() && value) {
-        options[key.trim()] = value;
-      }
-    });
-
-  return options;
-}
-
-function optionsToText(options: any) {
-  if (!options || typeof options !== 'object') return '';
-
-  return Object.entries(options)
-    .map(([key, value]) => `${key}: ${value}`)
-    .join(' | ');
+function productMinPrice(product: ProductForm) {
+  const activeVariations = normalizeVariations(product.variacoes).filter((v) => v.ativo !== false && Number(v.preco || 0) > 0);
+  if (activeVariations.length === 0) return Number(product.preco || 0);
+  return Math.min(...activeVariations.map((v) => Number(v.preco || 0)));
 }
 
 export function Produtos() {
@@ -115,7 +95,7 @@ export function Produtos() {
         apiFetch<Category[]>('/categorias')
       ]);
 
-      setProducts((prodRes.data || []).map((p) => normalizeProduct(p) as ProductForm));
+      setProducts((prodRes.data || []).map((p) => ({ ...normalizeProduct(p), variacoes: normalizeVariations(p.variacoes) })) as ProductForm[]);
       setCategories(cats || []);
     } catch (err: any) {
       alert(err.message || 'Erro ao carregar produtos.');
@@ -128,35 +108,31 @@ export function Produtos() {
     load();
   }, []);
 
-  const filtered = useMemo(
-    () =>
-      products.filter(
-        (p) =>
-          String(p.nome || '').toLowerCase().includes(search.toLowerCase()) ||
-          String(p.categoria_nome || '').toLowerCase().includes(search.toLowerCase())
-      ),
-    [products, search]
-  );
+  const filtered = useMemo(() => {
+    return products.filter((p) =>
+      String(p.nome || '').toLowerCase().includes(search.toLowerCase()) ||
+      String(p.categoria_nome || '').toLowerCase().includes(search.toLowerCase()) ||
+      String(p.sku || '').toLowerCase().includes(search.toLowerCase())
+    );
+  }, [products, search]);
 
   const openNew = () => {
     setEditingProduct({
       ...emptyProduct,
       categoria_id: categories[0]?.id || '',
-      sku: `SKU-${Date.now()}`
+      sku: `SKU-${Date.now()}`,
+      variacoes: []
     });
     setMode('new');
   };
 
   const openEdit = (product: ProductForm) => {
-    setEditingProduct({
-      ...product,
-      variacoes: Array.isArray(product.variacoes) ? product.variacoes : []
-    });
+    setEditingProduct({ ...product, variacoes: normalizeVariations(product.variacoes) });
     setMode('edit');
   };
 
   const openView = (product: ProductForm) => {
-    setSelectedProduct(product);
+    setSelectedProduct({ ...product, variacoes: normalizeVariations(product.variacoes) });
     setMode('view');
   };
 
@@ -166,74 +142,50 @@ export function Produtos() {
     setMode(null);
   };
 
-  const payloadFromForm = (p: ProductForm) => {
-    const variacoes = Array.isArray(p.variacoes)
-      ? p.variacoes
-          .filter((v) => v.nome || Number(v.preco || 0) > 0)
-          .map((v, index) => ({
-            id: v.id || String(index + 1),
-            nome: v.nome || `Variação ${index + 1}`,
-            quantidade: v.quantidade || '',
-            preco: Number(v.preco || 0),
-            preco_original:
-              v.preco_original !== undefined && v.preco_original !== null
-                ? Number(v.preco_original)
-                : null,
-            estoque: Number(v.estoque || 0),
-            sku: v.sku || '',
-            opcoes: v.opcoes && typeof v.opcoes === 'object' ? v.opcoes : {},
-            ativo: v.ativo !== false
-          }))
-      : [];
-
-    const menorPreco =
-      variacoes.filter((v) => v.ativo !== false && v.preco > 0).length > 0
-        ? Math.min(...variacoes.filter((v) => v.ativo !== false && v.preco > 0).map((v) => v.preco))
-        : Number(p.preco || 0);
-
-    return {
-      categoria_id: p.categoria_id || categories[0]?.id,
-      nome: p.nome,
-      descricao: p.descricao || p.nome,
-      descricao_longa: p.descricao_longa || p.descricao || '',
-      preco: menorPreco,
-      preco_original: Number(p.preco_original || 0) || null,
-      estoque: Number(p.estoque || 0),
-      imagem_principal: p.imagem_principal || '/assets/chaveiros-personalizados.jpeg',
-      imagens_adicionais: Array.isArray(p.imagens_adicionais) ? p.imagens_adicionais : [],
-      especificacoes: p.especificacoes && typeof p.especificacoes === 'object' ? p.especificacoes : {},
-      variacoes,
-      slug: p.slug || slugify(p.nome),
-      sku: p.sku || `SKU-${Date.now()}`,
-      peso: Number(p.peso || 0),
-      dimensoes: p.dimensoes && typeof p.dimensoes === 'object' ? p.dimensoes : {},
-      tempo_producao: Number(p.tempo_producao || 3),
-      destaque: Boolean(p.destaque),
-      ativo: p.ativo !== false
-    };
-  };
+  const payloadFromForm = (p: ProductForm) => ({
+    categoria_id: p.categoria_id || categories[0]?.id,
+    nome: p.nome,
+    descricao: p.descricao || p.nome,
+    descricao_longa: p.descricao_longa || p.descricao || '',
+    preco: Number(p.preco || 0),
+    preco_original: p.preco_original ? Number(p.preco_original) : null,
+    estoque: Number(p.estoque || 0),
+    imagem_principal: p.imagem_principal || '/assets/chaveiros-personalizados.jpeg',
+    imagens_adicionais: Array.isArray(p.imagens_adicionais) ? p.imagens_adicionais : [],
+    especificacoes: p.especificacoes && typeof p.especificacoes === 'object' ? p.especificacoes : {},
+    variacoes: normalizeVariations(p.variacoes)
+      .filter((v) => String(v.nome || '').trim() || Number(v.preco || 0) > 0)
+      .map((v) => ({
+        id: v.id || String(Date.now() + Math.random()),
+        nome: v.nome || v.quantidade || v.modelo || 'Variação',
+        quantidade: v.quantidade || '',
+        modelo: v.modelo || '',
+        acabamento: v.acabamento || '',
+        tamanho: v.tamanho || '',
+        preco: Number(v.preco || 0),
+        estoque: Number(v.estoque || 0),
+        ativo: v.ativo !== false
+      })),
+    slug: p.slug || slugify(p.nome),
+    sku: p.sku || `SKU-${Date.now()}`,
+    peso: Number(p.peso || 0),
+    dimensoes: p.dimensoes && typeof p.dimensoes === 'object' ? p.dimensoes : {},
+    tempo_producao: Number(p.tempo_producao || 3),
+    destaque: Boolean(p.destaque),
+    ativo: p.ativo !== false
+  });
 
   const saveProduct = async () => {
     if (!editingProduct?.nome) return alert('Informe o nome do produto.');
-    if (!editingProduct.categoria_id && !categories[0]?.id) {
-      return alert('Cadastre uma categoria antes de salvar produto.');
-    }
-
-    if (!confirm('Confirmar alteração neste produto?')) return;
+    if (!editingProduct.categoria_id && !categories[0]?.id) return alert('Cadastre uma categoria antes de salvar produto.');
 
     try {
       const body = payloadFromForm(editingProduct);
 
       if (mode === 'new') {
-        await apiFetch('/produtos', {
-          method: 'POST',
-          body: JSON.stringify(body)
-        });
+        await apiFetch('/produtos', { method: 'POST', body: JSON.stringify(body) });
       } else {
-        await apiFetch(`/produtos/${editingProduct.id}`, {
-          method: 'PUT',
-          body: JSON.stringify(body)
-        });
+        await apiFetch(`/produtos/${editingProduct.id}`, { method: 'PUT', body: JSON.stringify(body) });
       }
 
       close();
@@ -250,114 +202,69 @@ export function Produtos() {
     try {
       await apiFetch(`/produtos/${product.id}`, { method: 'DELETE' });
       await load();
-      alert('Produto removido.');
+      alert('Produto excluído.');
     } catch (err: any) {
-      alert(err.message || 'Erro ao deletar produto.');
+      alert(err.message || 'Erro ao excluir produto.');
     }
   };
 
-  const addVariation = () => {
-    if (!editingProduct) return;
+  const duplicateProduct = async (product: ProductForm) => {
+    if (!confirm(`Deseja duplicar o produto ${product.nome}?`)) return;
 
-    setEditingProduct({
-      ...editingProduct,
-      variacoes: [
-        ...(editingProduct.variacoes || []),
-        {
-          ...emptyVariation,
-          id: String(Date.now()),
-          nome: 'Nova variação'
-        }
-      ]
-    });
-  };
+    try {
+      const body = payloadFromForm({
+        ...product,
+        id: '',
+        nome: `${product.nome} - Cópia`,
+        slug: `${slugify(product.nome)}-copia-${Date.now()}`,
+        sku: `${product.sku || 'SKU'}-COPIA-${Date.now()}`,
+        destaque: false,
+        variacoes: normalizeVariations(product.variacoes)
+      });
 
-  const duplicateVariation = (index: number) => {
-    if (!editingProduct) return;
-
-    const current = editingProduct.variacoes || [];
-    const selected = current[index];
-
-    setEditingProduct({
-      ...editingProduct,
-      variacoes: [
-        ...current,
-        {
-          ...selected,
-          id: String(Date.now()),
-          nome: `${selected?.nome || 'Variação'} cópia`
-        }
-      ]
-    });
+      await apiFetch('/produtos', { method: 'POST', body: JSON.stringify(body) });
+      await load();
+      alert('Produto duplicado com sucesso.');
+    } catch (err: any) {
+      alert(err.message || 'Erro ao duplicar produto.');
+    }
   };
 
   const updateVariation = (index: number, field: keyof ProductVariation, value: any) => {
     if (!editingProduct) return;
 
-    const next = [...(editingProduct.variacoes || [])];
-
+    const next = normalizeVariations(editingProduct.variacoes);
     next[index] = {
       ...next[index],
-      [field]: value
+      [field]: field === 'preco' || field === 'estoque' ? Number(value || 0) : value
     };
 
-    setEditingProduct({
-      ...editingProduct,
-      variacoes: next
-    });
+    setEditingProduct({ ...editingProduct, variacoes: next });
   };
 
-  const updateVariationOptions = (index: number, value: string) => {
+  const addVariation = () => {
     if (!editingProduct) return;
-
-    const next = [...(editingProduct.variacoes || [])];
-
-    next[index] = {
-      ...next[index],
-      opcoes: textToOptions(value)
-    };
-
-    setEditingProduct({
-      ...editingProduct,
-      variacoes: next
-    });
+    setEditingProduct({ ...editingProduct, variacoes: [...normalizeVariations(editingProduct.variacoes), makeVariation()] });
   };
 
   const removeVariation = (index: number) => {
     if (!editingProduct) return;
-
-    const next = [...(editingProduct.variacoes || [])];
-    next.splice(index, 1);
-
-    setEditingProduct({
-      ...editingProduct,
-      variacoes: next
-    });
+    const next = normalizeVariations(editingProduct.variacoes).filter((_, i) => i !== index);
+    setEditingProduct({ ...editingProduct, variacoes: next });
   };
 
   const renderActions = (product: ProductForm) => (
     <>
-      <button
-        onClick={() => openView(product)}
-        className="p-2 rounded-lg hover:bg-gray-100 text-gray-500"
-        title="Ver"
-      >
+      <button onClick={() => openView(product)} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500" title="Ver">
         <Eye size={16} />
       </button>
-
-      <button
-        onClick={() => openEdit(product)}
-        className="p-2 rounded-lg hover:bg-blue-50 text-blue-600"
-        title="Editar"
-      >
+      <button onClick={() => openEdit(product)} className="p-2 rounded-lg hover:bg-blue-50 text-blue-600" title="Editar">
         <Edit2 size={16} />
       </button>
-
-      <button
-        onClick={() => deleteProduct(product)}
-        className="p-2 rounded-lg hover:bg-red-50 text-red-600"
-        title="Deletar"
-      >
+      <button onClick={() => duplicateProduct(product)} className="p-2 rounded-lg hover:bg-amber-50 text-amber-700" title="Duplicar">
+        <Copy size={16} />
+      </button>
+      <button onClick={() => deleteProduct(product)} className="p-2 rounded-lg hover:bg-red-50 text-red-600" title="Deletar">
         <Trash2 size={16} />
       </button>
     </>
@@ -366,10 +273,7 @@ export function Produtos() {
   return (
     <div className="fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-        <h1 className="font-display text-2xl sm:text-3xl font-bold text-primary">
-          Gerenciador de Produtos
-        </h1>
-
+        <h1 className="font-display text-2xl sm:text-3xl font-bold text-primary">Gerenciador de Produtos</h1>
         <button className="btn btn-primary" onClick={openNew}>
           <Plus size={18} />
           Novo Produto
@@ -380,7 +284,7 @@ export function Produtos() {
         <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
         <input
           type="text"
-          placeholder="Buscar por nome ou categoria..."
+          placeholder="Buscar por nome, SKU ou categoria..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="input pl-11"
@@ -397,489 +301,189 @@ export function Produtos() {
                 <th className="text-left px-6 py-4">Produto</th>
                 <th className="text-left px-6 py-4">Categoria</th>
                 <th className="text-left px-6 py-4">Preço</th>
-                <th className="text-left px-6 py-4">Variações</th>
                 <th className="text-left px-6 py-4">Estoque</th>
+                <th className="text-left px-6 py-4">Variações</th>
                 <th className="text-right px-6 py-4">Ações</th>
               </tr>
             </thead>
-
             <tbody className="divide-y divide-gray-100">
-              {filtered.map((product) => (
-                <tr key={product.id}>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-3">
-                      <img
-                        src={product.imagem_principal}
-                        alt=""
-                        className="w-10 h-10 rounded-lg object-cover bg-gray-100"
-                      />
-                      <span className="font-semibold text-primary">{product.nome}</span>
-                    </div>
-                  </td>
-
-                  <td className="px-6 py-4 text-gray-600">{product.categoria_nome}</td>
-
-                  <td className="px-6 py-4 font-semibold">
-                    {activeVariations(product).length > 0 ? 'A partir de ' : ''}
-                    {formatMoney(lowestPrice(product))}
-                  </td>
-
-                  <td className="px-6 py-4 text-gray-600">
-                    {activeVariations(product).length}
-                  </td>
-
-                  <td className="px-6 py-4 text-gray-600">{product.estoque} un</td>
-
-                  <td className="px-6 py-4">
-                    <div className="flex items-center justify-end gap-2">
-                      {renderActions(product)}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {filtered.map((product) => {
+                const qtdVariacoes = normalizeVariations(product.variacoes).length;
+                return (
+                  <tr key={product.id}>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <img src={product.imagem_principal} alt="" className="w-10 h-10 rounded-lg object-cover bg-gray-100" />
+                        <span className="font-semibold text-primary">{product.nome}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-gray-600">{product.categoria_nome}</td>
+                    <td className="px-6 py-4 font-semibold">
+                      {qtdVariacoes > 0 ? `A partir de ${formatMoney(productMinPrice(product))}` : formatMoney(product.preco)}
+                    </td>
+                    <td className="px-6 py-4 text-gray-600">{product.estoque} un</td>
+                    <td className="px-6 py-4 text-gray-600">{qtdVariacoes}</td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center justify-end gap-2">{renderActions(product)}</div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
 
         <div className="sm:hidden divide-y divide-gray-100">
-          {filtered.map((product) => (
-            <div key={product.id} className="p-4">
-              <div className="flex gap-3">
-                <img
-                  src={product.imagem_principal}
-                  alt=""
-                  className="w-16 h-16 rounded-xl object-cover bg-gray-100"
-                />
-
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-bold text-primary truncate">{product.nome}</h3>
-                  <p className="text-sm text-gray-500 truncate">{product.categoria_nome}</p>
-                  <p className="font-bold text-primary mt-1">
-                    {activeVariations(product).length > 0 ? 'A partir de ' : ''}
-                    {formatMoney(lowestPrice(product))}
-                  </p>
-                  <p className="text-xs text-gray-400">
-                    {activeVariations(product).length} variação(ões)
-                  </p>
+          {filtered.map((product) => {
+            const qtdVariacoes = normalizeVariations(product.variacoes).length;
+            return (
+              <div key={product.id} className="p-4">
+                <div className="flex gap-3">
+                  <img src={product.imagem_principal} alt="" className="w-16 h-16 rounded-xl object-cover bg-gray-100" />
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-bold text-primary truncate">{product.nome}</h3>
+                    <p className="text-sm text-gray-500 truncate">{product.categoria_nome}</p>
+                    <p className="font-bold text-primary mt-1">
+                      {qtdVariacoes > 0 ? `A partir de ${formatMoney(productMinPrice(product))}` : formatMoney(product.preco)}
+                    </p>
+                    <p className="text-xs text-gray-500">{qtdVariacoes} variação(ões)</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-4 gap-2 mt-4">
+                  <button onClick={() => openView(product)} className="btn btn-outline px-2"><Eye size={16} />Ver</button>
+                  <button onClick={() => openEdit(product)} className="btn btn-outline px-2"><Edit2 size={16} />Editar</button>
+                  <button onClick={() => duplicateProduct(product)} className="btn btn-outline px-2"><Copy size={16} />Duplicar</button>
+                  <button onClick={() => deleteProduct(product)} className="btn btn-danger px-2"><Trash2 size={16} />Excluir</button>
                 </div>
               </div>
-
-              <div className="grid grid-cols-3 gap-2 mt-4">
-                <button onClick={() => openView(product)} className="btn btn-outline">
-                  <Eye size={16} />
-                  Ver
-                </button>
-
-                <button onClick={() => openEdit(product)} className="btn btn-outline">
-                  <Edit2 size={16} />
-                  Editar
-                </button>
-
-                <button onClick={() => deleteProduct(product)} className="btn btn-danger">
-                  <Trash2 size={16} />
-                  Deletar
-                </button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
       <BottomSheet isOpen={mode === 'view' && !!selectedProduct} onClose={close} title="Detalhes do Produto">
         {selectedProduct && (
           <div className="space-y-4">
-            <img
-              src={selectedProduct.imagem_principal}
-              className="w-full h-56 object-cover rounded-2xl"
-            />
-
+            <img src={selectedProduct.imagem_principal} className="w-full h-56 object-cover rounded-2xl" />
             <div>
               <h3 className="font-display text-xl font-bold text-primary">{selectedProduct.nome}</h3>
-              <p className="text-gray-500">{selectedProduct.descricao}</p>
+              <p className="text-gray-600">{selectedProduct.descricao}</p>
             </div>
-
             <div className="grid sm:grid-cols-3 gap-3">
-              <div className="card p-4">
-                <p className="text-xs text-gray-500">Preço base</p>
-                <p className="font-bold text-primary">{formatMoney(selectedProduct.preco)}</p>
-              </div>
-
-              <div className="card p-4">
-                <p className="text-xs text-gray-500">Estoque</p>
-                <p className="font-bold text-primary">{selectedProduct.estoque}</p>
-              </div>
-
-              <div className="card p-4">
-                <p className="text-xs text-gray-500">Variações</p>
-                <p className="font-bold text-primary">{activeVariations(selectedProduct).length}</p>
-              </div>
+              <div className="card p-4 shadow-none"><p className="text-sm text-gray-500">Preço base</p><p className="font-bold text-primary">{formatMoney(selectedProduct.preco)}</p></div>
+              <div className="card p-4 shadow-none"><p className="text-sm text-gray-500">Estoque</p><p className="font-bold text-primary">{selectedProduct.estoque}</p></div>
+              <div className="card p-4 shadow-none"><p className="text-sm text-gray-500">Variações</p><p className="font-bold text-primary">{normalizeVariations(selectedProduct.variacoes).length}</p></div>
             </div>
-
-            {activeVariations(selectedProduct).length > 0 && (
-              <div>
-                <h4 className="font-bold text-primary mb-2">Variações cadastradas</h4>
-
-                <div className="space-y-2">
-                  {activeVariations(selectedProduct).map((v, index) => (
-                    <div key={v.id || index} className="rounded-2xl border border-gray-100 p-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="font-bold text-primary">{v.nome}</p>
-                          <p className="text-sm text-gray-500">
-                            {v.quantidade || 'Sem quantidade'} • Estoque {v.estoque || 0}
-                          </p>
-                          {Object.keys(v.opcoes || {}).length > 0 && (
-                            <p className="text-xs text-gray-400">{optionsToText(v.opcoes)}</p>
-                          )}
-                        </div>
-
-                        <p className="font-bold text-primary">{formatMoney(v.preco)}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+            {normalizeVariations(selectedProduct.variacoes).length > 0 && (
+              <div className="space-y-2">
+                <h4 className="font-bold text-primary">Variações</h4>
+                {normalizeVariations(selectedProduct.variacoes).map((v) => (
+                  <div key={v.id} className="rounded-2xl border border-gray-100 p-3">
+                    <p className="font-bold text-primary">{v.nome}</p>
+                    <p className="text-sm text-gray-500">Qtd: {v.quantidade || '-'} • Modelo: {v.modelo || '-'} • Acabamento: {v.acabamento || '-'}</p>
+                    <p className="font-bold text-primary">{formatMoney(v.preco)}</p>
+                  </div>
+                ))}
               </div>
             )}
-
-            <button
-              className="btn btn-primary w-full"
-              onClick={() => {
-                setEditingProduct(selectedProduct);
-                setSelectedProduct(null);
-                setMode('edit');
-              }}
-            >
-              Editar produto
-            </button>
+            <button className="btn btn-primary w-full" onClick={() => openEdit(selectedProduct)}>Editar produto</button>
           </div>
         )}
       </BottomSheet>
 
-      <BottomSheet
-        isOpen={(mode === 'edit' || mode === 'new') && !!editingProduct}
-        onClose={close}
-        title={mode === 'new' ? 'Novo Produto' : 'Editar Produto'}
-      >
+      <BottomSheet isOpen={(mode === 'edit' || mode === 'new') && !!editingProduct} onClose={close} title={mode === 'new' ? 'Novo Produto' : 'Editar Produto'}>
         {editingProduct && (
-          <div className="space-y-5">
-            <div className="rounded-2xl bg-amber-50 border border-amber-100 p-4">
-              <p className="font-bold text-primary">Dados principais</p>
-              <p className="text-sm text-gray-600">
-                Cadastre o produto base, categoria e depois adicione variações de preço.
-              </p>
+          <div className="space-y-4">
+            <div className="grid sm:grid-cols-2 gap-3">
+              <label className="block">
+                <span className="text-sm font-bold text-primary">Nome</span>
+                <input className="input" placeholder="Nome" value={editingProduct.nome} onChange={(e) => setEditingProduct({ ...editingProduct, nome: e.target.value })} />
+              </label>
+              <label className="block">
+                <span className="text-sm font-bold text-primary">Categoria</span>
+                <select className="input" value={editingProduct.categoria_id || ''} onChange={(e) => setEditingProduct({ ...editingProduct, categoria_id: e.target.value })}>
+                  <option value="">Selecione uma categoria</option>
+                  {categories.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                </select>
+              </label>
             </div>
 
             <div className="grid sm:grid-cols-2 gap-3">
-              <label>
-                <span className="text-sm font-bold text-primary">Nome</span>
-                <input
-                  className="input mt-1"
-                  placeholder="Nome do produto"
-                  value={editingProduct.nome}
-                  onChange={(e) =>
-                    setEditingProduct({
-                      ...editingProduct,
-                      nome: e.target.value,
-                      slug: editingProduct.slug || slugify(e.target.value)
-                    })
-                  }
-                />
-              </label>
-
-              <label>
-                <span className="text-sm font-bold text-primary">Categoria</span>
-                <select
-                  className="input mt-1"
-                  value={editingProduct.categoria_id || ''}
-                  onChange={(e) => setEditingProduct({ ...editingProduct, categoria_id: e.target.value })}
-                >
-                  <option value="">Selecione uma categoria</option>
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.nome}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label>
+              <label className="block">
                 <span className="text-sm font-bold text-primary">Slug</span>
-                <input
-                  className="input mt-1"
-                  placeholder="slug-do-produto"
-                  value={editingProduct.slug || ''}
-                  onChange={(e) => setEditingProduct({ ...editingProduct, slug: e.target.value })}
-                />
+                <input className="input" placeholder="Slug" value={editingProduct.slug || ''} onChange={(e) => setEditingProduct({ ...editingProduct, slug: e.target.value })} />
               </label>
-
-              <label>
+              <label className="block">
                 <span className="text-sm font-bold text-primary">SKU</span>
-                <input
-                  className="input mt-1"
-                  placeholder="SKU"
-                  value={editingProduct.sku || ''}
-                  onChange={(e) => setEditingProduct({ ...editingProduct, sku: e.target.value })}
-                />
+                <input className="input" placeholder="SKU" value={editingProduct.sku || ''} onChange={(e) => setEditingProduct({ ...editingProduct, sku: e.target.value })} />
               </label>
             </div>
 
             <label className="block">
               <span className="text-sm font-bold text-primary">Descrição curta</span>
-              <textarea
-                className="input mt-1 min-h-24"
-                placeholder="Descrição curta do produto"
-                value={editingProduct.descricao || ''}
-                onChange={(e) => setEditingProduct({ ...editingProduct, descricao: e.target.value })}
-              />
+              <textarea className="input min-h-24" placeholder="Descrição" value={editingProduct.descricao || ''} onChange={(e) => setEditingProduct({ ...editingProduct, descricao: e.target.value })} />
             </label>
 
             <label className="block">
-              <span className="text-sm font-bold text-primary">Descrição longa</span>
-              <textarea
-                className="input mt-1 min-h-28"
-                placeholder="Descrição completa"
-                value={editingProduct.descricao_longa || ''}
-                onChange={(e) => setEditingProduct({ ...editingProduct, descricao_longa: e.target.value })}
-              />
+              <span className="text-sm font-bold text-primary">Descrição completa</span>
+              <textarea className="input min-h-28" placeholder="Descrição longa" value={editingProduct.descricao_longa || ''} onChange={(e) => setEditingProduct({ ...editingProduct, descricao_longa: e.target.value })} />
             </label>
 
             <div className="grid sm:grid-cols-3 gap-3">
-              <label>
-                <span className="text-sm font-bold text-primary">Preço base</span>
-                <input
-                  className="input mt-1"
-                  placeholder="Preço"
-                  type="number"
-                  step="0.01"
-                  value={editingProduct.preco || ''}
-                  onChange={(e) => setEditingProduct({ ...editingProduct, preco: Number(e.target.value) })}
-                />
-              </label>
-
-              <label>
-                <span className="text-sm font-bold text-primary">Preço original</span>
-                <input
-                  className="input mt-1"
-                  placeholder="Preço original"
-                  type="number"
-                  step="0.01"
-                  value={editingProduct.preco_original || ''}
-                  onChange={(e) =>
-                    setEditingProduct({ ...editingProduct, preco_original: Number(e.target.value) || null })
-                  }
-                />
-              </label>
-
-              <label>
-                <span className="text-sm font-bold text-primary">Estoque base</span>
-                <input
-                  className="input mt-1"
-                  placeholder="Estoque"
-                  type="number"
-                  value={editingProduct.estoque || ''}
-                  onChange={(e) => setEditingProduct({ ...editingProduct, estoque: Number(e.target.value) })}
-                />
-              </label>
+              <label className="block"><span className="text-sm font-bold text-primary">Preço base</span><input className="input" placeholder="Preço" type="number" value={editingProduct.preco || ''} onChange={(e) => setEditingProduct({ ...editingProduct, preco: Number(e.target.value) })} /></label>
+              <label className="block"><span className="text-sm font-bold text-primary">Preço original</span><input className="input" placeholder="Preço original" type="number" value={editingProduct.preco_original || ''} onChange={(e) => setEditingProduct({ ...editingProduct, preco_original: Number(e.target.value) })} /></label>
+              <label className="block"><span className="text-sm font-bold text-primary">Estoque</span><input className="input" placeholder="Estoque" type="number" value={editingProduct.estoque || ''} onChange={(e) => setEditingProduct({ ...editingProduct, estoque: Number(e.target.value) })} /></label>
             </div>
 
             <label className="block">
               <span className="text-sm font-bold text-primary">URL da imagem principal</span>
-              <input
-                className="input mt-1"
-                placeholder="https://..."
-                value={editingProduct.imagem_principal || ''}
-                onChange={(e) => setEditingProduct({ ...editingProduct, imagem_principal: e.target.value })}
-              />
+              <input className="input" placeholder="URL da imagem" value={editingProduct.imagem_principal || ''} onChange={(e) => setEditingProduct({ ...editingProduct, imagem_principal: e.target.value })} />
             </label>
 
-            <div className="grid sm:grid-cols-2 gap-3">
-              <label>
-                <span className="text-sm font-bold text-primary">Tempo de produção</span>
-                <input
-                  className="input mt-1"
-                  type="number"
-                  value={editingProduct.tempo_producao || 3}
-                  onChange={(e) =>
-                    setEditingProduct({ ...editingProduct, tempo_producao: Number(e.target.value || 3) })
-                  }
-                />
-              </label>
-
-              <div className="flex flex-col justify-end gap-3">
-                <label className="flex items-center gap-2 font-bold text-primary">
-                  <input
-                    type="checkbox"
-                    checked={!!editingProduct.destaque}
-                    onChange={(e) => setEditingProduct({ ...editingProduct, destaque: e.target.checked })}
-                  />
-                  Produto em destaque
-                </label>
-
-                <label className="flex items-center gap-2 font-bold text-primary">
-                  <input
-                    type="checkbox"
-                    checked={editingProduct.ativo !== false}
-                    onChange={(e) => setEditingProduct({ ...editingProduct, ativo: e.target.checked })}
-                  />
-                  Produto ativo
-                </label>
-              </div>
-            </div>
-
-            <div className="border-t border-gray-100 pt-5">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+            <div className="rounded-2xl border border-gray-100 p-4 space-y-3">
+              <div className="flex items-center justify-between gap-3">
                 <div>
-                  <h3 className="font-display text-xl font-bold text-primary flex items-center gap-2">
-                    <Layers size={20} />
-                    Variações de preço
-                  </h3>
-                  <p className="text-sm text-gray-500">
-                    Use para quantidade, tamanho, acabamento, frente/verso e outros preços.
-                  </p>
+                  <h3 className="font-bold text-primary">Variações de preço</h3>
+                  <p className="text-sm text-gray-500">Use para quantidades, modelos, acabamentos ou tamanhos com preços diferentes.</p>
                 </div>
-
-                <button type="button" className="btn btn-outline" onClick={addVariation}>
-                  <Plus size={16} />
-                  Adicionar variação
-                </button>
+                <button type="button" className="btn btn-outline" onClick={addVariation}><Plus size={16} />Adicionar</button>
               </div>
 
-              {(!editingProduct.variacoes || editingProduct.variacoes.length === 0) && (
-                <div className="rounded-2xl bg-gray-50 border border-dashed border-gray-200 p-4 text-gray-500 text-sm">
-                  Nenhuma variação cadastrada. O produto usará apenas o preço base.
-                </div>
+              {normalizeVariations(editingProduct.variacoes).length === 0 && (
+                <p className="rounded-xl bg-gray-50 p-3 text-sm text-gray-500">Nenhuma variação cadastrada. O produto usará o preço base.</p>
               )}
 
-              <div className="space-y-4">
-                {(editingProduct.variacoes || []).map((v, index) => (
-                  <div key={v.id || index} className="rounded-3xl border border-gray-200 p-4 bg-white">
-                    <div className="flex items-center justify-between gap-3 mb-3">
+              <div className="space-y-3">
+                {normalizeVariations(editingProduct.variacoes).map((variation, index) => (
+                  <div key={variation.id || index} className="rounded-2xl border border-gray-100 bg-gray-50 p-3 space-y-3">
+                    <div className="flex items-center justify-between gap-3">
                       <p className="font-bold text-primary">Variação {index + 1}</p>
-
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          className="p-2 rounded-lg bg-gray-50 text-gray-600"
-                          onClick={() => duplicateVariation(index)}
-                          title="Duplicar"
-                        >
-                          <Copy size={16} />
-                        </button>
-
-                        <button
-                          type="button"
-                          className="p-2 rounded-lg bg-red-50 text-red-600"
-                          onClick={() => removeVariation(index)}
-                          title="Remover"
-                        >
-                          <X size={16} />
-                        </button>
-                      </div>
+                      <button type="button" className="rounded-lg bg-red-50 p-2 text-red-600" onClick={() => removeVariation(index)}><X size={16} /></button>
                     </div>
-
                     <div className="grid sm:grid-cols-2 gap-3">
-                      <label>
-                        <span className="text-sm font-bold text-primary">Nome da variação</span>
-                        <input
-                          className="input mt-1"
-                          placeholder="Ex: 5 unidades, 10 unidades, 60x90"
-                          value={v.nome || ''}
-                          onChange={(e) => updateVariation(index, 'nome', e.target.value)}
-                        />
-                      </label>
-
-                      <label>
-                        <span className="text-sm font-bold text-primary">Quantidade</span>
-                        <input
-                          className="input mt-1"
-                          placeholder="Ex: 5 unidades"
-                          value={v.quantidade || ''}
-                          onChange={(e) => updateVariation(index, 'quantidade', e.target.value)}
-                        />
-                      </label>
-
-                      <label>
-                        <span className="text-sm font-bold text-primary">Preço</span>
-                        <input
-                          className="input mt-1"
-                          type="number"
-                          step="0.01"
-                          placeholder="Preço"
-                          value={v.preco || ''}
-                          onChange={(e) => updateVariation(index, 'preco', Number(e.target.value || 0))}
-                        />
-                      </label>
-
-                      <label>
-                        <span className="text-sm font-bold text-primary">Preço original</span>
-                        <input
-                          className="input mt-1"
-                          type="number"
-                          step="0.01"
-                          placeholder="Opcional"
-                          value={v.preco_original || ''}
-                          onChange={(e) =>
-                            updateVariation(index, 'preco_original', Number(e.target.value || 0) || null)
-                          }
-                        />
-                      </label>
-
-                      <label>
-                        <span className="text-sm font-bold text-primary">Estoque</span>
-                        <input
-                          className="input mt-1"
-                          type="number"
-                          placeholder="Estoque"
-                          value={v.estoque || ''}
-                          onChange={(e) => updateVariation(index, 'estoque', Number(e.target.value || 0))}
-                        />
-                      </label>
-
-                      <label>
-                        <span className="text-sm font-bold text-primary">SKU</span>
-                        <input
-                          className="input mt-1"
-                          placeholder="SKU da variação"
-                          value={v.sku || ''}
-                          onChange={(e) => updateVariation(index, 'sku', e.target.value)}
-                        />
-                      </label>
+                      <input className="input" placeholder="Nome da variação. Ex: 5 unidades" value={variation.nome || ''} onChange={(e) => updateVariation(index, 'nome', e.target.value)} />
+                      <input className="input" placeholder="Quantidade. Ex: 5 unidades" value={variation.quantidade || ''} onChange={(e) => updateVariation(index, 'quantidade', e.target.value)} />
+                      <input className="input" placeholder="Modelo. Ex: Frente única" value={variation.modelo || ''} onChange={(e) => updateVariation(index, 'modelo', e.target.value)} />
+                      <input className="input" placeholder="Acabamento. Ex: Transparente" value={variation.acabamento || ''} onChange={(e) => updateVariation(index, 'acabamento', e.target.value)} />
+                      <input className="input" placeholder="Tamanho. Ex: 5x5 cm" value={variation.tamanho || ''} onChange={(e) => updateVariation(index, 'tamanho', e.target.value)} />
+                      <input className="input" placeholder="Preço da variação" type="number" value={variation.preco || ''} onChange={(e) => updateVariation(index, 'preco', e.target.value)} />
+                      <input className="input" placeholder="Estoque da variação" type="number" value={variation.estoque || ''} onChange={(e) => updateVariation(index, 'estoque', e.target.value)} />
+                      <label className="flex items-center gap-2 rounded-xl bg-white px-4 py-3 font-semibold text-primary"><input type="checkbox" checked={variation.ativo !== false} onChange={(e) => updateVariation(index, 'ativo', e.target.checked)} /> Ativa</label>
                     </div>
-
-                    <label className="block mt-3">
-                      <span className="text-sm font-bold text-primary">Opções extras</span>
-                      <input
-                        className="input mt-1"
-                        placeholder="Ex: Modelo: Frente única | Acabamento: Transparente"
-                        value={optionsToText(v.opcoes)}
-                        onChange={(e) => updateVariationOptions(index, e.target.value)}
-                      />
-                      <span className="text-xs text-gray-400">
-                        Separe com | e use chave: valor.
-                      </span>
-                    </label>
-
-                    <label className="flex items-center gap-2 mt-3 font-bold text-primary">
-                      <input
-                        type="checkbox"
-                        checked={v.ativo !== false}
-                        onChange={(e) => updateVariation(index, 'ativo', e.target.checked)}
-                      />
-                      Variação ativa
-                    </label>
                   </div>
                 ))}
               </div>
             </div>
 
-            <div className="sticky bottom-0 bg-white border-t border-gray-100 pt-4 grid grid-cols-2 gap-3">
-              <button className="btn btn-outline" onClick={close}>
-                Cancelar
-              </button>
+            <div className="grid sm:grid-cols-3 gap-3">
+              <label className="flex items-center gap-2 rounded-xl border border-gray-100 px-4 py-3"><input type="checkbox" checked={!!editingProduct.destaque} onChange={(e) => setEditingProduct({ ...editingProduct, destaque: e.target.checked })} /> Destaque</label>
+              <label className="flex items-center gap-2 rounded-xl border border-gray-100 px-4 py-3"><input type="checkbox" checked={editingProduct.ativo !== false} onChange={(e) => setEditingProduct({ ...editingProduct, ativo: e.target.checked })} /> Ativo</label>
+              <label className="block"><span className="text-sm font-bold text-primary">Produção em dias</span><input className="input" type="number" value={editingProduct.tempo_producao || 3} onChange={(e) => setEditingProduct({ ...editingProduct, tempo_producao: Number(e.target.value) })} /></label>
+            </div>
 
-              <button className="btn btn-primary" onClick={saveProduct}>
-                Salvar no Supabase
-              </button>
+            <div className="sticky bottom-0 -mx-5 -mb-5 bg-white border-t border-gray-100 p-4 grid grid-cols-2 gap-3">
+              <button type="button" className="btn btn-outline" onClick={close}>Cancelar</button>
+              <button className="btn btn-primary" onClick={saveProduct}>Salvar no Supabase</button>
             </div>
           </div>
         )}
