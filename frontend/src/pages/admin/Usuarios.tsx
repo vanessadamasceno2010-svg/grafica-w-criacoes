@@ -1,29 +1,39 @@
 import { useEffect, useState } from 'react';
-import { Edit, KeyRound, Trash2 } from 'lucide-react';
-import { apiFetch, confirmAction, notifySuccess } from '../../lib/api';
-import { BottomSheet } from '../../components/BottomSheet';
+import { Edit, KeyRound, Trash2, X, ShieldCheck } from 'lucide-react';
+import { apiFetch, formatPhoneDigits, notifySuccess } from '../../lib/api';
 
 const permissoesDisponiveis = [
   { key: 'dashboard', label: 'Dashboard' },
   { key: 'produtos', label: 'Produtos' },
   { key: 'pedidos', label: 'Pedidos' },
+  { key: 'orcamentos', label: 'Orçamentos' },
   { key: 'clientes', label: 'Clientes' },
   { key: 'categorias', label: 'Categorias' },
   { key: 'cupons', label: 'Cupons' },
-  { key: 'avaliacoes', label: 'Avaliações' },
+  { key: 'mensagens', label: 'Mensagens' },
   { key: 'relatorios', label: 'Relatórios' }
 ];
 
+type Usuario = {
+  id: string;
+  nome: string;
+  email: string;
+  telefone?: string;
+  role: string;
+  funcionario_permissoes?: string[];
+};
+
 export function Usuarios() {
-  const [users, setUsers] = useState<any[]>([]);
+  const [users, setUsers] = useState<Usuario[]>([]);
   const [loading, setLoading] = useState(true);
-  const [editing, setEditing] = useState<any>(null);
+  const [editing, setEditing] = useState<Usuario | null>(null);
   const [senha, setSenha] = useState<any>(null);
 
   async function load() {
     setLoading(true);
     try {
-      setUsers(await apiFetch<any[]>('/admin/usuarios'));
+      const rows = await apiFetch<Usuario[]>('/admin/usuarios');
+      setUsers(Array.isArray(rows) ? rows : []);
     } catch (err: any) {
       alert(err.message || 'Erro ao carregar usuários.');
     } finally {
@@ -31,24 +41,35 @@ export function Usuarios() {
     }
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+  }, []);
+
+  function abrirEdicao(user: Usuario) {
+    setEditing({
+      ...user,
+      telefone: formatPhoneDigits(user.telefone || ''),
+      funcionario_permissoes: Array.isArray(user.funcionario_permissoes) ? user.funcionario_permissoes : []
+    });
+  }
 
   function togglePermissao(key: string) {
+    if (!editing) return;
     const atual = Array.isArray(editing.funcionario_permissoes) ? editing.funcionario_permissoes : [];
-    const next = atual.includes(key) ? atual.filter((p: string) => p !== key) : [...atual, key];
+    const next = atual.includes(key) ? atual.filter((p) => p !== key) : [...atual, key];
     setEditing({ ...editing, funcionario_permissoes: next });
   }
 
   async function salvarUsuario() {
     if (!editing) return;
-    if (!confirmAction('Confirmar alteração deste usuário?')) return;
+    if (!editing.nome.trim()) return alert('Informe o nome do usuário.');
 
     try {
       await apiFetch('/admin/usuarios/' + editing.id, {
         method: 'PUT',
         body: JSON.stringify({
           nome: editing.nome,
-          telefone: editing.telefone || '',
+          telefone: formatPhoneDigits(editing.telefone || ''),
           role: editing.role,
           funcionario_permissoes: editing.role === 'funcionario' ? editing.funcionario_permissoes || [] : []
         })
@@ -64,7 +85,6 @@ export function Usuarios() {
   async function redefinirSenha() {
     if (!senha?.id) return;
     if (!senha.nova || senha.nova.length < 6) return alert('A senha precisa ter pelo menos 6 caracteres.');
-    if (!confirmAction('Confirmar redefinição de senha?')) return;
 
     try {
       await apiFetch('/admin/usuarios/' + senha.id + '/redefinir-senha', {
@@ -78,9 +98,7 @@ export function Usuarios() {
     }
   }
 
-  async function excluirUsuario(user: any) {
-    if (!confirmAction('Deseja excluir este usuário?')) return;
-
+  async function excluirUsuario(user: Usuario) {
     try {
       await apiFetch('/admin/usuarios/' + user.id, { method: 'DELETE' });
       await load();
@@ -92,62 +110,102 @@ export function Usuarios() {
 
   return (
     <div className="fade-in">
-      <h1 className="font-display text-2xl sm:text-3xl font-bold text-primary mb-6">Gerenciador de Usuários</h1>
+      <div className="mb-6">
+        <h1 className="font-display text-2xl sm:text-3xl font-bold text-primary">Gerenciador de Usuários</h1>
+        <p className="text-gray-500 mt-1">Edite função, telefone e permissões do funcionário.</p>
+      </div>
+
       {loading && <div className="card p-4 mb-4">Carregando usuários...</div>}
 
       <div className="grid sm:grid-cols-2 gap-4">
         {users.map((u) => (
           <div className="card p-4" key={u.id || u.email}>
             <h3 className="font-bold text-primary">{u.nome}</h3>
-            <p className="text-sm text-gray-500">{u.email}</p>
+            <p className="text-sm text-gray-500 break-all">{u.email}</p>
             <p className="text-sm text-gray-500">{u.telefone || 'Sem telefone'}</p>
             <span className="badge bg-gold/10 text-gold mt-3">{u.role}</span>
-            {u.role === 'funcionario' && <p className="text-xs text-gray-500 mt-2">Permissões: {(u.funcionario_permissoes || []).join(', ') || 'nenhuma'}</p>}
-            <div className="grid grid-cols-3 gap-2 mt-4">
-              <button className="btn btn-outline" onClick={() => setEditing({ ...u, funcionario_permissoes: Array.isArray(u.funcionario_permissoes) ? u.funcionario_permissoes : [] })}><Edit size={16}/>Editar</button>
-              <button className="btn btn-outline" onClick={() => setSenha({ ...u, nova: '' })}><KeyRound size={16}/>Senha</button>
-              <button className="btn btn-outline text-red-600" onClick={() => excluirUsuario(u)}><Trash2 size={16}/>Excluir</button>
+            {u.role === 'funcionario' && (
+              <p className="text-xs text-gray-500 mt-2">Permissões: {(u.funcionario_permissoes || []).join(', ') || 'nenhuma'}</p>
+            )}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-4">
+              <button className="btn btn-outline" onClick={() => abrirEdicao(u)}><Edit size={16} />Editar</button>
+              <button className="btn btn-outline" onClick={() => setSenha({ ...u, nova: '' })}><KeyRound size={16} />Senha</button>
+              <button className="btn btn-outline text-red-600" onClick={() => excluirUsuario(u)}><Trash2 size={16} />Excluir</button>
             </div>
           </div>
         ))}
       </div>
 
-      <BottomSheet isOpen={!!editing} onClose={() => setEditing(null)} title="Editar usuário">
-        {editing && <div className="space-y-4">
-          <input className="input" placeholder="Nome" value={editing.nome || ''} onChange={(e) => setEditing({ ...editing, nome: e.target.value })} />
-          <input className="input" placeholder="Telefone" value={editing.telefone || ''} onChange={(e) => setEditing({ ...editing, telefone: e.target.value })} />
-          <select className="input" value={editing.role || 'user'} onChange={(e) => setEditing({ ...editing, role: e.target.value })}>
-            <option value="user">Cliente</option>
-            <option value="funcionario">Funcionário</option>
-            <option value="admin">Administrador</option>
-            <option value="inactive">Inativo</option>
-          </select>
-
-          {editing.role === 'funcionario' && (
-            <div className="card p-4 bg-gray-50">
-              <h3 className="font-bold text-primary mb-3">Permissões do funcionário</h3>
-              <div className="grid sm:grid-cols-2 gap-2">
-                {permissoesDisponiveis.map((p) => (
-                  <label key={p.key} className="flex items-center gap-2 bg-white rounded-xl p-3 border border-gray-100">
-                    <input type="checkbox" checked={(editing.funcionario_permissoes || []).includes(p.key)} onChange={() => togglePermissao(p.key)} />
-                    <span className="font-semibold text-sm">{p.label}</span>
-                  </label>
-                ))}
+      {editing && (
+        <div className="fixed inset-0 z-[99999] bg-slate-950/70 flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-2xl max-h-[92dvh] rounded-3xl shadow-2xl overflow-hidden flex flex-col">
+            <div className="p-5 border-b border-gray-100 flex items-center justify-between gap-3">
+              <div>
+                <h2 className="font-display text-2xl font-bold text-primary">Editar usuário</h2>
+                <p className="text-sm text-gray-500 break-all">{editing.email}</p>
               </div>
+              <button onClick={() => setEditing(null)} className="w-11 h-11 rounded-full bg-gray-100 flex items-center justify-center"><X size={20} /></button>
             </div>
-          )}
 
-          <button className="btn btn-primary w-full" onClick={salvarUsuario}>Salvar alteração</button>
-        </div>}
-      </BottomSheet>
+            <div className="p-5 overflow-y-auto space-y-4">
+              <label className="block">
+                <span className="text-sm font-bold text-primary">Nome</span>
+                <input className="input mt-1" placeholder="Nome" value={editing.nome || ''} onChange={(e) => setEditing({ ...editing, nome: e.target.value })} />
+              </label>
 
-      <BottomSheet isOpen={!!senha} onClose={() => setSenha(null)} title="Redefinir senha">
-        {senha && <div className="space-y-4">
-          <p className="text-sm text-gray-500">Usuário: <b>{senha.nome}</b></p>
-          <input type="password" className="input" placeholder="Nova senha" value={senha.nova || ''} onChange={(e) => setSenha({ ...senha, nova: e.target.value })} />
-          <button className="btn btn-primary w-full" onClick={redefinirSenha}>Salvar nova senha</button>
-        </div>}
-      </BottomSheet>
+              <label className="block">
+                <span className="text-sm font-bold text-primary">Telefone completo</span>
+                <input className="input mt-1" inputMode="numeric" placeholder="Somente números. Ex: 5588996240470" value={editing.telefone || ''} onChange={(e) => setEditing({ ...editing, telefone: formatPhoneDigits(e.target.value) })} />
+              </label>
+
+              <label className="block">
+                <span className="text-sm font-bold text-primary">Função</span>
+                <select className="input mt-1" value={editing.role || 'user'} onChange={(e) => setEditing({ ...editing, role: e.target.value })}>
+                  <option value="user">Cliente</option>
+                  <option value="funcionario">Funcionário</option>
+                  <option value="admin">Administrador</option>
+                  <option value="inactive">Inativo</option>
+                </select>
+              </label>
+
+              {editing.role === 'funcionario' && (
+                <div className="card p-4 bg-gray-50 shadow-none">
+                  <h3 className="font-bold text-primary mb-3 flex items-center gap-2"><ShieldCheck size={18} />Permissões do funcionário</h3>
+                  <div className="grid sm:grid-cols-2 gap-2">
+                    {permissoesDisponiveis.map((p) => (
+                      <label key={p.key} className="flex items-center gap-2 bg-white rounded-xl p-3 border border-gray-100">
+                        <input type="checkbox" checked={(editing.funcionario_permissoes || []).includes(p.key)} onChange={() => togglePermissao(p.key)} />
+                        <span className="font-semibold text-sm">{p.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-gray-100 grid grid-cols-2 gap-3">
+              <button className="btn btn-outline" onClick={() => setEditing(null)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={salvarUsuario}>Salvar alteração</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {senha && (
+        <div className="fixed inset-0 z-[99999] bg-slate-950/70 flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="font-display text-2xl font-bold text-primary">Redefinir senha</h2>
+                <p className="text-sm text-gray-500">Usuário: <b>{senha.nome}</b></p>
+              </div>
+              <button onClick={() => setSenha(null)} className="w-11 h-11 rounded-full bg-gray-100 flex items-center justify-center"><X size={20} /></button>
+            </div>
+            <input type="password" className="input" placeholder="Nova senha" value={senha.nova || ''} onChange={(e) => setSenha({ ...senha, nova: e.target.value })} />
+            <button className="btn btn-primary w-full mt-4" onClick={redefinirSenha}>Salvar nova senha</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

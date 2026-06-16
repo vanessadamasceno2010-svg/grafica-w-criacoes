@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { Menu, X, LogOut, LayoutDashboard, Package, ShoppingCart, Users, Settings, FolderTree, TicketPercent, Star, BarChart3, UserCog, Home, ClipboardList } from 'lucide-react';
+import { Menu, X, LogOut, LayoutDashboard, Package, ShoppingCart, Users, Settings, FolderTree, TicketPercent, MessageSquare, BarChart3, UserCog, Home, ClipboardList } from 'lucide-react';
 import { useApp } from '../../contexts/AppContext';
 
 const links = [
@@ -11,7 +11,7 @@ const links = [
   { to: '/admin/clientes', label: 'Clientes', icon: Users },
   { to: '/admin/categorias', label: 'Categorias', icon: FolderTree },
   { to: '/admin/cupons', label: 'Cupons', icon: TicketPercent },
-  { to: '/admin/avaliacoes', label: 'Avaliações', icon: Star },
+  { to: '/admin/mensagens', label: 'Mensagens', icon: MessageSquare },
   { to: '/admin/configuracoes', label: 'Configurações', icon: Settings },
   { to: '/admin/relatorios', label: 'Relatórios', icon: BarChart3 },
   { to: '/admin/usuarios', label: 'Usuários', icon: UserCog },

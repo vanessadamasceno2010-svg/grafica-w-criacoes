@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Plus, Search, Edit2, Trash2, Eye, Copy, X } from 'lucide-react';
-import { apiFetch, formatMoney, normalizeProduct, Product, ProductVariation, slugify } from '../../lib/api';
+import { apiFetch, confirmAction, formatMoney, normalizeProduct, Product, ProductVariation, slugify } from '../../lib/api';
 import { BottomSheet } from '../../components/BottomSheet';
 
 type Category = {
@@ -197,7 +197,7 @@ export function Produtos() {
   };
 
   const deleteProduct = async (product: ProductForm) => {
-    if (!confirm(`Deseja deletar o produto ${product.nome}?`)) return;
+    if (!confirmAction(`Deseja deletar o produto ${product.nome}?`)) return;
 
     try {
       await apiFetch(`/produtos/${product.id}`, { method: 'DELETE' });
@@ -209,7 +209,7 @@ export function Produtos() {
   };
 
   const duplicateProduct = async (product: ProductForm) => {
-    if (!confirm(`Deseja duplicar o produto ${product.nome}?`)) return;
+    if (!confirmAction(`Deseja duplicar o produto ${product.nome}?`)) return;
 
     try {
       const body = payloadFromForm({

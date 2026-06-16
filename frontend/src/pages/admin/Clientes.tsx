@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ClipboardList, Edit, FileText, KeyRound, ReceiptText, Trash2, UserPlus, X } from 'lucide-react';
-import { apiFetch, formatMoney } from '../../lib/api';
+import { apiFetch, formatMoney, formatPhoneDigits } from '../../lib/api';
 
 type Cliente = {
   id: string;
@@ -72,13 +72,13 @@ export function Clientes() {
 
   function abrirEditar(cliente: Cliente) {
     setSelecionado(cliente);
-    setForm({ nome: cliente.nome || '', email: cliente.email || '', telefone: cliente.telefone || '', senha: '' });
+    setForm({ nome: cliente.nome || '', email: cliente.email || '', telefone: formatPhoneDigits(cliente.telefone || ''), senha: '' });
     setModal('editar');
   }
 
   function abrirSenha(cliente: Cliente) {
     setSelecionado(cliente);
-    setForm({ nome: cliente.nome || '', email: cliente.email || '', telefone: cliente.telefone || '', senha: '' });
+    setForm({ nome: cliente.nome || '', email: cliente.email || '', telefone: formatPhoneDigits(cliente.telefone || ''), senha: '' });
     setModal('senha');
   }
 
@@ -107,7 +107,7 @@ export function Clientes() {
           body: JSON.stringify({
             nome: form.nome,
             email: form.email,
-            telefone: form.telefone,
+            telefone: formatPhoneDigits(form.telefone),
             senha: form.senha || '12345678',
             role: 'user'
           })
@@ -117,7 +117,7 @@ export function Clientes() {
       if (modal === 'editar' && selecionado) {
         await apiFetch('/admin/clientes/' + selecionado.id, {
           method: 'PUT',
-          body: JSON.stringify({ nome: form.nome, email: form.email, telefone: form.telefone })
+          body: JSON.stringify({ nome: form.nome, email: form.email, telefone: formatPhoneDigits(form.telefone) })
         });
       }
 
@@ -311,7 +311,7 @@ export function Clientes() {
                 <>
                   <label className="block"><span className="text-sm font-black text-slate-800">Nome</span><input className="input mt-1" value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} /></label>
                   <label className="block"><span className="text-sm font-black text-slate-800">Email</span><input className="input mt-1" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></label>
-                  <label className="block"><span className="text-sm font-black text-slate-800">Telefone</span><input className="input mt-1" value={form.telefone} onChange={(e) => setForm({ ...form, telefone: e.target.value })} /></label>
+                  <label className="block"><span className="text-sm font-black text-slate-800">Telefone</span><input className="input mt-1" value={form.telefone} inputMode="numeric" placeholder="Somente números. Ex: 5588996240470" onChange={(e) => setForm({ ...form, telefone: formatPhoneDigits(e.target.value) })} /></label>
                 </>
               )}
               {(modal === 'novo' || modal === 'senha') && (

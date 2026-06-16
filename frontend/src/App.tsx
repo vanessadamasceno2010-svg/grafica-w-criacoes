@@ -20,7 +20,7 @@ import { Clientes } from './pages/admin/Clientes';
 import { Categorias } from './pages/admin/Categorias';
 import { Configuracoes } from './pages/admin/Configuracoes';
 import { Cupons } from './pages/admin/Cupons';
-import { Avaliacoes } from './pages/admin/Avaliacoes';
+import { Mensagens } from './pages/admin/Mensagens';
 import { Relatorios } from './pages/admin/Relatorios';
 import { Usuarios } from './pages/admin/Usuarios';
 import { Orcamentos } from './pages/admin/Orcamentos';
@@ -51,7 +51,8 @@ function App() {
             <Route path="clientes" element={<Clientes />} />
             <Route path="categorias" element={<Categorias />} />
             <Route path="cupons" element={<Cupons />} />
-            <Route path="avaliacoes" element={<Avaliacoes />} />
+            <Route path="mensagens" element={<Mensagens />} />
+            <Route path="avaliacoes" element={<Mensagens />} />
             <Route path="configuracoes" element={<Configuracoes />} />
             <Route path="relatorios" element={<Relatorios />} />
             <Route path="usuarios" element={<Usuarios />} />

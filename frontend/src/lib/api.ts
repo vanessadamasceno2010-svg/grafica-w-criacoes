@@ -11,6 +11,7 @@ export const BRAND = {
   phone: '(88) 99624-0470',
   whatsapp: '88 99624-0470',
   whatsappNumber: WHATSAPP_NUMBER,
+  email: 'wcriacoesgrafica@gmail.com',
   slogan: 'Pequeno por fora, gigante na divulgação!'
 };
 
@@ -329,8 +330,19 @@ export async function getPublicConfig(): Promise<Record<string, string>> {
 export const mockProducts: Product[] = [];
 export const mockCategories: Category[] = [];
 
-export function confirmAction(message: string) {
-  return window.confirm(message);
+export function onlyDigits(value: string) {
+  return String(value || '').replace(/\D/g, '');
+}
+
+export function formatPhoneDigits(value: string) {
+  return onlyDigits(value).slice(0, 13);
+}
+
+export function confirmAction(_message: string) {
+  // Evita o bloqueio do navegador quando o usuário marca
+  // “não permitir que este site mostre mensagens novamente”.
+  // As ações seguem funcionando mesmo sem o popup nativo do browser.
+  return true;
 }
 
 export function notifySuccess(message: string) {

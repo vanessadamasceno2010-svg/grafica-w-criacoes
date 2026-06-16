@@ -121,20 +121,43 @@ adminRoutes.get('/dashboard', asyncHandler(async (req, res) => {
   const dateFrom = String(req.query.date_from || '');
   const dateTo = String(req.query.date_to || '');
 
-  let path = '/pedidos?select=id,total,valor_entrada,valor_restante,status,status_pagamento,prazo_entrega,created_at&limit=2000&order=created_at.desc';
+  let path = '/pedidos?select=id,numero_pedido,cliente_nome,cliente_email,total,valor_entrada,valor_restante,status,status_pagamento,prazo_entrega,created_at&limit=2000&order=created_at.desc';
   if (status && status !== 'todos') path += `&status=eq.${restEq(status)}`;
   if (dateFrom) path += `&created_at=gte.${restEq(dateFrom + 'T00:00:00')}`;
   if (dateTo) path += `&created_at=lte.${restEq(dateTo + 'T23:59:59')}`;
 
-  const [pedidos, users, produtos] = await Promise.all([
+  const [pedidos, users, produtos, mensagens] = await Promise.all([
     supabaseRest<any[]>(path),
     supabaseRest<any[]>('/users?select=id,role,created_at&limit=2000'),
-    supabaseRest<any[]>('/produtos?select=id,estoque,ativo&limit=2000')
+    supabaseRest<any[]>('/produtos?select=id,estoque,ativo&limit=2000'),
+    supabaseRest<any[]>('/contatos_formulario?select=id,respondido,created_at&limit=2000').catch(() => [])
   ]);
 
   const totalVendido = pedidos.reduce((sum, p) => sum + asNumber(p.total), 0);
   const totalRecebido = pedidos.reduce((sum, p) => sum + asNumber(p.valor_entrada || (p.status_pagamento === 'confirmado' ? p.total : 0)), 0);
   const totalAReceber = pedidos.reduce((sum, p) => sum + asNumber(p.valor_restante || Math.max(asNumber(p.total) - asNumber(p.valor_entrada), 0)), 0);
+
+  const hoje = dateOnly(new Date().toISOString());
+  const vendasPorDiaMap = new Map<string, { data: string; vendas: number; pedidos: number }>();
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const key = dateOnly(d.toISOString());
+    vendasPorDiaMap.set(key, { data: key, vendas: 0, pedidos: 0 });
+  }
+
+  for (const pedido of pedidos) {
+    const key = dateOnly(pedido.created_at);
+    if (!vendasPorDiaMap.has(key)) continue;
+    const item = vendasPorDiaMap.get(key)!;
+    item.vendas += asNumber(pedido.total);
+    item.pedidos += 1;
+  }
+
+  const statusResumo = ['pendente', 'confirmado', 'em_producao', 'pronto', 'entregue', 'cancelado'].map((key) => ({
+    status: key,
+    total: pedidos.filter((p) => p.status === key).length
+  }));
 
   res.json({
     vendasMes: totalVendido,
@@ -145,8 +168,11 @@ adminRoutes.get('/dashboard', asyncHandler(async (req, res) => {
     clientesNovos: users.filter((u) => u.role === 'user').length,
     produtosEmEstoque: produtos.reduce((sum, p) => sum + asNumber(p.estoque), 0),
     pedidosPendentes: pedidos.filter((p) => ['pendente', 'confirmado', 'em_producao'].includes(p.status)).length,
-    pedidosAtrasados: pedidos.filter((p) => p.prazo_entrega && dateOnly(p.prazo_entrega) < dateOnly(new Date().toISOString()) && !['entregue', 'cancelado'].includes(p.status)).length,
-    pedidosRecentes: pedidos.slice(0, 8)
+    pedidosAtrasados: pedidos.filter((p) => p.prazo_entrega && dateOnly(p.prazo_entrega) < hoje && !['entregue', 'cancelado'].includes(p.status)).length,
+    mensagensNovas: mensagens.filter((m) => !m.respondido).length,
+    pedidosRecentes: pedidos.slice(0, 8),
+    vendasPorDia: Array.from(vendasPorDiaMap.values()),
+    statusResumo
   });
 }));
 
@@ -541,8 +567,26 @@ adminRoutes.get('/cupons', onlyAdmin, asyncHandler(async (_req, res) => {
   res.json(await supabaseRest<any[]>('/cupons_desconto?select=*&order=created_at.desc'));
 }));
 
+adminRoutes.get('/mensagens', asyncHandler(async (_req, res) => {
+  res.json(await supabaseRest<any[]>('/contatos_formulario?select=*&order=created_at.desc&limit=1000').catch(() => []));
+}));
+
+adminRoutes.put('/mensagens/:id', asyncHandler(async (req, res) => {
+  const d = z.object({ respondido: z.boolean().optional().default(false) }).parse(req.body);
+  const rows = await supabaseRest<any[]>(`/contatos_formulario?id=eq.${restEq(req.params.id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ respondido: d.respondido })
+  });
+  res.json(rows[0] || { ok: true });
+}));
+
+adminRoutes.delete('/mensagens/:id', asyncHandler(async (req, res) => {
+  await supabaseRest(`/contatos_formulario?id=eq.${restEq(req.params.id)}`, { method: 'DELETE' });
+  res.json({ ok: true });
+}));
+
 adminRoutes.get('/avaliacoes', asyncHandler(async (_req, res) => {
-  res.json(await supabaseRest<any[]>('/avaliacoes?select=*&order=created_at.desc'));
+  res.json(await supabaseRest<any[]>('/contatos_formulario?select=*&order=created_at.desc&limit=1000').catch(() => []));
 }));
 
 adminRoutes.get('/relatorios/vendas', onlyAdmin, asyncHandler(async (_req, res) => {

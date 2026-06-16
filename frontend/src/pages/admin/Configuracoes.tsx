@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Save } from 'lucide-react';
-import { apiFetch } from '../../lib/api';
+import { apiFetch, formatPhoneDigits } from '../../lib/api';
 
 const grupos = [
   {
     titulo: 'Dados da empresa',
     campos: [
       { chave: 'nome_empresa', label: 'Nome da empresa', tipo: 'texto' },
-      { chave: 'whatsapp', label: 'WhatsApp', tipo: 'texto' },
+      { chave: 'whatsapp', label: 'WhatsApp completo', tipo: 'telefone' },
       { chave: 'email', label: 'Email', tipo: 'texto' },
       { chave: 'endereco', label: 'Endereço', tipo: 'texto' },
       { chave: 'instagram', label: 'Instagram', tipo: 'texto' },
@@ -67,7 +67,8 @@ export function Configuracoes() {
   useEffect(() => { carregar(); }, []);
 
   function setCampo(chave: string, valor: string) {
-    setDados((prev) => ({ ...prev, [chave]: valor }));
+    const nextValue = chave === 'whatsapp' ? formatPhoneDigits(valor) : valor;
+    setDados((prev) => ({ ...prev, [chave]: nextValue }));
   }
 
   async function salvarTudo() {
@@ -77,7 +78,7 @@ export function Configuracoes() {
       for (const campo of allCampos) {
         await apiFetch('/admin/configuracoes/' + campo.chave, {
           method: 'PUT',
-          body: JSON.stringify({ valor: dados[campo.chave] || '', tipo: campo.tipo === 'textarea' ? 'texto_longo' : 'texto' })
+          body: JSON.stringify({ valor: dados[campo.chave] || '', tipo: 'texto' })
         });
       }
       alert('Configurações salvas com sucesso.');
@@ -108,7 +109,7 @@ export function Configuracoes() {
                 {campo.tipo === 'textarea' ? (
                   <textarea className="mt-1 w-full min-h-[120px] rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:ring-4 focus:ring-amber-100" value={dados[campo.chave] || ''} onChange={(e) => setCampo(campo.chave, e.target.value)} />
                 ) : (
-                  <input className="mt-1 w-full h-12 rounded-2xl border border-slate-200 px-4 outline-none focus:ring-4 focus:ring-amber-100" value={dados[campo.chave] || ''} onChange={(e) => setCampo(campo.chave, e.target.value)} />
+                  <input className="mt-1 w-full h-12 rounded-2xl border border-slate-200 px-4 outline-none focus:ring-4 focus:ring-amber-100" inputMode={campo.tipo === 'telefone' ? 'numeric' : undefined} placeholder={campo.tipo === 'telefone' ? 'Somente números. Ex: 5588996240470' : ''} value={dados[campo.chave] || ''} onChange={(e) => setCampo(campo.chave, e.target.value)} />
                 )}
               </label>
             ))}
