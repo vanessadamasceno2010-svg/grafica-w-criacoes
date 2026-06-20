@@ -76,12 +76,12 @@ export function Dashboard() {
     if (isFuncionario) return operacional;
 
     return [
-      { label: 'Vendas filtradas', value: formatMoney(data?.vendasMes || 0), icon: DollarSign, color: 'text-success', bg: 'bg-success/10' },
+      { label: 'Fluxo do mês', value: formatMoney(data?.fluxoCaixaMes || 0), icon: WalletCards, color: 'text-success', bg: 'bg-success/10' },
+      { label: 'Vendas filtradas', value: formatMoney(data?.vendasMes || 0), icon: DollarSign, color: 'text-primary', bg: 'bg-primary/10' },
       { label: 'A receber', value: formatMoney(data?.valoresAReceber || 0), icon: WalletCards, color: 'text-red-600', bg: 'bg-red-50' },
       ...operacional,
       { label: 'Ticket médio', value: formatMoney(data?.ticketMedio || 0), icon: TrendingUp, color: 'text-gold', bg: 'bg-gold/10' },
-      { label: 'Clientes', value: String(data?.clientesNovos || 0), icon: Users, color: 'text-blue-500', bg: 'bg-blue-500/10' },
-      { label: 'Estoque total', value: String(data?.produtosEmEstoque || 0), icon: Package, color: 'text-emerald-600', bg: 'bg-emerald-50' }
+      { label: 'Clientes', value: String(data?.clientesNovos || 0), icon: Users, color: 'text-blue-500', bg: 'bg-blue-500/10' }
     ];
   }, [data, isFuncionario]);
 

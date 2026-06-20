@@ -7,6 +7,7 @@ import {
   RefreshCcw,
   Search,
   Trash2,
+  Pencil,
   WalletCards
 } from 'lucide-react';
 import { apiFetch, formatMoney, getStoredUser } from '../../lib/api';
@@ -82,6 +83,7 @@ export function FluxoCaixa() {
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState<CaixaForm>(buildForm());
   const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
@@ -115,6 +117,31 @@ export function FluxoCaixa() {
   const formasMap = useMemo(() => Object.fromEntries(formasPagamento.map((item) => [item.value, item.label])), []);
   const origensMap = useMemo(() => Object.fromEntries(origens.map((item) => [item.value, item.label])), []);
 
+  function openCreateMovement() {
+    setEditingId(null);
+    setForm(buildForm());
+    setShowForm(true);
+  }
+
+  function openEditMovement(movimento: any) {
+    setEditingId(movimento.id);
+    setForm({
+      data_movimento: String(movimento.data_movimento || today()).slice(0, 10),
+      descricao: movimento.descricao || '',
+      valor: String(movimento.valor || ''),
+      forma_pagamento: movimento.forma_pagamento || 'pix',
+      origem: movimento.origem || 'manual',
+      observacoes: movimento.observacoes || ''
+    });
+    setShowForm(true);
+  }
+
+  function closeForm() {
+    setShowForm(false);
+    setEditingId(null);
+    setForm(buildForm());
+  }
+
   async function saveMovement() {
     const valor = moneyToNumber(form.valor);
 
@@ -134,8 +161,8 @@ export function FluxoCaixa() {
     }
 
     try {
-      await apiFetch('/admin/fluxo-caixa', {
-        method: 'POST',
+      await apiFetch(editingId ? '/admin/fluxo-caixa/' + editingId : '/admin/fluxo-caixa', {
+        method: editingId ? 'PUT' : 'POST',
         body: JSON.stringify({
           data_movimento: form.data_movimento,
           descricao: form.descricao,
@@ -148,8 +175,9 @@ export function FluxoCaixa() {
 
       setForm(buildForm());
       setShowForm(false);
+      setEditingId(null);
       await load();
-      alert('Entrada registrada no caixa.');
+      alert(editingId ? 'Entrada atualizada no caixa.' : 'Entrada registrada no caixa.');
     } catch (error: any) {
       alert(error.message || 'Erro ao salvar entrada no caixa.');
     }
@@ -209,7 +237,7 @@ export function FluxoCaixa() {
           </p>
         </div>
 
-        <button className="btn btn-primary w-full sm:w-auto" onClick={() => setShowForm(true)}>
+        <button className="btn btn-primary w-full sm:w-auto" onClick={openCreateMovement}>
           <Plus size={18} /> Nova entrada
         </button>
       </div>
@@ -323,11 +351,16 @@ export function FluxoCaixa() {
 
                 <div className="text-right shrink-0">
                   <p className="font-display text-lg font-bold text-emerald-700">{formatMoney(m.valor || 0)}</p>
-                  {isAdmin && (
-                    <button className="mt-2 p-2 rounded-lg bg-red-50 text-red-700 hover:bg-red-100" onClick={() => deleteMovement(m)} title="Excluir entrada">
-                      <Trash2 size={16} />
+                  <div className="mt-2 flex justify-end gap-2">
+                    <button className="p-2 rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100" onClick={() => openEditMovement(m)} title="Editar entrada">
+                      <Pencil size={16} />
                     </button>
-                  )}
+                    {isAdmin && (
+                      <button className="p-2 rounded-lg bg-red-50 text-red-700 hover:bg-red-100" onClick={() => deleteMovement(m)} title="Excluir entrada">
+                        <Trash2 size={16} />
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}
@@ -339,7 +372,7 @@ export function FluxoCaixa() {
         <div className="fixed inset-0 z-[9999] bg-slate-950/70 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[92vh] overflow-hidden flex flex-col">
             <div className="p-5 border-b border-gray-100">
-              <h2 className="font-display text-xl font-bold text-primary">Nova entrada no caixa</h2>
+              <h2 className="font-display text-xl font-bold text-primary">{editingId ? 'Editar entrada no caixa' : 'Nova entrada no caixa'}</h2>
               <p className="text-sm text-gray-500">Registre somente valores que entraram no caixa.</p>
             </div>
 
@@ -382,8 +415,8 @@ export function FluxoCaixa() {
             </div>
 
             <div className="p-4 border-t border-gray-100 grid grid-cols-2 gap-3">
-              <button className="btn btn-outline" onClick={() => setShowForm(false)}>Cancelar</button>
-              <button className="btn btn-primary" onClick={saveMovement}>Salvar entrada</button>
+              <button className="btn btn-outline" onClick={closeForm}>Cancelar</button>
+              <button className="btn btn-primary" onClick={saveMovement}>{editingId ? 'Salvar alterações' : 'Salvar entrada'}</button>
             </div>
           </div>
         </div>

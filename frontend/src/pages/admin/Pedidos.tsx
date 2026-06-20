@@ -288,28 +288,17 @@ export function Pedidos() {
       : 'A combinar';
     const link = window.location.origin + '/acompanhar?pedido=' + encodeURIComponent(numero);
     const descricao = String(order.observacoes || order.descricao || 'Pedido registrado no painel.').trim();
-    const total = moneyToNumber(order.total);
-    const entrada = moneyToNumber(order.valor_entrada);
-    const restante = Math.max(total - entrada, 0);
-    const formaPagamento = restante <= 0
-      ? 'Pagamento integral confirmado'
-      : entrada > 0
-        ? '50% Pedido e 50% Entrega'
-        : 'A combinar na confirmação do pedido';
 
     return [
       `*Pedido número:* ${numero}`,
       '',
       `*Cliente:* ${order.cliente_nome || 'Cliente'}`,
-      `*Descrição:*`,
+      '',
+      `*Descrição do pedido:*`,
       descricao,
       '',
-      `*Valor total:* ${formatMoney(total)}`,
-      `*Valor pago/entrada:* ${formatMoney(entrada)}`,
-      `*Valor restante:* ${formatMoney(restante)}`,
-      '',
       `*Forma de pagamento:*`,
-      formaPagamento,
+      '50% Pedido e 50% Entrega',
       '',
       `*Chave Pix:*`,
       'wcriacoesgrafica@gmail.com',
@@ -432,7 +421,7 @@ export function Pedidos() {
           return (
             <button key={o.id} onClick={() => openOrder(o)} className="card p-4 text-left hover:ring-2 hover:ring-gold/40 transition">
               <div className="grid xl:grid-cols-[1fr_1fr_130px_170px_130px] gap-3 items-center">
-                <div><p className="font-bold text-primary">{o.numero_pedido}</p><p className="text-sm text-gray-500">{statusLabels[o.status] || o.status}</p></div>
+                <div><p className="font-bold text-primary line-clamp-2">{String(o.observacoes || o.descricao || o.numero_pedido || 'Pedido')}</p><p className="text-sm text-gray-500">{o.numero_pedido} • {statusLabels[o.status] || o.status}</p></div>
                 <div><p className="font-semibold text-primary truncate">{o.cliente_nome || o.cliente_email || 'Cliente'}</p><p className="text-sm text-gray-500 truncate">{o.cliente_telefone || o.cliente_email}</p></div>
                 <div><span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold ${pz.cls}`}><Icon size={14} />{pz.label}</span><p className="text-xs text-gray-500 mt-1">{o.prazo_entrega ? new Date(o.prazo_entrega).toLocaleDateString('pt-BR') : 'A combinar'}</p></div>
                 <div><p className="font-bold text-primary">{formatMoney(o.total)}</p><p className="text-xs text-gray-500">Pago {formatMoney(o.valor_entrada || 0)} • Resta {formatMoney(o.valor_restante || 0)}</p></div>
@@ -462,7 +451,7 @@ export function Pedidos() {
             </div>
             <div className="grid sm:grid-cols-2 gap-3">
               <select className="input" value={selectedOrder.status} onChange={(e) => setSelectedOrder({ ...selectedOrder, status: e.target.value })}>{Object.entries(statusLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select>
-              <select className="input" value={selectedOrder.status_pagamento || 'pendente'} onChange={(e) => setSelectedOrder({ ...selectedOrder, status_pagamento: e.target.value })}>{Object.entries(paymentLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select>
+              <select className="input" value={selectedOrder.status_pagamento || 'pendente'} onChange={(e) => { const status = e.target.value; const total = moneyToNumber(selectedOrder.total); const entradaAtual = moneyToNumber(selectedOrder.valor_entrada); const entrada = status === 'confirmado' ? total : status === 'pendente' ? 0 : entradaAtual; setSelectedOrder({ ...selectedOrder, status_pagamento: status, valor_entrada: entrada, valor_restante: Math.max(total - entrada, 0) }); }}>{Object.entries(paymentLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select>
             </div>
             <textarea className="input min-h-24" placeholder="Observações" value={selectedOrder.observacoes || ''} onChange={(e) => setSelectedOrder({ ...selectedOrder, observacoes: e.target.value })} />
             <div className="sticky bottom-0 -mx-5 -mb-5 bg-white border-t border-gray-100 p-4 grid grid-cols-1 sm:grid-cols-4 gap-2">

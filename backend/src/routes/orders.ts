@@ -1,5 +1,4 @@
 import { Router } from 'express';
-import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { auth } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/http.js';
@@ -42,67 +41,29 @@ function calcularPagamento(totalValue: any, entradaValue: any, statusPagamento?:
 }
 
 
-function normalizePhone(value: string) {
-  return String(value || '').replace(/\D/g, '');
-}
+async function registrarEntradaCaixaPedido(pedido: any, usuario: any, valor: number, observacaoExtra = '') {
+  const entrada = asNumber(valor);
+  if (entrada <= 0 || !pedido?.id) return;
 
-function safeClienteEmail(nome: string, telefone: string) {
-  const phone = normalizePhone(telefone);
-  const base =
-    phone ||
-    String(nome || 'cliente')
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/(^-|-$)/g, '') ||
-    'cliente';
+  const cliente = pedido.cliente_nome || pedido.cliente_email || pedido.cliente_telefone || 'Cliente';
+  const descricaoPedido = String(pedido.observacoes || pedido.descricao || pedido.numero_pedido || 'Pedido').trim();
 
-  return `cliente-${base}-${Date.now()}@grafica.local`;
-}
-
-async function findOrCreateClienteSimples(data: {
-  nome: string;
-  email?: string;
-  telefone?: string;
-}) {
-  const nome = String(data.nome || '').trim() || 'Cliente';
-  const email = String(data.email || '').trim().toLowerCase();
-  const telefone = String(data.telefone || '').trim();
-  const telefoneLimpo = normalizePhone(telefone);
-
-  if (email) {
-    const byEmail = await supabaseRest<any[]>(`/users?select=id,nome,email,telefone&email=eq.${restEq(email)}&limit=1`).catch(() => []);
-    if (byEmail[0]) return byEmail[0];
-  }
-
-  if (telefone) {
-    const byPhone = await supabaseRest<any[]>(`/users?select=id,nome,email,telefone&telefone=eq.${restEq(telefone)}&limit=1`).catch(() => []);
-    if (byPhone[0]) return byPhone[0];
-  }
-
-  if (telefoneLimpo && telefoneLimpo.length >= 8) {
-    const byPhoneClean = await supabaseRest<any[]>(`/users?select=id,nome,email,telefone&telefone=ilike.${restEq('%' + telefoneLimpo.slice(-8) + '%')}&limit=1`).catch(() => []);
-    if (byPhoneClean[0]) return byPhoneClean[0];
-  }
-
-  const senhaHash = await bcrypt.hash(`cliente-site-${Date.now()}-${Math.random()}`, 10);
-  const novoEmail = email || safeClienteEmail(nome, telefone);
-
-  const created = await supabaseRest<any[]>('/users', {
+  await supabaseRest('/caixa_movimentacoes', {
     method: 'POST',
     body: JSON.stringify({
-      nome,
-      email: novoEmail,
-      telefone,
-      senha: senhaHash,
-      role: 'user',
+      data_movimento: new Date().toISOString().slice(0, 10),
+      descricao: `${cliente} - ${descricaoPedido}`,
+      valor: entrada,
+      forma_pagamento: pedido.metodo_pagamento || 'pix',
+      origem: 'pedido',
+      pedido_id: pedido.id,
+      usuario_id: usuario?.id || null,
+      usuario_nome: usuario?.nome || usuario?.email || 'Sistema',
+      observacoes: `Entrada vinculada ao pedido ${pedido.numero_pedido || pedido.id}${observacaoExtra ? ' - ' + observacaoExtra : ''}`,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     })
-  });
-
-  return created[0];
+  }).catch(() => null);
 }
 
 async function registrarHistorico(pedidoId: string, usuario: any, acao: string, campo: string, valorAnterior: any, valorNovo: any) {
@@ -120,98 +81,6 @@ async function registrarHistorico(pedidoId: string, usuario: any, acao: string, 
     })
   }).catch(() => null);
 }
-
-
-orderRoutes.post('/pedidos/site', asyncHandler(async (req, res) => {
-  const d = z.object({
-    items: z.array(z.any()).optional().default([]),
-    subtotal: z.number().optional().default(0),
-    frete: z.number().optional().default(0),
-    desconto: z.number().optional().default(0),
-    total: z.number().optional().default(0),
-    valor_entrada: z.number().optional().default(0),
-    metodo_pagamento: z.string().optional().default('whatsapp'),
-    status_pagamento: z.string().optional().default('pendente'),
-    endereco_entrega: z.string().optional().default('A combinar'),
-    tipo_entrega: z.string().optional().default('retirada'),
-    observacoes: z.string().optional().default(''),
-    cliente_nome: z.string().min(2),
-    cliente_email: z.string().optional().default(''),
-    cliente_telefone: z.string().optional().default(''),
-    prazo_entrega: z.string().optional().nullable(),
-    origem: z.string().optional().default('site')
-  }).parse(req.body);
-
-  const cliente = await findOrCreateClienteSimples({
-    nome: d.cliente_nome,
-    email: d.cliente_email,
-    telefone: d.cliente_telefone
-  });
-
-  const numero = `SITE${Date.now()}`;
-  const pagamento = calcularPagamento(d.total || d.subtotal, d.valor_entrada, d.status_pagamento);
-
-  const descricaoItens = (d.items || [])
-    .map((item: any, index: number) => {
-      const quantidade = Number(item.quantidade || 1);
-      const nome = item.nome || item.produto_nome || 'Produto';
-      const specs = Object.entries(item.especificacoes_selecionadas || item.especificacoes || {})
-        .map(([key, value]) => `${key}: ${value}`)
-        .join(' | ');
-      return `${index + 1}. ${quantidade}x ${nome}${specs ? ` (${specs})` : ''}`;
-    })
-    .join('\n');
-
-  const pedidos = await supabaseRest<any[]>('/pedidos', {
-    method: 'POST',
-    body: JSON.stringify({
-      usuario_id: cliente?.id || null,
-      numero_pedido: numero,
-      status: 'pendente',
-      subtotal: d.subtotal,
-      frete: d.frete,
-      desconto: d.desconto,
-      total: pagamento.total,
-      valor_entrada: pagamento.entrada,
-      valor_restante: pagamento.restante,
-      metodo_pagamento: d.metodo_pagamento,
-      status_pagamento: pagamento.status_pagamento,
-      endereco_entrega: d.endereco_entrega,
-      observacoes: d.observacoes || descricaoItens || 'Pedido criado pelo site.',
-      cliente_nome: cliente?.nome || d.cliente_nome,
-      cliente_email: d.cliente_email || cliente?.email || '',
-      cliente_telefone: d.cliente_telefone || cliente?.telefone || '',
-      prazo_entrega: d.prazo_entrega || null,
-      origem: 'site',
-      data_entrega_estimada: d.prazo_entrega || null,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    })
-  });
-
-  const pedido = pedidos[0];
-
-  for (const item of d.items || []) {
-    await supabaseRest('/itens_pedido', {
-      method: 'POST',
-      body: JSON.stringify({
-        pedido_id: pedido.id,
-        produto_id: item.produto_id || item.id || null,
-        quantidade: Number(item.quantidade || 1),
-        preco_unitario: Number(item.preco_unitario || item.preco || 0),
-        especificacoes: item.especificacoes_selecionadas || item.especificacoes || {},
-        created_at: new Date().toISOString()
-      })
-    }).catch(() => null);
-  }
-
-  await registrarHistorico(pedido.id, null, 'criou pedido', 'pedido pelo site', '', numero);
-  if (cliente?.id) {
-    await registrarHistorico(pedido.id, null, 'vinculou cliente', 'cliente', '', cliente.nome || cliente.email || cliente.id);
-  }
-
-  res.status(201).json(pedido);
-}));
 
 orderRoutes.get('/pedidos', auth, asyncHandler(async (req, res) => {
   let path = '/pedidos?select=*&order=created_at.desc&limit=500';
@@ -299,6 +168,7 @@ orderRoutes.post('/pedidos', auth, asyncHandler(async (req, res) => {
   }
 
   await registrarHistorico(pedido.id, req.user, 'criou pedido', 'pedido', '', numero);
+  await registrarEntradaCaixaPedido(pedido, req.user, valorEntrada, 'pedido criado pelo site');
   res.status(201).json(pedido);
 }));
 
@@ -358,7 +228,13 @@ orderRoutes.put('/pedidos/:id', auth, asyncHandler(async (req, res) => {
     }
   }
 
-  res.json(rows[0] || { ok: true });
+  const novoPedido = rows[0] || { ...oldOrder, ...payload, id: req.params.id };
+  const entradaAnterior = asNumber(oldOrder?.valor_entrada || (oldOrder?.status_pagamento === 'confirmado' ? oldOrder?.total : 0));
+  const entradaNova = asNumber(novoPedido.valor_entrada || (novoPedido.status_pagamento === 'confirmado' ? novoPedido.total : 0));
+  const diferencaRecebida = Math.max(entradaNova - entradaAnterior, 0);
+  await registrarEntradaCaixaPedido(novoPedido, req.user, diferencaRecebida, 'valor recebido atualizado no pedido');
+
+  res.json(novoPedido || { ok: true });
 }));
 
 orderRoutes.delete('/pedidos/:id', auth, asyncHandler(async (req, res) => {

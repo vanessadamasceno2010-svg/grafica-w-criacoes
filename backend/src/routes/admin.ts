@@ -31,6 +31,32 @@ function dateOnly(value: any) {
   return String(value).slice(0, 10);
 }
 
+
+async function registrarEntradaCaixaPedido(pedido: any, usuario: any, valor: number, observacaoExtra = '') {
+  const entrada = asNumber(valor);
+  if (entrada <= 0 || !pedido?.id) return;
+
+  const cliente = pedido.cliente_nome || pedido.cliente_email || pedido.cliente_telefone || 'Cliente';
+  const descricaoPedido = String(pedido.observacoes || pedido.descricao || pedido.numero_pedido || 'Pedido').trim();
+
+  await supabaseRest('/caixa_movimentacoes', {
+    method: 'POST',
+    body: JSON.stringify({
+      data_movimento: new Date().toISOString().slice(0, 10),
+      descricao: `${cliente} - ${descricaoPedido}`,
+      valor: entrada,
+      forma_pagamento: pedido.metodo_pagamento || 'pix',
+      origem: 'pedido',
+      pedido_id: pedido.id,
+      usuario_id: usuario?.id || null,
+      usuario_nome: usuario?.nome || usuario?.email || 'Sistema',
+      observacoes: `Entrada vinculada ao pedido ${pedido.numero_pedido || pedido.id}${observacaoExtra ? ' - ' + observacaoExtra : ''}`,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    })
+  }).catch(() => null);
+}
+
 async function registrarHistorico(pedidoId: string, usuario: any, acao: string, campo: string, valorAnterior: any, valorNovo: any) {
   await supabaseRest('/pedido_historico', {
     method: 'POST',
@@ -136,6 +162,14 @@ adminRoutes.get('/dashboard', asyncHandler(async (req, res) => {
   const totalVendido = pedidos.reduce((sum, p) => sum + asNumber(p.total), 0);
   const totalRecebido = pedidos.reduce((sum, p) => sum + asNumber(p.valor_entrada || (p.status_pagamento === 'confirmado' ? p.total : 0)), 0);
   const totalAReceber = pedidos.reduce((sum, p) => sum + asNumber(p.valor_restante || Math.max(asNumber(p.total) - asNumber(p.valor_entrada), 0)), 0);
+  const inicioMes = new Date();
+  inicioMes.setDate(1);
+  const inicioMesStr = dateOnly(inicioMes.toISOString());
+  const fimMes = new Date(inicioMes.getFullYear(), inicioMes.getMonth() + 1, 0);
+  const fimMesStr = dateOnly(fimMes.toISOString());
+  const caixaMesRows = await supabaseRest<any[]>(`/caixa_movimentacoes?select=valor&data_movimento=gte.${restEq(inicioMesStr)}&data_movimento=lte.${restEq(fimMesStr)}&limit=5000`).catch(() => []);
+  const fluxoCaixaMes = caixaMesRows.reduce((sum, item) => sum + asNumber(item.valor), 0);
+
 
   const hoje = dateOnly(new Date().toISOString());
   const vendasPorDiaMap = new Map<string, { data: string; vendas: number; pedidos: number }>();
@@ -163,6 +197,7 @@ adminRoutes.get('/dashboard', asyncHandler(async (req, res) => {
     vendasMes: totalVendido,
     pedidosMes: pedidos.length,
     ticketMedio: pedidos.length ? totalVendido / pedidos.length : 0,
+    fluxoCaixaMes,
     valoresRecebidos: totalRecebido,
     valoresAReceber: totalAReceber,
     clientesNovos: users.filter((u) => u.role === 'user').length,
@@ -346,6 +381,8 @@ adminRoutes.post('/pedidos/manual', asyncHandler(async (req, res) => {
   if (cliente?.id && !d.usuario_id) {
     await registrarHistorico(pedido.id, req.user, 'vinculou cliente', 'cliente', '', cliente.nome || cliente.email || cliente.id);
   }
+
+  await registrarEntradaCaixaPedido(pedido, req.user, d.valor_entrada, 'pedido manual criado no painel');
 
   res.status(201).json(pedido);
 }));
@@ -588,8 +625,6 @@ adminRoutes.delete('/mensagens/:id', asyncHandler(async (req, res) => {
 adminRoutes.get('/avaliacoes', asyncHandler(async (_req, res) => {
   res.json(await supabaseRest<any[]>('/contatos_formulario?select=*&order=created_at.desc&limit=1000').catch(() => []));
 }));
-
-
 
 const caixaSchema = z.object({
   data_movimento: z.string().min(8),
