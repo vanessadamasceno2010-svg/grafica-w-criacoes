@@ -59,10 +59,16 @@ function makeId(prefix = 'ID') {
   return `${prefix}-${Date.now()}-${Math.floor(Math.random() * 999999)}`;
 }
 
-function makeVariation(): ProductVariation {
+function makeVariation(groups: SpecGroup[] = []): ProductVariation {
   return {
     id: makeId('VAR'),
     nome: '',
+    opcoes: Object.fromEntries(
+      groups
+        .map((group) => group.nome.trim())
+        .filter(Boolean)
+        .map((groupName) => [groupName, ''])
+    ),
     quantidade: '',
     modelo: '',
     acabamento: '',
@@ -79,6 +85,11 @@ function normalizeVariations(value: any): ProductVariation[] {
   return value.map((v) => ({
     id: v?.id || makeId('VAR'),
     nome: v?.nome || '',
+    opcoes: v?.opcoes && typeof v.opcoes === 'object' && !Array.isArray(v.opcoes)
+      ? Object.fromEntries(
+          Object.entries(v.opcoes).map(([key, optionValue]) => [key, String(optionValue || '')])
+        )
+      : {},
     quantidade: v?.quantidade || '',
     modelo: v?.modelo || '',
     acabamento: v?.acabamento || '',
@@ -99,48 +110,58 @@ function productMinPrice(product: ProductForm) {
   return Math.min(...activeVariations.map((v) => Number(v.preco || 0)));
 }
 
-function variationDescription(variation: ProductVariation) {
-  return [
-    variation.quantidade,
-    variation.acabamento,
-    variation.tamanho,
-    variation.modelo
-  ].filter(Boolean).join(' • ') || variation.nome || 'Nova combinação';
+function variationOptions(variation: ProductVariation) {
+  const options: Record<string, string> = {
+    ...(variation.opcoes && typeof variation.opcoes === 'object' ? variation.opcoes : {})
+  };
+
+  if (Object.keys(options).length === 0) {
+    if (variation.tamanho) options.Tamanho = variation.tamanho;
+    if (variation.acabamento) options.Acabamento = variation.acabamento;
+    if (variation.quantidade) options.Quantidade = variation.quantidade;
+    if (variation.modelo) options.Modelo = variation.modelo;
+  }
+
+  return options;
 }
 
-function validateVariations(variations: ProductVariation[]) {
+function variationDescription(variation: ProductVariation) {
+  const optionValues = Array.from(new Set(Object.values(variationOptions(variation)).filter(Boolean)));
+  return optionValues.join(' • ') || variation.nome || 'Nova combinação';
+}
+
+function validateVariations(variations: ProductVariation[], groups: SpecGroup[]) {
   if (variations.length === 0) return '';
 
   const seen = new Set<string>();
-  const usesQuantityAndFinish = variations.some(
-    (variation) => variation.quantidade || variation.acabamento
-  );
+  const requiredGroups = groups
+    .map((group) => group.nome.trim())
+    .filter(Boolean);
 
   for (let index = 0; index < variations.length; index += 1) {
     const variation = variations[index];
     const position = index + 1;
+    const options = variationOptions(variation);
 
-    if (usesQuantityAndFinish && !String(variation.quantidade || '').trim()) {
-      return `Informe a quantidade na combinação ${position}.`;
-    }
-
-    if (usesQuantityAndFinish && !String(variation.acabamento || '').trim()) {
-      return `Informe o acabamento na combinação ${position}.`;
+    for (const groupName of requiredGroups) {
+      if (!String(options[groupName] || '').trim()) {
+        return `Escolha “${groupName}” na combinação ${position}.`;
+      }
     }
 
     if (Number(variation.preco || 0) <= 0) {
       return `Informe um preço maior que zero na combinação ${position}.`;
     }
 
-    const key = [
-      variation.quantidade,
-      variation.acabamento,
-      variation.tamanho,
-      variation.modelo
-    ].map((value) => String(value || '').trim().toLowerCase()).join('|');
+    const key = ((requiredGroups.length > 0
+      ? requiredGroups.map((groupName) => options[groupName])
+      : Object.entries(options)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([keyName, value]) => `${keyName}:${value}`)
+    ).map((value) => String(value || '').trim().toLowerCase()).join('|')) || String(variation.nome || '').trim().toLowerCase();
 
     if (seen.has(key)) {
-      return `A combinação ${position} está repetida. Altere a quantidade ou o acabamento.`;
+      return `A combinação ${position} está repetida. Altere pelo menos uma opção.`;
     }
 
     seen.add(key);
@@ -222,6 +243,7 @@ function generateVariationsFromSpecs(groups: SpecGroup[], basePrice: number, bas
     let variation: ProductVariation = {
       id: makeId('VAR'),
       nome: Object.values(combo).join(' • '),
+      opcoes: combo,
       quantidade: '',
       modelo: '',
       acabamento: '',
@@ -387,10 +409,11 @@ export function Produtos() {
     imagens_adicionais: Array.isArray(p.imagens_adicionais) ? p.imagens_adicionais : [],
     especificacoes: p.especificacoes && typeof p.especificacoes === 'object' ? p.especificacoes : groupsToSpecs(specGroups),
     variacoes: normalizeVariations(p.variacoes)
-      .filter((v) => String(v.nome || '').trim() || String(v.quantidade || '').trim() || Number(v.preco || 0) > 0)
+      .filter((v) => String(v.nome || '').trim() || Object.values(variationOptions(v)).some(Boolean) || Number(v.preco || 0) > 0)
       .map((v) => ({
         id: v.id || makeId('VAR'),
         nome: v.nome || variationDescription(v),
+        opcoes: variationOptions(v),
         quantidade: v.quantidade || '',
         modelo: v.modelo || '',
         acabamento: v.acabamento || '',
@@ -414,9 +437,14 @@ export function Produtos() {
       return alert('Cadastre uma categoria antes de salvar produto.');
     }
 
+    const groupNames = specGroups.map((group) => group.nome.trim()).filter(Boolean);
+    if (new Set(groupNames.map((name) => name.toLowerCase())).size !== groupNames.length) {
+      return alert('Existem grupos de opção com o mesmo nome. Altere ou remova o grupo repetido.');
+    }
+
     const variations = normalizeVariations(editingProduct.variacoes)
-      .filter((variation) => String(variation.nome || '').trim() || String(variation.quantidade || '').trim() || Number(variation.preco || 0) > 0);
-    const variationError = validateVariations(variations);
+      .filter((variation) => String(variation.nome || '').trim() || Object.values(variationOptions(variation)).some(Boolean) || Number(variation.preco || 0) > 0);
+    const variationError = validateVariations(variations, specGroups);
 
     if (variationError) return alert(variationError);
 
@@ -493,12 +521,29 @@ export function Produtos() {
     setEditingProduct({ ...editingProduct, variacoes: next });
   };
 
+  const updateVariationOption = (index: number, groupName: string, value: string) => {
+    if (!editingProduct) return;
+
+    const next = normalizeVariations(editingProduct.variacoes);
+    let variation: ProductVariation = {
+      ...next[index],
+      opcoes: {
+        ...variationOptions(next[index]),
+        [groupName]: value
+      }
+    };
+
+    variation = applySpecValueToVariation(variation, groupName, value);
+    next[index] = variation;
+    setEditingProduct({ ...editingProduct, variacoes: next });
+  };
+
   const addVariation = () => {
     if (!editingProduct) return;
 
     setEditingProduct({
       ...editingProduct,
-      variacoes: [...normalizeVariations(editingProduct.variacoes), makeVariation()]
+      variacoes: [...normalizeVariations(editingProduct.variacoes), makeVariation(specGroups)]
     });
   };
 
@@ -812,9 +857,9 @@ export function Produtos() {
             <div className="rounded-3xl border-2 border-gold/30 bg-amber-50/30 p-4 space-y-4">
               <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
                 <div>
-                  <h3 className="font-bold text-primary text-lg">Preços por quantidade e acabamento</h3>
+                  <h3 className="font-bold text-primary text-lg">Preços por combinação</h3>
                   <p className="text-sm text-gray-500">
-                    Cadastre uma linha para cada preço. Exemplo: 100 unidades + Fosco = R$ 80,00.
+                    Cada combinação das opções acima pode ter um preço diferente. Funciona com opções prontas ou personalizadas.
                   </p>
                 </div>
 
@@ -833,7 +878,7 @@ export function Produtos() {
 
               {normalizeVariations(editingProduct.variacoes).length === 0 && (
                 <p className="rounded-xl bg-gray-50 p-3 text-sm text-gray-500">
-                  Nenhum preço por quantidade cadastrado. Clique em “Adicionar preço” ou gere as combinações pelas opções acima.
+                  Nenhuma combinação cadastrada. Clique em “Adicionar preço” ou gere automaticamente pelas opções acima.
                 </p>
               )}
 
@@ -850,17 +895,42 @@ export function Produtos() {
                       </button>
                     </div>
 
-                    <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                      <label className="block">
-                        <span className="text-sm font-bold text-primary">Quantidade *</span>
-                        <input className="input" placeholder="Ex: 100 unidades" value={variation.quantidade || ''} onChange={(e) => updateVariation(index, 'quantidade', e.target.value)} />
-                      </label>
+                    {specGroups.filter((group) => group.nome.trim()).length > 0 ? (
+                      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {specGroups.filter((group) => group.nome.trim()).map((group) => {
+                          const values = splitValues(group.valoresTexto);
+                          const selectedValue = variationOptions(variation)[group.nome.trim()] || '';
 
-                      <label className="block">
-                        <span className="text-sm font-bold text-primary">Acabamento *</span>
-                        <input className="input" placeholder="Ex: Fosco" value={variation.acabamento || ''} onChange={(e) => updateVariation(index, 'acabamento', e.target.value)} />
-                      </label>
+                          return (
+                            <label className="block" key={group.id}>
+                              <span className="text-sm font-bold text-primary">{group.nome.trim()} *</span>
+                              {values.length > 0 ? (
+                                <select className="input" value={selectedValue} onChange={(e) => updateVariationOption(index, group.nome.trim(), e.target.value)}>
+                                  <option value="">Selecione</option>
+                                  {values.map((value) => <option key={value} value={value}>{value}</option>)}
+                                </select>
+                              ) : (
+                                <input className="input" value={selectedValue} placeholder={`Informe ${group.nome.trim()}`} onChange={(e) => updateVariationOption(index, group.nome.trim(), e.target.value)} />
+                              )}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="grid sm:grid-cols-2 gap-3">
+                        <label className="block">
+                          <span className="text-sm font-bold text-primary">Quantidade</span>
+                          <input className="input" placeholder="Ex: 100 unidades" value={variation.quantidade || ''} onChange={(e) => updateVariation(index, 'quantidade', e.target.value)} />
+                        </label>
 
+                        <label className="block">
+                          <span className="text-sm font-bold text-primary">Acabamento</span>
+                          <input className="input" placeholder="Ex: Fosco" value={variation.acabamento || ''} onChange={(e) => updateVariation(index, 'acabamento', e.target.value)} />
+                        </label>
+                      </div>
+                    )}
+
+                    <div className="grid sm:grid-cols-2 gap-3">
                       <label className="block">
                         <span className="text-sm font-bold text-primary">Preço *</span>
                         <input className="input" placeholder="Ex: 80,00" type="number" min="0" step="0.01" value={variation.preco || ''} onChange={(e) => updateVariation(index, 'preco', e.target.value)} />
