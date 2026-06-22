@@ -99,6 +99,56 @@ function productMinPrice(product: ProductForm) {
   return Math.min(...activeVariations.map((v) => Number(v.preco || 0)));
 }
 
+function variationDescription(variation: ProductVariation) {
+  return [
+    variation.quantidade,
+    variation.acabamento,
+    variation.tamanho,
+    variation.modelo
+  ].filter(Boolean).join(' • ') || variation.nome || 'Nova combinação';
+}
+
+function validateVariations(variations: ProductVariation[]) {
+  if (variations.length === 0) return '';
+
+  const seen = new Set<string>();
+  const usesQuantityAndFinish = variations.some(
+    (variation) => variation.quantidade || variation.acabamento
+  );
+
+  for (let index = 0; index < variations.length; index += 1) {
+    const variation = variations[index];
+    const position = index + 1;
+
+    if (usesQuantityAndFinish && !String(variation.quantidade || '').trim()) {
+      return `Informe a quantidade na combinação ${position}.`;
+    }
+
+    if (usesQuantityAndFinish && !String(variation.acabamento || '').trim()) {
+      return `Informe o acabamento na combinação ${position}.`;
+    }
+
+    if (Number(variation.preco || 0) <= 0) {
+      return `Informe um preço maior que zero na combinação ${position}.`;
+    }
+
+    const key = [
+      variation.quantidade,
+      variation.acabamento,
+      variation.tamanho,
+      variation.modelo
+    ].map((value) => String(value || '').trim().toLowerCase()).join('|');
+
+    if (seen.has(key)) {
+      return `A combinação ${position} está repetida. Altere a quantidade ou o acabamento.`;
+    }
+
+    seen.add(key);
+  }
+
+  return '';
+}
+
 function specsToGroups(specs: any): SpecGroup[] {
   if (!specs || typeof specs !== 'object' || Array.isArray(specs)) return [];
 
@@ -322,17 +372,25 @@ export function Produtos() {
     nome: p.nome,
     descricao: p.descricao || p.nome,
     descricao_longa: p.descricao_longa || p.descricao || '',
-    preco: Number(p.preco || 0),
+    preco: (() => {
+      const variationPrices = normalizeVariations(p.variacoes)
+        .filter((variation) => variation.ativo !== false && Number(variation.preco || 0) > 0)
+        .map((variation) => Number(variation.preco));
+
+      return variationPrices.length > 0
+        ? Math.min(...variationPrices)
+        : Number(p.preco || 0);
+    })(),
     preco_original: p.preco_original ? Number(p.preco_original) : null,
     estoque: Number(p.estoque || 0),
     imagem_principal: p.imagem_principal || '/assets/chaveiros-personalizados.jpeg',
     imagens_adicionais: Array.isArray(p.imagens_adicionais) ? p.imagens_adicionais : [],
     especificacoes: p.especificacoes && typeof p.especificacoes === 'object' ? p.especificacoes : groupsToSpecs(specGroups),
     variacoes: normalizeVariations(p.variacoes)
-      .filter((v) => String(v.nome || '').trim() || Number(v.preco || 0) > 0)
+      .filter((v) => String(v.nome || '').trim() || String(v.quantidade || '').trim() || Number(v.preco || 0) > 0)
       .map((v) => ({
         id: v.id || makeId('VAR'),
-        nome: v.nome || v.quantidade || v.modelo || v.acabamento || v.tamanho || 'Variação',
+        nome: v.nome || variationDescription(v),
         quantidade: v.quantidade || '',
         modelo: v.modelo || '',
         acabamento: v.acabamento || '',
@@ -354,6 +412,16 @@ export function Produtos() {
     if (!editingProduct?.nome) return alert('Informe o nome do produto.');
     if (!editingProduct.categoria_id && !categories[0]?.id) {
       return alert('Cadastre uma categoria antes de salvar produto.');
+    }
+
+    const variations = normalizeVariations(editingProduct.variacoes)
+      .filter((variation) => String(variation.nome || '').trim() || String(variation.quantidade || '').trim() || Number(variation.preco || 0) > 0);
+    const variationError = validateVariations(variations);
+
+    if (variationError) return alert(variationError);
+
+    if (variations.length === 0 && Number(editingProduct.preco || 0) <= 0) {
+      return alert('Informe o preço base ou adicione uma combinação de quantidade e acabamento.');
     }
 
     try {
@@ -741,12 +809,12 @@ export function Produtos() {
               </div>
             </div>
 
-            <div className="rounded-3xl border border-gray-100 p-4 space-y-4">
+            <div className="rounded-3xl border-2 border-gold/30 bg-amber-50/30 p-4 space-y-4">
               <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
                 <div>
-                  <h3 className="font-bold text-primary text-lg">Tabela de preços por variação</h3>
+                  <h3 className="font-bold text-primary text-lg">Preços por quantidade e acabamento</h3>
                   <p className="text-sm text-gray-500">
-                    Use quando cada quantidade, tamanho, acabamento ou modelo tiver preço diferente.
+                    Cadastre uma linha para cada preço. Exemplo: 100 unidades + Fosco = R$ 80,00.
                   </p>
                 </div>
 
@@ -758,68 +826,76 @@ export function Produtos() {
 
                   <button type="button" className="btn btn-outline" onClick={addVariation}>
                     <Plus size={16} />
-                    Adicionar variação
+                    Adicionar preço
                   </button>
                 </div>
               </div>
 
               {normalizeVariations(editingProduct.variacoes).length === 0 && (
                 <p className="rounded-xl bg-gray-50 p-3 text-sm text-gray-500">
-                  Nenhuma variação cadastrada. O produto usará o preço base.
+                  Nenhum preço por quantidade cadastrado. Clique em “Adicionar preço” ou gere as combinações pelas opções acima.
                 </p>
               )}
 
               <div className="space-y-3">
                 {normalizeVariations(editingProduct.variacoes).map((variation, index) => (
-                  <div key={variation.id || index} className="rounded-2xl border border-gray-100 bg-gray-50 p-3 space-y-3">
+                  <div key={variation.id || index} className="rounded-2xl border border-amber-200 bg-white p-4 space-y-3 shadow-sm">
                     <div className="flex items-center justify-between gap-3">
-                      <p className="font-bold text-primary">Variação {index + 1}</p>
+                      <div>
+                        <p className="font-bold text-primary">Preço {index + 1}</p>
+                        <p className="text-xs text-gray-500">{variationDescription(variation)}</p>
+                      </div>
                       <button type="button" className="rounded-lg bg-red-50 p-2 text-red-600" onClick={() => removeVariation(index)}>
                         <X size={16} />
                       </button>
                     </div>
 
-                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
                       <label className="block">
-                        <span className="text-sm font-bold text-primary">Nome exibido</span>
-                        <input className="input" placeholder="Ex: 100 un • Fosco" value={variation.nome || ''} onChange={(e) => updateVariation(index, 'nome', e.target.value)} />
-                      </label>
-
-                      <label className="block">
-                        <span className="text-sm font-bold text-primary">Quantidade</span>
+                        <span className="text-sm font-bold text-primary">Quantidade *</span>
                         <input className="input" placeholder="Ex: 100 unidades" value={variation.quantidade || ''} onChange={(e) => updateVariation(index, 'quantidade', e.target.value)} />
                       </label>
 
                       <label className="block">
-                        <span className="text-sm font-bold text-primary">Modelo</span>
-                        <input className="input" placeholder="Ex: Frente única" value={variation.modelo || ''} onChange={(e) => updateVariation(index, 'modelo', e.target.value)} />
-                      </label>
-
-                      <label className="block">
-                        <span className="text-sm font-bold text-primary">Acabamento</span>
+                        <span className="text-sm font-bold text-primary">Acabamento *</span>
                         <input className="input" placeholder="Ex: Fosco" value={variation.acabamento || ''} onChange={(e) => updateVariation(index, 'acabamento', e.target.value)} />
                       </label>
 
                       <label className="block">
-                        <span className="text-sm font-bold text-primary">Tamanho</span>
-                        <input className="input" placeholder="Ex: 9x5 cm" value={variation.tamanho || ''} onChange={(e) => updateVariation(index, 'tamanho', e.target.value)} />
+                        <span className="text-sm font-bold text-primary">Preço *</span>
+                        <input className="input" placeholder="Ex: 80,00" type="number" min="0" step="0.01" value={variation.preco || ''} onChange={(e) => updateVariation(index, 'preco', e.target.value)} />
                       </label>
 
                       <label className="block">
-                        <span className="text-sm font-bold text-primary">Preço dessa variação</span>
-                        <input className="input" placeholder="Preço" type="number" value={variation.preco || ''} onChange={(e) => updateVariation(index, 'preco', e.target.value)} />
-                      </label>
-
-                      <label className="block">
-                        <span className="text-sm font-bold text-primary">Estoque dessa variação</span>
-                        <input className="input" placeholder="Estoque" type="number" value={variation.estoque || ''} onChange={(e) => updateVariation(index, 'estoque', e.target.value)} />
-                      </label>
-
-                      <label className="flex items-center gap-2 rounded-xl bg-white px-4 py-3 font-semibold text-primary">
-                        <input type="checkbox" checked={variation.ativo !== false} onChange={(e) => updateVariation(index, 'ativo', e.target.checked)} />
-                        Ativa
+                        <span className="text-sm font-bold text-primary">Estoque</span>
+                        <input className="input" placeholder="Ex: 50" type="number" min="0" step="1" value={variation.estoque || ''} onChange={(e) => updateVariation(index, 'estoque', e.target.value)} />
                       </label>
                     </div>
+
+                    <details className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+                      <summary className="cursor-pointer text-sm font-bold text-primary">Mais detalhes (opcional)</summary>
+                      <div className="grid sm:grid-cols-3 gap-3 pt-3">
+                      <label className="block">
+                          <span className="text-sm font-bold text-primary">Nome exibido</span>
+                          <input className="input" placeholder="Gerado automaticamente" value={variation.nome || ''} onChange={(e) => updateVariation(index, 'nome', e.target.value)} />
+                      </label>
+
+                      <label className="block">
+                          <span className="text-sm font-bold text-primary">Tamanho</span>
+                          <input className="input" placeholder="Ex: 9x5 cm" value={variation.tamanho || ''} onChange={(e) => updateVariation(index, 'tamanho', e.target.value)} />
+                      </label>
+
+                        <label className="block">
+                          <span className="text-sm font-bold text-primary">Modelo</span>
+                          <input className="input" placeholder="Ex: Frente única" value={variation.modelo || ''} onChange={(e) => updateVariation(index, 'modelo', e.target.value)} />
+                        </label>
+                      </div>
+                    </details>
+
+                    <label className="flex items-center gap-2 rounded-xl bg-gray-50 px-4 py-3 font-semibold text-primary">
+                      <input type="checkbox" checked={variation.ativo !== false} onChange={(e) => updateVariation(index, 'ativo', e.target.checked)} />
+                      Disponível para o cliente
+                    </label>
                   </div>
                 ))}
               </div>

@@ -12,7 +12,11 @@ function activeVariations(product?: Product | null) {
 }
 
 function variationLabel(v: ProductVariation) {
-  return [v.nome, v.quantidade, v.modelo, v.acabamento, v.tamanho].filter(Boolean).join(' • ') || 'Variação';
+  const details = [v.quantidade, v.acabamento, v.tamanho, v.modelo].filter(Boolean);
+
+  if (details.length > 0) return details.join(' • ');
+
+  return v.nome || 'Variação';
 }
 
 function normalizeSearchText(value: any) {
