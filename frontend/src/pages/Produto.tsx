@@ -182,7 +182,8 @@ export function Produto() {
     ...(selectedVariation
       ? {
           Variação: variationLabel(selectedVariation),
-          'Preço da variação': formatMoney(unitPrice)
+          'Preço da variação': formatMoney(unitPrice),
+          ...(selectedVariation.prazo_entrega ? { 'Prazo de entrega': selectedVariation.prazo_entrega } : {})
         }
       : {})
   };
@@ -320,6 +321,9 @@ export function Produto() {
                   </div>
                   <div className="text-right">
                     <p className="font-bold text-primary">{formatMoney(selectedVariation.preco)}</p>
+                    {selectedVariation.prazo_entrega && (
+                      <p className="text-xs text-gray-500">Prazo: {selectedVariation.prazo_entrega}</p>
+                    )}
                   </div>
                 </div>
               )}

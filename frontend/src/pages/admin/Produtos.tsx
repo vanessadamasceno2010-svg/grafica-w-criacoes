@@ -76,6 +76,7 @@ function makeVariation(groups: SpecGroup[] = []): ProductVariation {
     acabamento: '',
     tamanho: '',
     preco: 0,
+    prazo_entrega: '',
     estoque: 0,
     ativo: true
   };
@@ -97,6 +98,7 @@ function normalizeVariations(value: any): ProductVariation[] {
     acabamento: v?.acabamento || '',
     tamanho: v?.tamanho || '',
     preco: Number(v?.preco || 0),
+    prazo_entrega: v?.prazo_entrega || v?.prazo || '',
     estoque: Number(v?.estoque || 0),
     ativo: v?.ativo !== false
   }));
@@ -251,6 +253,7 @@ function generateVariationsFromSpecs(groups: SpecGroup[], basePrice: number, bas
       acabamento: '',
       tamanho: '',
       preco: Number(basePrice || 0),
+      prazo_entrega: '',
       estoque: Number(baseStock || 0),
       ativo: true
     };
@@ -415,7 +418,7 @@ export function Produtos() {
     imagens_adicionais: Array.isArray(p.imagens_adicionais) ? p.imagens_adicionais : [],
     especificacoes: p.especificacoes && typeof p.especificacoes === 'object' ? p.especificacoes : groupsToSpecs(specGroups),
     variacoes: normalizeVariations(p.variacoes)
-      .filter((v) => String(v.nome || '').trim() || Object.values(variationOptions(v)).some(Boolean) || Number(v.preco || 0) > 0)
+      .filter((v) => String(v.nome || '').trim() || Object.values(variationOptions(v)).some(Boolean) || Number(v.preco || 0) > 0 || String(v.prazo_entrega || '').trim())
       .map((v) => ({
         id: v.id || makeId('VAR'),
         nome: v.nome || variationDescription(v),
@@ -425,6 +428,7 @@ export function Produtos() {
         acabamento: v.acabamento || '',
         tamanho: v.tamanho || '',
         preco: Number(v.preco || 0),
+        prazo_entrega: v.prazo_entrega || '',
         estoque: Number(v.estoque || 0),
         ativo: v.ativo !== false
       })),
@@ -452,7 +456,7 @@ export function Produtos() {
     }
 
     const variations = normalizeVariations(editingProduct.variacoes)
-      .filter((variation) => String(variation.nome || '').trim() || Object.values(variationOptions(variation)).some(Boolean) || Number(variation.preco || 0) > 0);
+      .filter((variation) => String(variation.nome || '').trim() || Object.values(variationOptions(variation)).some(Boolean) || Number(variation.preco || 0) > 0 || String(variation.prazo_entrega || '').trim());
     const variationError = validateVariations(variations, specGroups);
 
     if (variationError) return alert(variationError);
@@ -942,10 +946,15 @@ export function Produtos() {
                       </div>
                     )}
 
-                    <div className="grid gap-3">
+                    <div className="grid sm:grid-cols-2 gap-3">
                       <label className="block">
                         <span className="text-sm font-bold text-primary">Preço *</span>
                         <input className="input" placeholder="Ex: 80,00" type="number" min="0" step="0.01" value={variation.preco || ''} onChange={(e) => updateVariation(index, 'preco', e.target.value)} />
+                      </label>
+
+                      <label className="block">
+                        <span className="text-sm font-bold text-primary">Prazo de entrega</span>
+                        <input className="input" placeholder="Ex: 3 dias úteis" value={variation.prazo_entrega || ''} onChange={(e) => updateVariation(index, 'prazo_entrega', e.target.value)} />
                       </label>
                     </div>
 

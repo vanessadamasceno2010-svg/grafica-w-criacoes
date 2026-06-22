@@ -28,6 +28,7 @@ export type ProductVariation = {
   acabamento?: string;
   tamanho?: string;
   preco: number;
+  prazo_entrega?: string;
   estoque?: number;
   ativo?: boolean;
 };
@@ -257,6 +258,7 @@ export function normalizeProduct(product: any): Product {
           acabamento: v?.acabamento || '',
           tamanho: v?.tamanho || '',
           preco: Number(v?.preco || 0),
+          prazo_entrega: v?.prazo_entrega || v?.prazo || '',
           estoque: Number(v?.estoque || 0),
           ativo: v?.ativo !== false
         }))
