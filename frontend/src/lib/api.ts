@@ -1,5 +1,9 @@
-export const API_BASE =
-  import.meta.env.VITE_API_URL || 'https://grafica-w-criacoes-backend.vercel.app/api';
+const isVercelSite =
+  typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app');
+
+export const API_BASE = isVercelSite
+  ? '/api'
+  : import.meta.env.VITE_API_URL || 'https://grafica-w-criacoes-backend.vercel.app/api';
 
 export const API_URL = API_BASE;
 
@@ -168,13 +172,19 @@ export async function apiFetch<T = any>(
     headers.Authorization = 'Bearer ' + authToken;
   }
 
-  const response = await fetch(API_BASE + path, {
-    ...options,
-    headers: {
-      ...headers,
-      ...(options.headers || {})
-    }
-  });
+  let response: Response;
+
+  try {
+    response = await fetch(API_BASE + path, {
+      ...options,
+      headers: {
+        ...headers,
+        ...(options.headers || {})
+      }
+    });
+  } catch {
+    throw new Error('Não foi possível conectar ao servidor. Aguarde alguns segundos e tente novamente.');
+  }
 
   const text = await response.text();
 
