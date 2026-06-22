@@ -1,5 +1,9 @@
-export const API_BASE =
-  import.meta.env.VITE_API_URL || 'https://grafica-w-criacoes-backend.vercel.app/api';
+const isVercelSite =
+  typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app');
+
+export const API_BASE = isVercelSite
+  ? '/api'
+  : import.meta.env.VITE_API_URL || 'https://grafica-w-criacoes-backend.vercel.app/api';
 
 export const API_URL = API_BASE;
 
@@ -18,11 +22,13 @@ export const BRAND = {
 export type ProductVariation = {
   id?: string;
   nome: string;
+  opcoes?: Record<string, string>;
   quantidade?: string;
   modelo?: string;
   acabamento?: string;
   tamanho?: string;
   preco: number;
+  prazo_entrega?: string;
   estoque?: number;
   ativo?: boolean;
 };
@@ -168,13 +174,19 @@ export async function apiFetch<T = any>(
     headers.Authorization = 'Bearer ' + authToken;
   }
 
-  const response = await fetch(API_BASE + path, {
-    ...options,
-    headers: {
-      ...headers,
-      ...(options.headers || {})
-    }
-  });
+  let response: Response;
+
+  try {
+    response = await fetch(API_BASE + path, {
+      ...options,
+      headers: {
+        ...headers,
+        ...(options.headers || {})
+      }
+    });
+  } catch {
+    throw new Error('Não foi possível conectar ao servidor. Aguarde alguns segundos e tente novamente.');
+  }
 
   const text = await response.text();
 
@@ -238,11 +250,15 @@ export function normalizeProduct(product: any): Product {
       ? product.variacoes.map((v: any) => ({
           id: v?.id || String(Date.now() + Math.random()),
           nome: v?.nome || '',
+          opcoes: v?.opcoes && typeof v.opcoes === 'object' && !Array.isArray(v.opcoes)
+            ? v.opcoes
+            : {},
           quantidade: v?.quantidade || '',
           modelo: v?.modelo || '',
           acabamento: v?.acabamento || '',
           tamanho: v?.tamanho || '',
           preco: Number(v?.preco || 0),
+          prazo_entrega: v?.prazo_entrega || v?.prazo || '',
           estoque: Number(v?.estoque || 0),
           ativo: v?.ativo !== false
         }))

@@ -11,8 +11,27 @@ function activeVariations(product?: Product | null) {
     : [];
 }
 
+function variationOptions(v: ProductVariation) {
+  const options: Record<string, string> = {
+    ...(v.opcoes && typeof v.opcoes === 'object' ? v.opcoes : {})
+  };
+
+  if (Object.keys(options).length === 0) {
+    if (v.tamanho) options.Tamanho = v.tamanho;
+    if (v.acabamento) options.Acabamento = v.acabamento;
+    if (v.quantidade) options.Quantidade = v.quantidade;
+    if (v.modelo) options.Modelo = v.modelo;
+  }
+
+  return options;
+}
+
 function variationLabel(v: ProductVariation) {
-  return [v.nome, v.quantidade, v.modelo, v.acabamento, v.tamanho].filter(Boolean).join(' • ') || 'Variação';
+  const details = Array.from(new Set(Object.values(variationOptions(v)).filter(Boolean)));
+
+  if (details.length > 0) return details.join(' • ');
+
+  return v.nome || 'Variação';
 }
 
 function normalizeSearchText(value: any) {
@@ -46,10 +65,16 @@ export function Produto() {
       const vars = activeVariations(normalized);
       if (vars[0]?.id) setSelectedVariationId(String(vars[0].id));
 
-      const initial: Record<string, string> = {};
-      Object.entries(normalized.especificacoes || {}).forEach(([key, values]: any) => {
-        if (Array.isArray(values) && values[0]) initial[key] = values[0];
-      });
+      const initial: Record<string, string> = vars[0]
+        ? variationOptions(vars[0])
+        : {};
+
+      if (!vars[0]) {
+        Object.entries(normalized.especificacoes || {}).forEach(([key, values]: any) => {
+          if (Array.isArray(values) && values[0]) initial[key] = values[0];
+        });
+      }
+
       setSelectedSpecs(initial);
     };
 
@@ -88,7 +113,58 @@ export function Produto() {
   }, [slug]);
 
   const variations = useMemo(() => activeVariations(product), [product]);
-  const selectedVariation = variations.find((v) => String(v.id) === String(selectedVariationId)) || variations[0] || null;
+  const filterGroups = useMemo(() => {
+    const names: string[] = [];
+    const addName = (name: string) => {
+      if (name && !names.includes(name)) names.push(name);
+    };
+
+    Object.keys(product?.especificacoes || {}).forEach(addName);
+    variations.forEach((variation) => Object.keys(variationOptions(variation)).forEach(addName));
+
+    return names
+      .map((name) => ({
+        name,
+        values: Array.from(new Set(
+          variations.map((variation) => variationOptions(variation)[name]).filter(Boolean)
+        ))
+      }))
+      .filter((group) => group.values.length > 0);
+  }, [product, variations]);
+
+  const selectedVariation = variations.find((variation) => {
+    const options = variationOptions(variation);
+    return filterGroups.every((group) => options[group.name] === selectedSpecs[group.name]);
+  }) || variations.find((v) => String(v.id) === String(selectedVariationId)) || variations[0] || null;
+
+  const selectFilterValue = (groupName: string, value: string) => {
+    const groupIndex = filterGroups.findIndex((group) => group.name === groupName);
+    const choicesUntilHere = Object.fromEntries(
+      filterGroups
+        .slice(0, groupIndex)
+        .map((group) => [group.name, selectedSpecs[group.name]])
+    );
+    const next = { ...choicesUntilHere, [groupName]: value };
+    const match = variations.find((variation) => {
+      const options = variationOptions(variation);
+      return Object.entries(next).every(([name, selectedValue]) => options[name] === selectedValue);
+    });
+
+    if (match) {
+      setSelectedSpecs(variationOptions(match));
+      if (match.id) setSelectedVariationId(String(match.id));
+    }
+  };
+
+  const isFilterValueAvailable = (groupName: string, value: string) => variations.some((variation) => {
+    const options = variationOptions(variation);
+    if (options[groupName] !== value) return false;
+
+    const groupIndex = filterGroups.findIndex((group) => group.name === groupName);
+    return filterGroups.slice(0, groupIndex).every((group) => (
+      !selectedSpecs[group.name] || options[group.name] === selectedSpecs[group.name]
+    ));
+  });
 
   const unitPrice = selectedVariation ? Number(selectedVariation.preco || 0) : Number(product?.preco || 0);
   const totalPrice = unitPrice * quantity;
@@ -106,7 +182,8 @@ export function Produto() {
     ...(selectedVariation
       ? {
           Variação: variationLabel(selectedVariation),
-          'Preço da variação': formatMoney(unitPrice)
+          'Preço da variação': formatMoney(unitPrice),
+          ...(selectedVariation.prazo_entrega ? { 'Prazo de entrega': selectedVariation.prazo_entrega } : {})
         }
       : {})
   };
@@ -206,37 +283,70 @@ export function Produto() {
           <p className="text-gray-600 leading-relaxed mb-8">{product.descricao}</p>
 
           {variations.length > 0 && (
-            <div className="space-y-3 mb-8">
-              <label className="block text-sm font-bold text-gray-700">Escolha a variação</label>
-              <div className="grid gap-2">
-                {variations.map((v) => (
-                  <button key={v.id || variationLabel(v)} onClick={() => setSelectedVariationId(String(v.id || ''))} className={`rounded-2xl border p-4 text-left transition-all ${String(selectedVariation?.id) === String(v.id) ? 'border-gold bg-gold/10' : 'border-gray-100 bg-white hover:border-gold/50'}`}>
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="font-bold text-primary">{variationLabel(v)}</p>
-                        <p className="text-xs text-gray-500">Estoque: {v.estoque || product.estoque || 0}</p>
-                      </div>
-                      <p className="font-bold text-primary">{formatMoney(v.preco)}</p>
-                    </div>
-                  </button>
-                ))}
+            <div className="space-y-5 mb-8 rounded-2xl border border-gray-100 bg-white p-4">
+              <div>
+                <h2 className="font-bold text-primary">Monte sua opção</h2>
+                <p className="text-sm text-gray-500">O preço muda conforme as escolhas disponíveis.</p>
               </div>
+
+              {filterGroups.map((group) => (
+                <div key={group.name}>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">{group.name}</label>
+                  <div className="flex flex-wrap gap-2">
+                    {group.values.map((value) => {
+                      const selected = selectedSpecs[group.name] === value;
+                      const available = isFilterValueAvailable(group.name, value);
+
+                      return (
+                        <button
+                          type="button"
+                          key={value}
+                          disabled={!available}
+                          onClick={() => selectFilterValue(group.name, value)}
+                          className={`px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ${selected ? 'bg-primary text-white shadow-lg shadow-primary/20' : available ? 'bg-gray-100 text-gray-600 hover:bg-gray-200' : 'bg-gray-50 text-gray-300 line-through cursor-not-allowed'}`}
+                        >
+                          {value}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+
+              {selectedVariation && (
+                <div className="flex items-center justify-between gap-3 rounded-xl bg-amber-50 border border-amber-100 p-3">
+                  <div>
+                    <p className="text-xs text-gray-500">Combinação selecionada</p>
+                    <p className="font-bold text-primary">{variationLabel(selectedVariation)}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-bold text-primary">{formatMoney(selectedVariation.preco)}</p>
+                    {selectedVariation.prazo_entrega && (
+                      <p className="text-xs text-gray-500">Prazo: {selectedVariation.prazo_entrega}</p>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
-          <div className="space-y-4 mb-8">
-            {Object.entries(product.especificacoes || {}).map(([key, values]: any) => Array.isArray(values) && values.length > 0 ? (
-              <div key={key}>
-                <label className="block text-sm font-bold text-gray-700 mb-2">{key}</label>
-                <div className="flex flex-wrap gap-2">
-                  {values.map((value: string) => <button key={value} onClick={() => setSelectedSpecs((prev) => ({ ...prev, [key]: value }))} className={`px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ${selectedSpecs[key] === value ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>{value}</button>)}
+          {variations.length === 0 && (
+            <div className="space-y-4 mb-8">
+              {Object.entries(product.especificacoes || {}).map(([key, values]: any) => Array.isArray(values) && values.length > 0 ? (
+                <div key={key}>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">{key}</label>
+                  <div className="flex flex-wrap gap-2">
+                    {values.map((value: string) => <button key={value} onClick={() => setSelectedSpecs((prev) => ({ ...prev, [key]: value }))} className={`px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ${selectedSpecs[key] === value ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>{value}</button>)}
+                  </div>
                 </div>
-              </div>
-            ) : null)}
-          </div>
+              ) : null)}
+            </div>
+          )}
 
           <div className="mb-8">
-            <label className="block text-sm font-bold text-gray-700 mb-2">Quantidade</label>
+            <label className="block text-sm font-bold text-gray-700 mb-2">
+              {filterGroups.some((group) => group.name.toLowerCase().includes('quant')) ? 'Número de conjuntos' : 'Quantidade'}
+            </label>
             <div className="flex items-center gap-4">
               <button onClick={() => setQuantity((q) => Math.max(1, q - 1))} className="w-12 h-12 rounded-xl bg-gray-100 flex items-center justify-center text-primary font-bold text-xl active:bg-gray-200 transition-colors">-</button>
               <span className="font-display text-2xl font-bold text-primary w-12 text-center">{quantity}</span>
