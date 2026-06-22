@@ -320,7 +320,6 @@ export function Produto() {
                   </div>
                   <div className="text-right">
                     <p className="font-bold text-primary">{formatMoney(selectedVariation.preco)}</p>
-                    <p className="text-xs text-gray-500">Estoque: {selectedVariation.estoque || product.estoque || 0}</p>
                   </div>
                 </div>
               )}

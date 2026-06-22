@@ -33,6 +33,8 @@ type SpecGroup = {
   valoresTexto: string;
 };
 
+const NEW_CATEGORY_VALUE = '__nova_categoria__';
+
 const emptyProduct: ProductForm = {
   id: '',
   categoria_id: '',
@@ -267,6 +269,7 @@ export function Produtos() {
   const [search, setSearch] = useState('');
   const [products, setProducts] = useState<ProductForm[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [newCategoryName, setNewCategoryName] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<ProductForm | null>(null);
   const [editingProduct, setEditingProduct] = useState<ProductForm | null>(null);
   const [specGroups, setSpecGroups] = useState<SpecGroup[]>([]);
@@ -326,6 +329,7 @@ export function Produtos() {
     };
 
     setEditingProduct(product);
+    setNewCategoryName('');
     setSpecGroups(specsToGroups(product.especificacoes));
     setMode('new');
   };
@@ -338,6 +342,7 @@ export function Produtos() {
     };
 
     setEditingProduct(nextProduct);
+    setNewCategoryName('');
     setSpecGroups(specsToGroups(nextProduct.especificacoes));
     setMode('edit');
   };
@@ -354,6 +359,7 @@ export function Produtos() {
     setSelectedProduct(null);
     setEditingProduct(null);
     setSpecGroups([]);
+    setNewCategoryName('');
     setMode(null);
   };
 
@@ -433,8 +439,11 @@ export function Produtos() {
 
   const saveProduct = async () => {
     if (!editingProduct?.nome) return alert('Informe o nome do produto.');
-    if (!editingProduct.categoria_id && !categories[0]?.id) {
-      return alert('Cadastre uma categoria antes de salvar produto.');
+    if (!editingProduct.categoria_id) {
+      return alert('Selecione uma categoria ou escolha “Outros”.');
+    }
+    if (editingProduct.categoria_id === NEW_CATEGORY_VALUE && newCategoryName.trim().length < 2) {
+      return alert('Digite o nome da nova categoria.');
     }
 
     const groupNames = specGroups.map((group) => group.nome.trim()).filter(Boolean);
@@ -449,12 +458,40 @@ export function Produtos() {
     if (variationError) return alert(variationError);
 
     if (variations.length === 0 && Number(editingProduct.preco || 0) <= 0) {
-      return alert('Informe o preço base ou adicione uma combinação de quantidade e acabamento.');
+      return alert('Adicione pelo menos uma combinação com preço antes de salvar.');
     }
 
     try {
+      let categoryId = editingProduct.categoria_id;
+
+      if (categoryId === NEW_CATEGORY_VALUE) {
+        const categoryName = newCategoryName.trim();
+        const existingCategory = categories.find(
+          (category) => category.nome.trim().toLowerCase() === categoryName.toLowerCase()
+        );
+
+        if (existingCategory?.id) {
+          categoryId = existingCategory.id;
+        } else {
+          const createdCategory = await apiFetch<Category>('/categorias', {
+            method: 'POST',
+            body: JSON.stringify({
+              nome: categoryName,
+              slug: slugify(categoryName),
+              descricao: '',
+              ativo: true
+            })
+          });
+
+          if (!createdCategory?.id) throw new Error('Não foi possível criar a nova categoria.');
+          categoryId = createdCategory.id;
+        }
+      }
+
       const body = payloadFromForm({
         ...editingProduct,
+        categoria_id: categoryId,
+        descricao: editingProduct.descricao_longa || editingProduct.descricao || editingProduct.nome,
         especificacoes: groupsToSpecs(specGroups)
       });
 
@@ -625,7 +662,7 @@ export function Produtos() {
         <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
         <input
           type="text"
-          placeholder="Buscar por nome, SKU ou categoria..."
+          placeholder="Buscar por nome ou categoria..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="input pl-11"
@@ -642,7 +679,6 @@ export function Produtos() {
                 <th className="text-left px-6 py-4">Produto</th>
                 <th className="text-left px-6 py-4">Categoria</th>
                 <th className="text-left px-6 py-4">Preço</th>
-                <th className="text-left px-6 py-4">Estoque</th>
                 <th className="text-left px-6 py-4">Opções</th>
                 <th className="text-left px-6 py-4">Variações</th>
                 <th className="text-right px-6 py-4">Ações</th>
@@ -665,7 +701,6 @@ export function Produtos() {
                     <td className="px-6 py-4 font-semibold">
                       {qtdVariacoes > 0 ? `A partir de ${formatMoney(productMinPrice(product))}` : formatMoney(product.preco)}
                     </td>
-                    <td className="px-6 py-4 text-gray-600">{product.estoque} un</td>
                     <td className="px-6 py-4 text-gray-600">{qtdOpcoes}</td>
                     <td className="px-6 py-4 text-gray-600">{qtdVariacoes}</td>
                     <td className="px-6 py-4">
@@ -717,9 +752,7 @@ export function Produtos() {
               <p className="text-gray-600">{selectedProduct.descricao}</p>
             </div>
 
-            <div className="grid sm:grid-cols-3 gap-3">
-              <div className="card p-4 shadow-none"><p className="text-sm text-gray-500">Preço base</p><p className="font-bold text-primary">{formatMoney(selectedProduct.preco)}</p></div>
-              <div className="card p-4 shadow-none"><p className="text-sm text-gray-500">Estoque</p><p className="font-bold text-primary">{selectedProduct.estoque}</p></div>
+            <div className="grid gap-3">
               <div className="card p-4 shadow-none"><p className="text-sm text-gray-500">Variações</p><p className="font-bold text-primary">{normalizeVariations(selectedProduct.variacoes).length}</p></div>
             </div>
 
@@ -734,7 +767,7 @@ export function Produtos() {
             <div className="rounded-2xl bg-amber-50 border border-amber-100 p-4">
               <h3 className="font-bold text-primary">Cadastro avançado de produto</h3>
               <p className="text-sm text-gray-600 mt-1">
-                Cadastre os botões que o cliente verá na página do produto, como Acabamento, Quantidade, Tamanho e Modelo.
+                Cadastre as opções que o cliente verá e informe o preço em cada combinação.
               </p>
             </div>
 
@@ -746,51 +779,30 @@ export function Produtos() {
 
               <label className="block">
                 <span className="text-sm font-bold text-primary">Categoria</span>
-                <select className="input" value={editingProduct.categoria_id || ''} onChange={(e) => setEditingProduct({ ...editingProduct, categoria_id: e.target.value })}>
+                <select className="input" value={editingProduct.categoria_id || ''} onChange={(e) => {
+                  const categoria_id = e.target.value;
+                  setEditingProduct({ ...editingProduct, categoria_id });
+                  if (categoria_id !== NEW_CATEGORY_VALUE) setNewCategoryName('');
+                }}>
                   <option value="">Selecione uma categoria</option>
                   {categories.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                  <option value={NEW_CATEGORY_VALUE}>Outros — criar nova categoria</option>
                 </select>
               </label>
             </div>
 
-            <div className="grid sm:grid-cols-2 gap-3">
+            {editingProduct.categoria_id === NEW_CATEGORY_VALUE && (
               <label className="block">
-                <span className="text-sm font-bold text-primary">Slug/link do produto</span>
-                <input className="input" placeholder="cartao-de-visita-premium" value={editingProduct.slug || ''} onChange={(e) => setEditingProduct({ ...editingProduct, slug: e.target.value })} />
+                <span className="text-sm font-bold text-primary">Nome da nova categoria</span>
+                <input className="input" placeholder="Ex: Adesivos personalizados" value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} />
+                <span className="block text-xs text-gray-500 mt-1">A categoria será criada automaticamente ao salvar o produto.</span>
               </label>
-
-              <label className="block">
-                <span className="text-sm font-bold text-primary">SKU/código interno</span>
-                <input className="input" placeholder="SKU" value={editingProduct.sku || ''} onChange={(e) => setEditingProduct({ ...editingProduct, sku: e.target.value })} />
-              </label>
-            </div>
-
-            <label className="block">
-              <span className="text-sm font-bold text-primary">Descrição curta</span>
-              <textarea className="input min-h-24" placeholder="Descrição que aparece logo abaixo do preço" value={editingProduct.descricao || ''} onChange={(e) => setEditingProduct({ ...editingProduct, descricao: e.target.value })} />
-            </label>
+            )}
 
             <label className="block">
               <span className="text-sm font-bold text-primary">Descrição completa</span>
               <textarea className="input min-h-28" placeholder="Descrição completa do produto" value={editingProduct.descricao_longa || ''} onChange={(e) => setEditingProduct({ ...editingProduct, descricao_longa: e.target.value })} />
             </label>
-
-            <div className="grid sm:grid-cols-3 gap-3">
-              <label className="block">
-                <span className="text-sm font-bold text-primary">Preço base</span>
-                <input className="input" placeholder="Preço" type="number" value={editingProduct.preco || ''} onChange={(e) => setEditingProduct({ ...editingProduct, preco: Number(e.target.value) })} />
-              </label>
-
-              <label className="block">
-                <span className="text-sm font-bold text-primary">Preço original</span>
-                <input className="input" placeholder="Preço original" type="number" value={editingProduct.preco_original || ''} onChange={(e) => setEditingProduct({ ...editingProduct, preco_original: Number(e.target.value) })} />
-              </label>
-
-              <label className="block">
-                <span className="text-sm font-bold text-primary">Estoque base</span>
-                <input className="input" placeholder="Estoque" type="number" value={editingProduct.estoque || ''} onChange={(e) => setEditingProduct({ ...editingProduct, estoque: Number(e.target.value) })} />
-              </label>
-            </div>
 
             <label className="block">
               <span className="text-sm font-bold text-primary">Imagem principal</span>
@@ -930,15 +942,10 @@ export function Produtos() {
                       </div>
                     )}
 
-                    <div className="grid sm:grid-cols-2 gap-3">
+                    <div className="grid gap-3">
                       <label className="block">
                         <span className="text-sm font-bold text-primary">Preço *</span>
                         <input className="input" placeholder="Ex: 80,00" type="number" min="0" step="0.01" value={variation.preco || ''} onChange={(e) => updateVariation(index, 'preco', e.target.value)} />
-                      </label>
-
-                      <label className="block">
-                        <span className="text-sm font-bold text-primary">Estoque</span>
-                        <input className="input" placeholder="Ex: 50" type="number" min="0" step="1" value={variation.estoque || ''} onChange={(e) => updateVariation(index, 'estoque', e.target.value)} />
                       </label>
                     </div>
 
@@ -971,7 +978,7 @@ export function Produtos() {
               </div>
             </div>
 
-            <div className="grid sm:grid-cols-3 gap-3">
+            <div className="grid sm:grid-cols-2 gap-3">
               <label className="flex items-center gap-2 rounded-xl border border-gray-100 px-4 py-3">
                 <input type="checkbox" checked={!!editingProduct.destaque} onChange={(e) => setEditingProduct({ ...editingProduct, destaque: e.target.checked })} />
                 Produto em destaque
@@ -982,10 +989,6 @@ export function Produtos() {
                 Produto ativo
               </label>
 
-              <label className="block">
-                <span className="text-sm font-bold text-primary">Produção em dias</span>
-                <input className="input" type="number" value={editingProduct.tempo_producao || 3} onChange={(e) => setEditingProduct({ ...editingProduct, tempo_producao: Number(e.target.value) })} />
-              </label>
             </div>
 
             <div className="sticky bottom-0 -mx-5 -mb-5 bg-white border-t border-gray-100 p-4 grid grid-cols-2 gap-3">
