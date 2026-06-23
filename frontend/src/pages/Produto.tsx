@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Star, Clock, ChevronLeft, ChevronRight, ShoppingCart, Zap, Share2 } from 'lucide-react';
+import { Star, Clock, ChevronLeft, ChevronRight, ShoppingCart, Zap } from 'lucide-react';
 import { Product, ProductVariation, apiFetch, formatMoney, normalizeProduct } from '../lib/api';
 import { useApp } from '../contexts/AppContext';
 import { BottomSheet } from '../components/BottomSheet';
-import { shareProduct } from '../lib/share';
 
 function activeVariations(product?: Product | null) {
   return Array.isArray(product?.variacoes)
@@ -168,6 +167,9 @@ export function Produto() {
   });
 
   const unitPrice = selectedVariation ? Number(selectedVariation.preco || 0) : Number(product?.preco || 0);
+  const deliveryDays = selectedVariation
+    ? Math.max(1, Number(selectedVariation.prazo_entrega_dias || product?.tempo_producao || 3))
+    : Math.max(1, Number(product?.tempo_producao || 3));
   const totalPrice = unitPrice * quantity;
   const allImages = product ? [product.imagem_principal, ...(product.imagens_adicionais || [])].filter(Boolean) : [];
 
@@ -184,7 +186,7 @@ export function Produto() {
       ? {
           Variação: variationLabel(selectedVariation),
           'Preço da variação': formatMoney(unitPrice),
-          ...(selectedVariation.prazo_entrega ? { 'Prazo de entrega': selectedVariation.prazo_entrega } : {})
+          'Prazo estimado': `${deliveryDays} dias úteis`
         }
       : {})
   };
@@ -211,21 +213,6 @@ export function Produto() {
     } catch (error) {
       console.error(error);
       alert('Não foi possível continuar para a compra. Recarregue a página e tente novamente.');
-    }
-  };
-
-  const handleShareProduct = async () => {
-    if (!product) return;
-
-    try {
-      await shareProduct(product, {
-        price: unitPrice,
-        variationLabel: selectedVariation ? variationLabel(selectedVariation) : undefined,
-        prazoEntrega: selectedVariation?.prazo_entrega
-      });
-    } catch (error) {
-      console.error(error);
-      alert('Não foi possível compartilhar agora. Tente novamente.');
     }
   };
 
@@ -261,7 +248,6 @@ export function Produto() {
           {allImages.map((_, idx) => <button key={idx} onClick={() => setImageIndex(idx)} className={`w-2 h-2 rounded-full transition-all ${idx === imageIndex ? 'bg-white w-6' : 'bg-white/50'}`} />)}
         </div>
         <Link to="/catalogo" className="absolute top-4 left-4 w-10 h-10 rounded-full bg-white/80 backdrop-blur flex items-center justify-center shadow-lg"><ChevronLeft size={20} className="text-primary" /></Link>
-        <button type="button" onClick={handleShareProduct} className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/80 backdrop-blur flex items-center justify-center shadow-lg active:scale-90 transition-transform" aria-label="Compartilhar produto"><Share2 size={18} className="text-primary" /></button>
       </div>
 
       <div className="px-4 sm:px-0 sm:grid sm:grid-cols-2 sm:gap-10 sm:mt-8">
@@ -282,23 +268,13 @@ export function Produto() {
 
         <div className="sm:py-4">
           <Link to="/catalogo" className="sm:hidden inline-flex items-center gap-1 text-sm text-gray-500 mb-4"><ChevronLeft size={16} /> Voltar ao catálogo</Link>
-          <div className="flex items-start justify-between gap-3 mb-3">
-            <span className="inline-block px-3 py-1 rounded-full bg-gold/10 text-gold text-xs font-bold uppercase tracking-wider">{product.categoria_nome}</span>
-            <button
-              type="button"
-              onClick={handleShareProduct}
-              className="hidden sm:inline-flex h-10 px-4 rounded-2xl border border-gray-200 bg-white text-primary font-bold text-sm items-center justify-center gap-2 hover:bg-gray-50 active:scale-[0.98] transition-all"
-            >
-              <Share2 size={16} />
-              Compartilhar
-            </button>
-          </div>
+          <span className="inline-block px-3 py-1 rounded-full bg-gold/10 text-gold text-xs font-bold uppercase tracking-wider mb-3">{product.categoria_nome}</span>
           <h1 className="font-display text-3xl sm:text-4xl font-bold text-primary mb-4">{product.nome}</h1>
 
           <div className="flex items-center gap-3 mb-6">
             <div className="flex items-center gap-1"><Star size={16} className="text-gold fill-current" /><span className="font-bold text-primary">{Number(product.avaliacao_media || 5).toFixed(1)}</span></div>
             <span className="text-gray-300">|</span>
-            <div className="flex items-center gap-1 text-gray-500 text-sm"><Clock size={16} />{product.tempo_producao} dias úteis para produção</div>
+            <div className="flex items-center gap-1 text-gray-500 text-sm"><Clock size={16} />{deliveryDays} dias úteis para entrega</div>
           </div>
 
           <div className="mb-6">
@@ -348,9 +324,7 @@ export function Produto() {
                   </div>
                   <div className="text-right">
                     <p className="font-bold text-primary">{formatMoney(selectedVariation.preco)}</p>
-                    {selectedVariation.prazo_entrega && (
-                      <p className="text-xs text-gray-500">Prazo: {selectedVariation.prazo_entrega}</p>
-                    )}
+                    <p className="text-xs text-gray-500">Entrega: {deliveryDays} dias úteis</p>
                   </div>
                 </div>
               )}
@@ -400,7 +374,7 @@ export function Produto() {
           <div><p className="text-xs text-gray-500">Total</p><p className="font-display text-2xl font-bold text-primary">{formatMoney(totalPrice)}</p></div>
           <div className="flex items-center gap-3 bg-gray-100 rounded-xl p-1"><button onClick={() => setQuantity((q) => Math.max(1, q - 1))} className="w-9 h-9 rounded-lg bg-white flex items-center justify-center text-primary font-bold shadow-sm">-</button><span className="font-bold text-primary w-8 text-center">{quantity}</span><button onClick={() => setQuantity((q) => q + 1)} className="w-9 h-9 rounded-lg bg-white flex items-center justify-center text-primary font-bold shadow-sm">+</button></div>
         </div>
-        <div className="flex gap-3"><button onClick={handleShareProduct} className="btn btn-outline flex-1" aria-label="Compartilhar produto"><Share2 size={18} /></button><button onClick={handleAddToCart} className="btn btn-outline flex-1"><ShoppingCart size={18} /></button><button onClick={handleBuyNow} className="btn btn-primary flex-[2]"><Zap size={18} />Comprar Agora</button></div>
+        <div className="flex gap-3"><button onClick={handleAddToCart} className="btn btn-outline flex-1"><ShoppingCart size={18} /></button><button onClick={handleBuyNow} className="btn btn-primary flex-[2]"><Zap size={18} />Comprar Agora</button></div>
       </div>
 
       <BottomSheet isOpen={showCartSheet} onClose={() => setShowCartSheet(false)} title="Adicionado ao Carrinho!">

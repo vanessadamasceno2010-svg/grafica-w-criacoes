@@ -25,6 +25,7 @@ import { Relatorios } from './pages/admin/Relatorios';
 import { Usuarios } from './pages/admin/Usuarios';
 import { Orcamentos } from './pages/admin/Orcamentos';
 import { FluxoCaixa } from './pages/admin/FluxoCaixa';
+import { ContasPagar } from './pages/admin/ContasPagar';
 
 function App() {
   return (
@@ -50,6 +51,7 @@ function App() {
             <Route path="pedidos" element={<Pedidos />} />
             <Route path="orcamentos" element={<Orcamentos />} />
             <Route path="fluxo-caixa" element={<FluxoCaixa />} />
+            <Route path="contas-pagar" element={<ContasPagar />} />
             <Route path="clientes" element={<Clientes />} />
             <Route path="categorias" element={<Categorias />} />
             <Route path="cupons" element={<Cupons />} />

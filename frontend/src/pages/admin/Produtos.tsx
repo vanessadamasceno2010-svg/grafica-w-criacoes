@@ -76,7 +76,7 @@ function makeVariation(groups: SpecGroup[] = []): ProductVariation {
     acabamento: '',
     tamanho: '',
     preco: 0,
-    prazo_entrega: '',
+    prazo_entrega_dias: 3,
     estoque: 0,
     ativo: true
   };
@@ -98,7 +98,7 @@ function normalizeVariations(value: any): ProductVariation[] {
     acabamento: v?.acabamento || '',
     tamanho: v?.tamanho || '',
     preco: Number(v?.preco || 0),
-    prazo_entrega: v?.prazo_entrega || v?.prazo || '',
+    prazo_entrega_dias: Math.max(1, Number(v?.prazo_entrega_dias || 3)),
     estoque: Number(v?.estoque || 0),
     ativo: v?.ativo !== false
   }));
@@ -155,6 +155,10 @@ function validateVariations(variations: ProductVariation[], groups: SpecGroup[])
 
     if (Number(variation.preco || 0) <= 0) {
       return `Informe um preço maior que zero na combinação ${position}.`;
+    }
+
+    if (Number(variation.prazo_entrega_dias || 0) < 1) {
+      return `Informe o prazo de entrega na combinação ${position}.`;
     }
 
     const key = ((requiredGroups.length > 0
@@ -253,7 +257,7 @@ function generateVariationsFromSpecs(groups: SpecGroup[], basePrice: number, bas
       acabamento: '',
       tamanho: '',
       preco: Number(basePrice || 0),
-      prazo_entrega: '',
+      prazo_entrega_dias: 3,
       estoque: Number(baseStock || 0),
       ativo: true
     };
@@ -418,7 +422,7 @@ export function Produtos() {
     imagens_adicionais: Array.isArray(p.imagens_adicionais) ? p.imagens_adicionais : [],
     especificacoes: p.especificacoes && typeof p.especificacoes === 'object' ? p.especificacoes : groupsToSpecs(specGroups),
     variacoes: normalizeVariations(p.variacoes)
-      .filter((v) => String(v.nome || '').trim() || Object.values(variationOptions(v)).some(Boolean) || Number(v.preco || 0) > 0 || String(v.prazo_entrega || '').trim())
+      .filter((v) => String(v.nome || '').trim() || Object.values(variationOptions(v)).some(Boolean) || Number(v.preco || 0) > 0)
       .map((v) => ({
         id: v.id || makeId('VAR'),
         nome: v.nome || variationDescription(v),
@@ -428,7 +432,7 @@ export function Produtos() {
         acabamento: v.acabamento || '',
         tamanho: v.tamanho || '',
         preco: Number(v.preco || 0),
-        prazo_entrega: v.prazo_entrega || '',
+        prazo_entrega_dias: Math.max(1, Number(v.prazo_entrega_dias || 3)),
         estoque: Number(v.estoque || 0),
         ativo: v.ativo !== false
       })),
@@ -456,7 +460,7 @@ export function Produtos() {
     }
 
     const variations = normalizeVariations(editingProduct.variacoes)
-      .filter((variation) => String(variation.nome || '').trim() || Object.values(variationOptions(variation)).some(Boolean) || Number(variation.preco || 0) > 0 || String(variation.prazo_entrega || '').trim());
+      .filter((variation) => String(variation.nome || '').trim() || Object.values(variationOptions(variation)).some(Boolean) || Number(variation.preco || 0) > 0);
     const variationError = validateVariations(variations, specGroups);
 
     if (variationError) return alert(variationError);
@@ -556,7 +560,7 @@ export function Produtos() {
     const next = normalizeVariations(editingProduct.variacoes);
     next[index] = {
       ...next[index],
-      [field]: field === 'preco' || field === 'estoque' ? Number(value || 0) : value
+      [field]: field === 'preco' || field === 'estoque' || field === 'prazo_entrega_dias' ? Number(value || 0) : value
     };
 
     setEditingProduct({ ...editingProduct, variacoes: next });
@@ -953,8 +957,8 @@ export function Produtos() {
                       </label>
 
                       <label className="block">
-                        <span className="text-sm font-bold text-primary">Prazo de entrega</span>
-                        <input className="input" placeholder="Ex: 3 dias úteis" value={variation.prazo_entrega || ''} onChange={(e) => updateVariation(index, 'prazo_entrega', e.target.value)} />
+                        <span className="text-sm font-bold text-primary">Prazo de entrega (dias úteis) *</span>
+                        <input className="input" placeholder="Ex: 5" type="number" min="1" step="1" value={variation.prazo_entrega_dias || 3} onChange={(e) => updateVariation(index, 'prazo_entrega_dias', e.target.value)} />
                       </label>
                     </div>
 
