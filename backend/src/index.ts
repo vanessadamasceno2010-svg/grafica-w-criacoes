@@ -1,5 +1,5 @@
 import express, { Request, Response } from 'express';
-import cors from 'cors';
+import cors, { CorsOptions } from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
@@ -19,40 +19,29 @@ app.set('trust proxy', 1);
 
 app.use(helmet());
 
-app.use(
-  cors({
-    origin: config.frontendUrl || '*',
-    credentials: true
-  })
-);
-
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:3000',
   'https://grafica-w-criacoes-frontend.vercel.app',
   process.env.FRONTEND_URL
 ].filter(Boolean);
+const vercelPreviewOrigin = /^https:\/\/grafica-w-criacoes-frontend(?:-[a-z0-9-]+)?\.vercel\.app$/i;
 
-app.use(
-  cors({
-    origin: function (origin, callback) {
-      if (!origin) {
-        return callback(null, true);
-      }
-
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-
+const corsOptions: CorsOptions = {
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin) || vercelPreviewOrigin.test(origin)) {
       return callback(null, true);
-    },
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
-  })
-);
+    }
+    return callback(new Error('Origem não permitida pelo servidor.'));
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+};
 
-app.options('*', cors());
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 
 app.use(
   rateLimit({

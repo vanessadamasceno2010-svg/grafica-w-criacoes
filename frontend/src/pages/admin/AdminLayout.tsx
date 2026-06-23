@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { Menu, X, LogOut, LayoutDashboard, Package, ShoppingCart, Users, Settings, FolderTree, TicketPercent, MessageSquare, BarChart3, UserCog, Home, ClipboardList, WalletCards } from 'lucide-react';
+import { Menu, X, LogOut, LayoutDashboard, Package, ShoppingCart, Users, Settings, FolderTree, TicketPercent, MessageSquare, BarChart3, UserCog, Home, ClipboardList, WalletCards, ReceiptText } from 'lucide-react';
 import { useApp } from '../../contexts/AppContext';
 
 const links = [
@@ -9,6 +9,7 @@ const links = [
   { to: '/admin/pedidos', label: 'Pedidos', icon: ShoppingCart },
   { to: '/admin/orcamentos', label: 'Orçamentos', icon: ClipboardList },
   { to: '/admin/fluxo-caixa', label: 'Fluxo de Caixa', icon: WalletCards },
+  { to: '/admin/contas-pagar', label: 'Contas a Pagar', icon: ReceiptText, adminOnly: true },
   { to: '/admin/clientes', label: 'Clientes', icon: Users },
   { to: '/admin/categorias', label: 'Categorias', icon: FolderTree },
   { to: '/admin/cupons', label: 'Cupons', icon: TicketPercent },
@@ -22,6 +23,7 @@ export function AdminLayout() {
   const [open, setOpen] = useState(false);
   const { user, setUser } = useApp();
   const navigate = useNavigate();
+  const visibleLinks = links.filter((link) => !link.adminOnly || String(user?.role || '').toLowerCase() === 'admin');
 
   const handleLogout = () => {
     setUser(null);
@@ -46,7 +48,7 @@ export function AdminLayout() {
 
         {open && (
           <nav className="border-t border-white/10 px-4 py-4 space-y-2 max-h-[75vh] overflow-y-auto">
-            {links.map(({ to, label, icon: Icon }) => (
+            {visibleLinks.map(({ to, label, icon: Icon }) => (
               <NavLink key={to} to={to} end={to === '/admin'} onClick={() => setOpen(false)} className={({ isActive }) => `flex items-center gap-3 px-4 py-3 rounded-xl font-semibold transition-colors ${isActive ? 'bg-gold text-primary' : 'text-white/80 hover:bg-white/10'}`}>
                 <Icon size={18} /> {label}
               </NavLink>
@@ -73,7 +75,7 @@ export function AdminLayout() {
         </div>
 
         <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-          {links.map(({ to, label, icon: Icon }) => (
+          {visibleLinks.map(({ to, label, icon: Icon }) => (
             <NavLink key={to} to={to} end={to === '/admin'} className={({ isActive }) => `flex items-center gap-3 px-4 py-3 rounded-xl font-semibold transition-colors ${isActive ? 'bg-white text-primary' : 'text-white/80 hover:bg-white/10'}`}>
               <Icon size={18} /> {label}
             </NavLink>

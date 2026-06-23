@@ -1,9 +1,10 @@
 const isVercelSite =
   typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app');
+const configuredApiUrl = String(import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 
-export const API_BASE = isVercelSite
+export const API_BASE = configuredApiUrl || (isVercelSite
   ? '/api'
-  : import.meta.env.VITE_API_URL || 'https://grafica-w-criacoes-backend.vercel.app/api';
+  : 'https://grafica-w-criacoes-backend.vercel.app/api');
 
 export const API_URL = API_BASE;
 
@@ -28,7 +29,7 @@ export type ProductVariation = {
   acabamento?: string;
   tamanho?: string;
   preco: number;
-  prazo_entrega?: string;
+  prazo_entrega_dias?: number;
   estoque?: number;
   ativo?: boolean;
 };
@@ -258,7 +259,7 @@ export function normalizeProduct(product: any): Product {
           acabamento: v?.acabamento || '',
           tamanho: v?.tamanho || '',
           preco: Number(v?.preco || 0),
-          prazo_entrega: v?.prazo_entrega || v?.prazo || '',
+          prazo_entrega_dias: Math.max(1, Number(v?.prazo_entrega_dias || 3)),
           estoque: Number(v?.estoque || 0),
           ativo: v?.ativo !== false
         }))

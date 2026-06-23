@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { DollarSign, ShoppingCart, Users, Package, TrendingUp, WalletCards, AlertTriangle, MessageSquare } from 'lucide-react';
+import { DollarSign, ShoppingCart, Users, Package, TrendingUp, WalletCards, AlertTriangle, MessageSquare, ReceiptText, Clock3 } from 'lucide-react';
 import { apiFetch, formatMoney, getStoredUser } from '../../lib/api';
 
 const statusOptions = [
@@ -77,6 +77,9 @@ export function Dashboard() {
 
     return [
       { label: 'Fluxo do mês', value: formatMoney(data?.fluxoCaixaMes || 0), icon: WalletCards, color: 'text-success', bg: 'bg-success/10' },
+      { label: 'Contas do mês', value: formatMoney(data?.contasPagarMes || 0), icon: ReceiptText, color: 'text-primary', bg: 'bg-primary/10' },
+      { label: 'Contas a vencer', value: formatMoney(data?.contasAVencerMes || 0), icon: Clock3, color: 'text-amber-600', bg: 'bg-amber-50' },
+      { label: 'Contas vencidas', value: formatMoney(data?.contasVencidas || 0), icon: AlertTriangle, color: 'text-red-600', bg: 'bg-red-50' },
       { label: 'Vendas filtradas', value: formatMoney(data?.vendasMes || 0), icon: DollarSign, color: 'text-primary', bg: 'bg-primary/10' },
       { label: 'A receber', value: formatMoney(data?.valoresAReceber || 0), icon: WalletCards, color: 'text-red-600', bg: 'bg-red-50' },
       ...operacional,
