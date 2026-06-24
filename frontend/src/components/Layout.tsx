@@ -2,29 +2,35 @@ import { useEffect, useState } from 'react';
 import { Link, Outlet } from 'react-router-dom';
 import { Header } from './Header';
 import { BottomNav } from './BottomNav';
-import { apiFetch } from '../lib/api';
+import { WhatsAppButton } from './WhatsAppButton';   // ← Adicionado
 
 export function Layout() {
   const [config, setConfig] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    apiFetch<Record<string, string>>('/configuracoes').then(setConfig).catch(() => null);
+    fetch('/api/configuracoes')
+      .then(res => res.json())
+      .then(setConfig)
+      .catch(() => null);
   }, []);
 
   const nome = config.nome_empresa || 'Gráfica W Criações';
   const telefone = config.telefone || config.whatsapp || '(88) 99624-0470';
   const email = config.email || 'contato@graficawcriacoes.com';
-  const endereco = config.endereco || 'Endereço a definir';
+  const endereco = config.endereco || 'Guaraciaba do Norte - CE';
 
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
+      
       <main className="flex-1 pb-20 sm:pb-0">
         <Outlet />
       </main>
-      <BottomNav />
 
-      <footer className="hidden sm:block bg-primary text-white mt-16">
+      <BottomNav />
+      
+      {/* Footer melhorado */}
+      <footer className="hidden sm:block bg-primary text-white mt-auto">
         <div className="max-w-5xl mx-auto px-4 py-12 grid md:grid-cols-4 gap-8">
           <div>
             <div className="flex items-center gap-2.5 mb-4">
@@ -38,7 +44,7 @@ export function Layout() {
               <span className="font-display font-bold text-xl">{nome}</span>
             </div>
             <p className="text-gray-400 text-sm leading-relaxed">
-              {config.sobre || 'Impressos, brindes e personalizados com padrão premium. Qualidade e compromisso em cada detalhe.'}
+              {config.sobre || 'Impressos, brindes, bordados e personalizados com padrão premium há mais de 30 anos.'}
             </p>
           </div>
 
@@ -54,8 +60,8 @@ export function Layout() {
           <div>
             <h4 className="font-display font-bold mb-4">Atendimento</h4>
             <ul className="space-y-2 text-sm text-gray-400">
-              <li>WhatsApp: {telefone}</li>
-              <li>Email: {email}</li>
+              <li>WhatsApp: <a href={`https://wa.me/88996240470`} className="hover:text-gold">{telefone}</a></li>
+              <li>Email: <a href={`mailto:${email}`} className="hover:text-gold">{email}</a></li>
               <li>Endereço: {endereco}</li>
             </ul>
           </div>
@@ -63,17 +69,21 @@ export function Layout() {
           <div>
             <h4 className="font-display font-bold mb-4">Institucional</h4>
             <ul className="space-y-2 text-sm text-gray-400">
-              <li><Link to="/" className="hover:text-gold transition-colors">Tela inicial</Link></li>
-              <li><Link to="/sobre" className="hover:text-gold transition-colors">Sobre</Link></li>
+              <li><Link to="/" className="hover:text-gold transition-colors">Início</Link></li>
+              <li><Link to="/sobre" className="hover:text-gold transition-colors">Sobre Nós</Link></li>
               <li><Link to="/contato" className="hover:text-gold transition-colors">Contato</Link></li>
-              <li><Link to="/login" className="hover:text-gold transition-colors">Entrar</Link></li>
+              <li><Link to="/login" className="hover:text-gold transition-colors">Área do Cliente</Link></li>
             </ul>
           </div>
         </div>
+
         <div className="border-t border-white/10 py-6 text-center text-sm text-gray-500">
-          © {new Date().getFullYear()} {nome}. Todos os direitos reservados.
+          © {new Date().getFullYear()} {nome}. Todos os direitos reservados. | CNPJ: em breve
         </div>
       </footer>
+
+      {/* Botão WhatsApp Flutuante */}
+      <WhatsAppButton />
     </div>
   );
 }
