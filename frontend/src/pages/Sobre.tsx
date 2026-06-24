@@ -1,73 +1,83 @@
-import { SEO } from '../components/SEO';
+import { Sparkles, Target, Eye, ShieldCheck } from 'lucide-react';
 
 export function Sobre() {
+  const values = [
+    { icon: Target, title: 'Missão', desc: 'Oferecer soluções gráficas de alta qualidade que valorizem a identidade visual de cada cliente, com agilidade e compromisso.' },
+    { icon: Eye, title: 'Visão', desc: 'Ser referência regional em impressão personalizada, reconhecida pela excelência no atendimento e inovação nos acabamentos.' },
+    { icon: ShieldCheck, title: 'Valores', desc: 'Qualidade, transparência, respeito ao cliente e paixão por transformar ideias em produtos tangíveis de impacto.' },
+  ];
+
   return (
-    <>
-      <SEO 
-        title="Sobre Nós"
-        description="Conheça a Gráfica W Criações: 18 anos de experiência em impressão profissional, brindes corporativos, embalagens e sacolas personalizadas em Guaraciaba do Norte - CE."
-        keywords="sobre gráfica guaraciaba do norte, história gráfica, brindes corporativos ceará, embalagens personalizadas, sacolas de papel"
-      />
+    <div className="fade-in max-w-5xl mx-auto px-4 py-8 sm:py-12">
+      <h1 className="font-display text-3xl sm:text-4xl font-bold text-primary mb-6 text-center sm:text-left">
+        Sobre a Gráfica W Criações
+      </h1>
 
-      <div className="fade-in max-w-4xl mx-auto px-4 py-12">
-        <div className="text-center mb-12">
-          <h1 className="font-display text-5xl font-bold text-primary mb-4">Sobre a Gráfica W Criações</h1>
-          <p className="text-xl text-gray-600">18 anos transformando ideias em materiais que geram resultados</p>
-        </div>
-
-        <div className="prose prose-lg max-w-none text-gray-600 leading-relaxed">
-          <p>
-            Há <strong>18 anos</strong> no mercado, a <strong>Gráfica W Criações</strong> se consolidou como referência em impressão e produção de materiais promocionais na região de Guaraciaba do Norte - CE.
-          </p>
-
-          <p>
-            Somos especializados em soluções completas para empresas: <strong>brindes corporativos</strong>, <strong>embalagens personalizadas</strong>, <strong>sacolas de papel</strong>, adesivos, banners, cartões de visita, folders, etiquetas e todos os tipos de impressos.
-          </p>
-
-          <h2 className="text-3xl font-display font-bold text-primary mt-12 mb-6">Nossa Missão</h2>
-          <p>
-            Entregar qualidade premium com agilidade, ajudando empresas e empreendedores a se destacarem através de materiais bem produzidos e com identidade visual forte.
-          </p>
-
-          <h2 className="text-3xl font-display font-bold text-primary mt-12 mb-6">O que oferecemos</h2>
-          <ul className="grid md:grid-cols-2 gap-4 text-lg">
-            <li className="flex items-start gap-3"><span className="text-gold mt-1">•</span> Brindes Corporativos Personalizados</li>
-            <li className="flex items-start gap-3"><span className="text-gold mt-1">•</span> Embalagens e Sacolas de Papel</li>
-            <li className="flex items-start gap-3"><span className="text-gold mt-1">•</span> Impressão Digital e Offset</li>
-            <li className="flex items-start gap-3"><span className="text-gold mt-1">•</span> Adesivos e Etiquetas</li>
-            <li className="flex items-start gap-3"><span className="text-gold mt-1">•</span> Banners e Backdrops</li>
-            <li className="flex items-start gap-3"><span className="text-gold mt-1">•</span> Materiais para PDV e Eventos</li>
-          </ul>
-
-          <div className="bg-gray-50 p-8 rounded-3xl mt-12">
-            <h3 className="text-2xl font-display font-bold text-primary mb-4">Por que escolher a W Criações?</h3>
-            <div className="grid md:grid-cols-3 gap-6 text-center">
-              <div>
-                <div className="text-4xl font-display font-bold text-gold mb-2">18</div>
-                <p className="font-medium">Anos de Experiência</p>
-              </div>
-              <div>
-                <div className="text-4xl font-display font-bold text-gold mb-2">100%</div>
-                <p className="font-medium">Atendimento Personalizado</p>
-              </div>
-              <div>
-                <div className="text-4xl font-display font-bold text-gold mb-2">Rápido</div>
-                <p className="font-medium">Prazo de Entrega</p>
-              </div>
+      <div className="grid lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 space-y-6">
+          <div className="card p-6 sm:p-8">
+            <div className="flex items-center gap-3 mb-4">
+              <Sparkles size={24} className="text-gold" />
+              <h2 className="font-display text-2xl font-bold text-primary">Quem Somos</h2>
             </div>
+            <p className="text-gray-600 leading-relaxed text-lg mb-6">
+              Somos uma gráfica moderna focada em impressos personalizados, atendimento ágil e acabamento premium. 
+              Unimos tecnologia de ponta, design estratégico e produção cuidadosa para entregar materiais que 
+              realmente valorizam marcas e negócios.
+            </p>
+            <p className="text-gray-600 leading-relaxed">
+              Desde nossos primeiros pedidos, o compromisso com a qualidade e a satisfação do cliente tem sido 
+              o pilar que sustenta nosso crescimento. Cada projeto é tratado com atenção especial, garantindo 
+              que o resultado final supere as expectativas.
+            </p>
+          </div>
+
+          <div className="grid sm:grid-cols-3 gap-4">
+            {values.map(({ icon: Icon, title, desc }) => (
+              <div key={title} className="card p-5 text-center">
+                <div className="w-12 h-12 rounded-full bg-gold/10 flex items-center justify-center mx-auto mb-4">
+                  <Icon size={24} className="text-gold" />
+                </div>
+                <h3 className="font-display font-bold text-primary mb-2">{title}</h3>
+                <p className="text-sm text-gray-500 leading-relaxed">{desc}</p>
+              </div>
+            ))}
           </div>
         </div>
 
-        <div className="text-center mt-16">
-          <a 
-            href="https://wa.me/88996240470?text=Olá! Quero conhecer melhor a Gráfica W Criações."
-            target="_blank"
-            className="btn btn-primary text-lg px-10 py-4 inline-flex items-center gap-3"
-          >
-            Falar com Nossa Equipe
-          </a>
+        <div className="space-y-6">
+          <div className="card p-6">
+            <h3 className="font-display text-xl font-bold text-primary mb-4">Certificações e Qualidade</h3>
+            <ul className="space-y-3 text-gray-600">
+              <li className="flex items-start gap-3">
+                <ShieldCheck size={20} className="text-success flex-shrink-0 mt-0.5" />
+                <span>Processos de produção revisados e padronizados</span>
+              </li>
+              <li className="flex items-start gap-3">
+                <ShieldCheck size={20} className="text-success flex-shrink-0 mt-0.5" />
+                <span>Controle rigoroso de qualidade em cada etapa</span>
+              </li>
+              <li className="flex items-start gap-3">
+                <ShieldCheck size={20} className="text-success flex-shrink-0 mt-0.5" />
+                <span>Equipe especializada e treinada continuamente</span>
+              </li>
+            </ul>
+          </div>
+
+          <div className="card overflow-hidden">
+            <img 
+              src="https://images.unsplash.com/photo-1562577309-4932fdd64cd1?w=600&q=80" 
+              alt="Equipe trabalhando" 
+              className="w-full h-48 object-cover"
+            />
+            <div className="p-5">
+              <p className="text-sm text-gray-500 italic">
+                "Transformamos suas ideias em materiais que geram resultados reais para o seu negócio."
+              </p>
+            </div>
+          </div>
         </div>
       </div>
-    </>
+    </div>
   );
 }

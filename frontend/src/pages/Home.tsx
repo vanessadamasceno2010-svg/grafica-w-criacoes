@@ -1,9 +1,8 @@
-import { useEffect, useState } from 'react'; // Corrigido de "Import" para "import"
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Sparkles, Clock, ShieldCheck, Truck, MessageCircle, ArrowRight, Search } from 'lucide-react';
 import { ProductCard } from '../components/ProductCard';
-import { SEO } from '../components/SEO';
-import { apiFetch, Category, Product, getPublicConfig, normalizeCategory, normalizeProduct, whatsappUrl } from '../lib/api';
+import { BRAND, Category, Product, apiFetch, getPublicConfig, normalizeCategory, normalizeProduct, whatsappUrl } from '../lib/api';
 
 export function Home() {
   const [config, setConfig] = useState<Record<string, string>>({});
@@ -13,36 +12,25 @@ export function Home() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Busca as configurações públicas com segurança
-    getPublicConfig()
-      .then(setConfig)
-      .catch((err) => console.error("Erro ao carregar configurações públicas:", err));
+    getPublicConfig().then(setConfig);
 
-    // Busca os produtos com tratamento seguro de respostas nulas/indefinidas
     apiFetch<{ data: any[] }>('/produtos?limit=12')
       .then((res) => {
-        const list = (res?.data || []).map(normalizeProduct);
+        const list = (res.data || []).map(normalizeProduct);
         setProducts(list.sort((a, b) => Number(b.destaque) - Number(a.destaque)));
       })
-      .catch((err) => {
-        console.error("Erro ao buscar produtos da API:", err);
-        setProducts([]);
-      });
+      .catch(() => setProducts([]));
 
-    // Busca as categorias de forma segura
     apiFetch<any[]>('/categorias')
       .then((rows) => setCategories((rows || []).map(normalizeCategory)))
-      .catch((err) => {
-        console.error("Erro ao buscar categorias da API:", err);
-        setCategories([]);
-      });
+      .catch(() => setCategories([]));
   }, []);
 
   const features = [
-    { icon: Sparkles, title: 'Qualidade Premium', desc: 'Impressão e acabamento profissional para sua marca.' },
-    { icon: Clock, title: 'Produção Rápida', desc: 'Prazos ágeis para materiais promocionais e brindes.' },
-    { icon: ShieldCheck, title: 'Pedido Controlado', desc: 'Acompanhe todo o processo do seu projeto.' },
-    { icon: Truck, title: 'Entrega em Todo Ceará', desc: 'Flexibilidade e pontualidade na entrega.' }
+    { icon: Sparkles, title: 'Design Premium', desc: 'Acabamentos de alta qualidade que valorizam sua marca.' },
+    { icon: Clock, title: 'Produção Rápida', desc: 'Prazos ágeis sem comprometer a excelência do produto.' },
+    { icon: ShieldCheck, title: 'Pedido Controlado', desc: 'Acompanhe cada etapa da produção do seu pedido.' },
+    { icon: Truck, title: 'Entrega ou Retirada', desc: 'Flexibilidade para receber onde e quando for melhor.' }
   ];
 
   function acompanhar() {
@@ -51,118 +39,110 @@ export function Home() {
   }
 
   return (
-    <>
-      <SEO 
-        title="Gráfica em Guaraciaba do Norte"
-        description="Impressão de materiais promocionais, brindes corporativos, embalagens e sacolas personalizadas com qualidade premium. Atendemos empresas em toda região."
-        keywords="gráfica guaraciaba do norte, brindes corporativos, embalagens personalizadas, sacolas de papel, impressão digital, adesivos, banners"
-      />
+    <div className="fade-in">
+      <section className="brand-gradient text-white relative overflow-hidden">
+        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10" />
+        <div className="relative max-w-5xl mx-auto px-4 py-12 sm:py-20">
+          <div className="text-center sm:text-left sm:flex sm:items-center sm:gap-12">
+            <div className="sm:flex-1">
+              <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 text-sm font-semibold mb-6 border border-white/10">
+                <Sparkles size={14} className="text-gold" />
+                {config.home_badge || 'Padrão visual premium'}
+              </span>
 
-      <div className="fade-in">
-        {/* Hero Section */}
-        <section className="relative min-h-[85vh] md:min-h-[90vh] flex items-center bg-gradient-to-br from-primary via-primary to-primary/90 text-white overflow-hidden">
-          <div className="absolute inset-0 bg-[url('https://picsum.photos/id/1015/2000/1200')] bg-cover bg-center opacity-20" />
-          <div className="absolute inset-0 bg-black/40" />
-          
-          <div className="relative max-w-6xl mx-auto px-4 py-12 md:py-20 w-full">
-            <div className="grid md:grid-cols-2 gap-10 md:gap-12 items-center">
-              <div className="space-y-6 md:space-y-8">
-                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 border border-white/20 text-sm font-medium backdrop-blur-md">
-                  <Sparkles size={18} className="text-gold" />
-                  18 anos de Excelência
-                </div>
+              <h1 className="font-display text-4xl sm:text-5xl lg:text-6xl font-extrabold leading-tight mb-6">
+                {config.home_titulo || 'Produtos personalizados para divulgar sua marca com impacto.'}
+              </h1>
 
-                <h1 className="font-display text-4xl sm:text-5xl md:text-6xl font-bold leading-tight tracking-tighter">
-                  Sua marca merece<br />
-                  <span className="text-gold">o melhor visual</span>
-                </h1>
+              <p className="text-gray-300 text-lg mb-8 leading-relaxed max-w-xl">
+                {config.home_subtitulo || 'Escolha os produtos, monte o carrinho e finalize o pedido direto pelo WhatsApp com atendimento personalizado.'}
+              </p>
 
-                <p className="text-lg md:text-xl text-gray-200 leading-relaxed max-w-lg">
-                  Especialistas em impressão, brindes corporativos, embalagens e sacolas personalizadas para empresas.
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Link to="/catalogo" className="btn btn-primary text-base">
+                  Ver Catálogo <ArrowRight size={18} />
+                </Link>
+                <a href={whatsappUrl('Olá vim do Site')} target="_blank" rel="noopener noreferrer" className="btn btn-whats text-base">
+                  <MessageCircle size={18} />Falar no WhatsApp
+                </a>
+              </div>
+
+              <div className="mt-8 bg-white/10 border border-white/15 rounded-3xl p-4 backdrop-blur-sm max-w-xl">
+                <h2 className="font-display font-bold text-xl mb-1">
+                  {config.home_codigo_pedido_titulo || 'Acompanhe seu pedido'}
+                </h2>
+                <p className="text-gray-300 text-sm mb-3">
+                  {config.home_codigo_pedido_texto || 'Digite o código do pedido para consultar o andamento.'}
                 </p>
-
-                <div className="flex flex-col sm:flex-row gap-4">
-                  <Link to="/catalogo" className="btn btn-primary text-base sm:text-lg px-8 py-4 flex items-center justify-center gap-3 font-semibold rounded-2xl">
-                    Ver Catálogo Completo <ArrowRight size={22} />
-                  </Link>
-
-                  <a href={whatsappUrl('Olá! Quero um orçamento para brindes e impressos.')} target="_blank" rel="noopener noreferrer" className="btn btn-whats text-base sm:text-lg px-8 py-4 flex items-center justify-center gap-3 font-semibold rounded-2xl">
-                    <MessageCircle size={24} /> Falar no WhatsApp
-                  </a>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    value={codigo}
+                    onChange={(e) => setCodigo(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && acompanhar()}
+                    className="h-12 rounded-2xl px-4 text-primary outline-none flex-1 text-base"
+                    placeholder="Ex: WC1234567890"
+                  />
+                  <button onClick={acompanhar} className="h-12 px-5 rounded-2xl bg-gold text-primary font-bold flex items-center justify-center gap-2">
+                    <Search size={18} /> Buscar
+                  </button>
                 </div>
               </div>
             </div>
-          </div>
-        </section>
 
-        {/* Features */}
-        <section className="max-w-6xl mx-auto px-4 py-16">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-            {features.map(({ icon: Icon, title, desc }) => (
-              <div key={title} className="card p-8 text-center hover:shadow-xl transition-all group">
-                <div className="inline-flex p-4 rounded-2xl bg-gold/10 text-gold mb-6 group-hover:scale-110 transition-transform">
-                  <Icon size={32} />
-                </div>
-                <h3 className="font-display font-bold text-xl text-primary mb-3">{title}</h3>
-                <p className="text-gray-600 leading-relaxed">{desc}</p>
+            <div className="mt-10 sm:mt-0 sm:flex-1 relative">
+              <div className="relative rounded-3xl overflow-hidden shadow-2xl border border-white/10">
+                <img
+                  src={config.home_banner_url || products[0]?.imagem_principal || 'https://images.unsplash.com/photo-1589829085413-56de8ae18c73?w=800&q=80'}
+                  alt="Produtos personalizados"
+                  className="w-full h-64 sm:h-96 object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-primary/60 to-transparent" />
               </div>
-            ))}
+            </div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        {/* Categorias */}
-        <section className="max-w-6xl mx-auto px-4 py-12">
-          <h2 className="font-display font-bold text-3xl text-primary mb-8 text-center md:text-left">Categorias</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-            {categories.map((cat) => (
-              <Link key={cat.id} to={`/catalogo?categoria=${cat.slug}`} className="card p-4 text-center hover:border-gold hover:shadow-md transition-all">
-                {cat.imagem && (
-                  <img src={cat.imagem} alt={cat.nome} className="w-16 h-16 object-contain mx-auto mb-3 rounded" />
-                )}
-                <span className="font-medium text-sm text-gray-800 break-words">{cat.nome}</span>
-              </Link>
-            ))}
-          </div>
-        </section>
+      <section className="max-w-5xl mx-auto px-4 py-12 sm:py-16">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          {features.map(({ icon: Icon, title, desc }) => (
+            <div key={title} className="card p-4 sm:p-6 text-center sm:text-left">
+              <div className="inline-flex p-3 rounded-2xl bg-gold/10 text-gold mb-4"><Icon size={24} /></div>
+              <h3 className="font-display font-bold text-primary mb-2">{title}</h3>
+              <p className="text-gray-500 text-sm leading-relaxed hidden sm:block">{desc}</p>
+            </div>
+          ))}
+        </div>
+      </section>
 
-        {/* Produtos em Destaque */}
-        <section className="max-w-6xl mx-auto px-4 py-12 mb-12">
-          <div className="flex flex-col sm:flex-row justify-between items-center mb-8 gap-4">
-            <h2 className="font-display font-bold text-3xl text-primary">Produtos em Destaque</h2>
-            <Link to="/catalogo" className="text-primary hover:text-gold font-medium flex items-center gap-1 transition-colors">
-              Ver todos os produtos <ArrowRight size={18} />
+      <section className="max-w-5xl mx-auto px-4 py-8 sm:py-12">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="font-display text-2xl sm:text-3xl font-bold text-primary">Produtos em Destaque</h2>
+          <Link to="/catalogo" className="text-gold font-semibold text-sm flex items-center gap-1 active:opacity-70">
+            Ver todos <ArrowRight size={16} />
+          </Link>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+          {products.filter((p) => p.destaque).slice(0, 3).map((product) => (
+            <ProductCard key={product.id} product={product} />
+          ))}
+          {products.filter((p) => p.destaque).length === 0 && products.slice(0, 3).map((product) => (
+            <ProductCard key={product.id} product={product} />
+          ))}
+        </div>
+      </section>
+
+      <section className="max-w-5xl mx-auto px-4 py-8 sm:py-12 mb-8">
+        <h2 className="font-display text-2xl sm:text-3xl font-bold text-primary mb-6">Categorias</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+          {categories.map((cat) => (
+            <Link key={cat.id} to={`/catalogo?categoria=${cat.slug || cat.id}`} className="card p-4 flex flex-col items-center text-center gap-3 active:scale-95 transition-transform">
+              <div className="w-12 h-12 rounded-full bg-primary/5 flex items-center justify-center"><Sparkles size={20} className="text-primary" /></div>
+              <span className="font-semibold text-sm text-primary">{cat.nome}</span>
             </Link>
-          </div>
-          <div className="grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-            {products.map((product) => (
-              <ProductCard key={product.id} product={product} />
-            ))}
-          </div>
-        </section>
-
-        {/* Caixa de Acompanhamento de Pedido */}
-        <section className="max-w-md mx-auto px-4 py-12">
-          <div className="card p-6 border-2 border-dashed border-gray-300 rounded-2xl bg-gray-50/50">
-            <h3 className="font-display font-bold text-lg text-primary mb-2 flex items-center gap-2">
-              <Search size={20} className="text-gold" /> Já tem um projeto conosco?
-            </h3>
-            <p className="text-gray-600 text-sm mb-4">Insira o código do seu pedido para acompanhar o andamento.</p>
-            <div className="flex gap-2">
-              <input 
-                type="text" 
-                placeholder="Ex: #1234" 
-                value={codigo}
-                onChange={(e) => setCodigo(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && acompanhar()}
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:border-primary text-gray-800"
-              />
-              <button onClick={acompanhar} className="btn btn-primary px-4 py-2 rounded-xl text-sm font-semibold">
-                Buscar
-              </button>
-            </div>
-          </div>
-        </section>
-      </div>
-    </>
+          ))}
+        </div>
+      </section>
+    </div>
   );
 }
