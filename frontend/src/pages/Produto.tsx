@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Star, Clock, ChevronLeft, ChevronRight, ShoppingCart, Zap } from 'lucide-react';
 import { Product, ProductVariation, apiFetch, formatMoney, normalizeProduct } from '../lib/api';
 import { useApp } from '../contexts/AppContext';
+import { SEO } from '../components/SEO';
 
 function activeVariations(product?: Product | null) {
   return Array.isArray(product?.variacoes)
@@ -46,9 +47,7 @@ export function Produto() {
         const normalized = normalizeProduct(data);
         setProduct(normalized);
         const vars = activeVariations(normalized);
-        if (vars[0]) {
-          setSelectedSpecs(variationOptions(vars[0]));
-        }
+        if (vars[0]) setSelectedSpecs(variationOptions(vars[0]));
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -61,7 +60,6 @@ export function Produto() {
       ...Object.keys(product?.especificacoes || {}),
       ...variations.flatMap(v => Object.keys(variationOptions(v)))
     ])];
-
     return names.map(name => ({
       name,
       values: [...new Set(variations.map(v => variationOptions(v)[name]).filter(Boolean))]
@@ -88,9 +86,7 @@ export function Produto() {
     addToCart(product, quantity, {
       ...selectedSpecs,
       Variação: selectedVariation ? variationLabel(selectedVariation) : '',
-      'Preço': formatMoney(unitPrice)
     });
-    // Feedback visual (opcional)
     alert('Produto adicionado ao carrinho!');
   };
 
@@ -103,91 +99,101 @@ export function Produto() {
   if (!product) return <div className="p-10 text-center">Produto não encontrado</div>;
 
   return (
-    <div className="fade-in max-w-5xl mx-auto pb-28 sm:pb-12">
-      {/* Imagem Mobile */}
-      <div className="sm:hidden relative bg-white border-b">
-        <div className="aspect-[4/3] relative overflow-hidden">
-          <img src={allImages[imageIndex] || product.imagem_principal} alt={product.nome} className="w-full h-full object-contain bg-white p-4" />
+    <>
+      <SEO 
+        title={product.nome}
+        description={`Confira ${product.nome} - ${product.descricao || 'Produto de alta qualidade para sua empresa'}. Brindes corporativos, embalagens e materiais promocionais.`}
+        keywords={`${product.nome}, ${product.categoria_nome}, brindes corporativos, embalagens personalizadas, gráfica guaraciaba do norte`}
+      />
+
+      <div className="fade-in max-w-5xl mx-auto pb-28 sm:pb-12">
+        {/* Imagem Mobile */}
+        <div className="sm:hidden relative bg-white border-b">
+          <div className="aspect-[4/3] relative overflow-hidden">
+            <img 
+              src={allImages[imageIndex] || product.imagem_principal} 
+              alt={product.nome} 
+              className="w-full h-full object-contain bg-white p-4" 
+            />
+          </div>
         </div>
-      </div>
 
-      <div className="px-4 sm:px-6">
-        <h1 className="font-display text-3xl sm:text-4xl font-bold text-primary mt-6 mb-4">{product.nome}</h1>
+        <div className="px-4 sm:px-6">
+          <h1 className="font-display text-3xl sm:text-4xl font-bold text-primary mt-6 mb-4">{product.nome}</h1>
 
-        <div className="flex items-center gap-4 mb-6">
-          <div className="flex items-center gap-1"><Star size={18} className="text-gold fill-current" /> 5.0</div>
-          <div className="flex items-center gap-1 text-gray-500"><Clock size={18} /> {deliveryDays} dias úteis</div>
-        </div>
+          <div className="flex items-center gap-4 mb-6">
+            <div className="flex items-center gap-1"><Star size={18} className="text-gold fill-current" /> 5.0</div>
+            <div className="flex items-center gap-1 text-gray-500"><Clock size={18} /> {deliveryDays} dias úteis</div>
+          </div>
 
-        <p className="text-4xl font-display font-bold text-primary mb-6">{formatMoney(unitPrice)}</p>
-        <p className="text-gray-600 leading-relaxed mb-8">{product.descricao}</p>
+          <p className="text-4xl font-display font-bold text-primary mb-6">{formatMoney(unitPrice)}</p>
+          <p className="text-gray-600 leading-relaxed mb-8">{product.descricao}</p>
 
-        {/* Variações */}
-        {filterGroups.length > 0 && (
-          <div className="mb-10 space-y-8">
-            {filterGroups.map((group) => (
-              <div key={group.name}>
-                <label className="block text-sm font-bold text-gray-700 mb-3">{group.name}</label>
-                <div className="flex flex-wrap gap-3">
-                  {group.values.map((value) => {
-                    const isSelected = selectedSpecs[group.name] === value;
-                    return (
-                      <button
-                        key={value}
-                        onClick={() => selectFilterValue(group.name, value)}
-                        className={`px-6 py-3 rounded-2xl text-sm font-medium transition-all ${
-                          isSelected 
-                            ? 'bg-primary text-white shadow-lg' 
-                            : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
-                        }`}
-                      >
-                        {value}
-                      </button>
-                    );
-                  })}
+          {/* Variações */}
+          {filterGroups.length > 0 && (
+            <div className="mb-10 space-y-8">
+              {filterGroups.map((group) => (
+                <div key={group.name}>
+                  <label className="block text-sm font-bold text-gray-700 mb-3">{group.name}</label>
+                  <div className="flex flex-wrap gap-3">
+                    {group.values.map((value) => {
+                      const isSelected = selectedSpecs[group.name] === value;
+                      return (
+                        <button
+                          key={value}
+                          onClick={() => selectFilterValue(group.name, value)}
+                          className={`px-6 py-3 rounded-2xl text-sm font-medium transition-all ${
+                            isSelected ? 'bg-primary text-white shadow-lg' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                          }`}
+                        >
+                          {value}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
+              ))}
+            </div>
+          )}
 
-        {/* Quantidade */}
-        <div className="mb-10">
-          <label className="block text-sm font-bold text-gray-700 mb-3">Quantidade</label>
-          <div className="flex items-center gap-4">
-            <button onClick={() => setQuantity(q => Math.max(1, q-1))} className="w-14 h-14 rounded-2xl bg-gray-100 text-3xl font-bold">-</button>
-            <span className="font-display text-3xl font-bold w-16 text-center">{quantity}</span>
-            <button onClick={() => setQuantity(q => q + 1)} className="w-14 h-14 rounded-2xl bg-gray-100 text-3xl font-bold">+</button>
+          {/* Quantidade */}
+          <div className="mb-10">
+            <label className="block text-sm font-bold text-gray-700 mb-3">Quantidade</label>
+            <div className="flex items-center gap-4">
+              <button onClick={() => setQuantity(q => Math.max(1, q-1))} className="w-14 h-14 rounded-2xl bg-gray-100 text-3xl font-bold">-</button>
+              <span className="font-display text-3xl font-bold w-16 text-center">{quantity}</span>
+              <button onClick={() => setQuantity(q => q + 1)} className="w-14 h-14 rounded-2xl bg-gray-100 text-3xl font-bold">+</button>
+            </div>
+          </div>
+
+          {/* Descrição Longa com Scroll Suave */}
+          <div className="card p-6 mb-24">
+            <h2 className="font-display text-2xl font-bold text-primary mb-5">Descrição Completa</h2>
+            <div className="max-h-[420px] overflow-y-auto pr-3 scroll-smooth leading-relaxed text-gray-600 whitespace-pre-line">
+              {product.descricao_longa || product.descricao || 'Descrição não disponível.'}
+            </div>
           </div>
         </div>
 
-        {/* Descrição Longa com Scroll Suave */}
-        <div className="card p-6 mb-24">
-          <h2 className="font-display text-2xl font-bold text-primary mb-5">Descrição Completa</h2>
-          <div className="max-h-[420px] overflow-y-auto pr-3 scroll-smooth leading-relaxed text-gray-600 whitespace-pre-line">
-            {product.descricao_longa || product.descricao || 'Descrição não disponível.'}
-          </div>
-        </div>
-      </div>
-
-      {/* Barra fixa no mobile */}
-      <div className="sm:hidden fixed bottom-16 left-0 right-0 bg-white border-t p-4 shadow-2xl z-50">
-        <div className="flex justify-between mb-4">
-          <div>
-            <p className="text-xs text-gray-500">Total</p>
-            <p className="text-2xl font-display font-bold text-primary">{formatMoney(totalPrice)}</p>
+        {/* Barra fixa no mobile */}
+        <div className="sm:hidden fixed bottom-16 left-0 right-0 bg-white border-t p-4 shadow-2xl z-50">
+          <div className="flex justify-between mb-4">
+            <div>
+              <p className="text-xs text-gray-500">Total</p>
+              <p className="text-2xl font-display font-bold text-primary">{formatMoney(totalPrice)}</p>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setQuantity(q => Math.max(1,q-1))} className="w-11 h-11 rounded-xl bg-gray-100 text-2xl font-bold">-</button>
+              <span className="text-2xl font-bold w-10 text-center self-center">{quantity}</span>
+              <button onClick={() => setQuantity(q => q+1)} className="w-11 h-11 rounded-xl bg-gray-100 text-2xl font-bold">+</button>
+            </div>
           </div>
           <div className="flex gap-3">
-            <button onClick={() => setQuantity(q => Math.max(1,q-1))} className="w-11 h-11 rounded-xl bg-gray-100 text-2xl font-bold">-</button>
-            <span className="text-2xl font-bold w-10 text-center self-center">{quantity}</span>
-            <button onClick={() => setQuantity(q => q+1)} className="w-11 h-11 rounded-xl bg-gray-100 text-2xl font-bold">+</button>
+            <button onClick={handleAddToCart} className="btn btn-outline flex-1">Adicionar ao Carrinho</button>
+            <button onClick={handleBuyNow} className="btn btn-primary flex-[2]">Comprar Agora</button>
           </div>
         </div>
-        <div className="flex gap-3">
-          <button onClick={handleAddToCart} className="btn btn-outline flex-1">Adicionar ao Carrinho</button>
-          <button onClick={handleBuyNow} className="btn btn-primary flex-[2]">Comprar Agora</button>
-        </div>
       </div>
-    </div>
+    </>
   );
 }
