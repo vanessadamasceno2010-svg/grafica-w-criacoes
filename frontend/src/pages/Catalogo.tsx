@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Search, SlidersHorizontal, X } from 'lucide-react';
+import { Search, SlidersHorizontal, X, ArrowRight } from 'lucide-react';
 import { ProductCard } from '../components/ProductCard';
 import { apiFetch, Category, Product, normalizeCategory, normalizeProduct } from '../lib/api';
 import { BottomSheet } from '../components/BottomSheet';
@@ -46,7 +46,7 @@ export function Catalogo() {
         setProducts((prodRes.data || []).map(normalizeProduct));
         setCategories((catRows || []).map(normalizeCategory));
       })
-      .catch((err: any) => alert(err.message || 'Erro ao carregar catálogo.'))
+      .catch(() => alert('Erro ao carregar catálogo.'))
       .finally(() => setLoading(false));
   }, [search, category]);
 
@@ -73,64 +73,132 @@ export function Catalogo() {
   const hasActiveFilters = search || category || sort !== 'destaque';
 
   return (
-    <div className="fade-in max-w-5xl mx-auto px-4 py-6">
-      <h1 className="font-display text-3xl font-bold text-primary mb-6">Catálogo de Produtos</h1>
+    <div className="fade-in max-w-6xl mx-auto px-4 py-8">
+      <div className="mb-8">
+        <h1 className="font-display text-4xl md:text-5xl font-bold text-primary mb-2">Catálogo</h1>
+        <p className="text-gray-600 text-lg">Encontre o produto perfeito para sua marca</p>
+      </div>
 
-      <div className="flex gap-3 mb-6">
+      {/* Barra de Busca + Filtro */}
+      <div className="flex flex-col sm:flex-row gap-3 mb-8 sticky top-20 z-40 bg-white py-4 border-b">
         <div className="relative flex-1">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-          <input type="text" placeholder="Buscar produtos..." value={search} onChange={(e) => setSearch(e.target.value)} className="input pl-11 pr-4" />
-          {search && <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 active:text-gray-600"><X size={18} /></button>}
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={22} />
+          <input 
+            type="text" 
+            placeholder="Buscar por nome ou descrição..." 
+            value={search} 
+            onChange={(e) => setSearch(e.target.value)} 
+            className="w-full pl-12 pr-4 py-4 rounded-2xl border border-gray-200 focus:border-gold focus:ring-2 focus:ring-gold/30 text-base"
+          />
+          {search && (
+            <button 
+              onClick={() => setSearch('')} 
+              className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            >
+              <X size={20} />
+            </button>
+          )}
         </div>
-        <button onClick={() => setFilterOpen(true)} className={`btn ${hasActiveFilters ? 'btn-primary' : 'btn-outline'} px-4`}>
-          <SlidersHorizontal size={20} />
-          <span className="hidden sm:inline">Filtros</span>
+
+        <button 
+          onClick={() => setFilterOpen(true)} 
+          className={`flex items-center justify-center gap-2 px-6 py-4 rounded-2xl font-medium transition-all ${hasActiveFilters ? 'bg-primary text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+        >
+          <SlidersHorizontal size={22} />
+          Filtros
         </button>
       </div>
 
+      {/* Filtros Ativos */}
       {hasActiveFilters && (
-        <div className="flex flex-wrap gap-2 mb-6">
-          {search && <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-medium">Busca: {search}<button onClick={() => setSearch('')} className="hover:text-danger"><X size={14} /></button></span>}
-          {category && <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-medium">Categoria: {category}<button onClick={() => setCategory('')} className="hover:text-danger"><X size={14} /></button></span>}
-          <button onClick={clearFilters} className="text-sm text-gray-500 underline hover:text-primary">Limpar tudo</button>
+        <div className="flex flex-wrap gap-2 mb-8">
+          {search && (
+            <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary text-sm">
+              Busca: {search}
+              <button onClick={() => setSearch('')}><X size={16} /></button>
+            </span>
+          )}
+          {category && (
+            <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary text-sm">
+              Categoria: {category}
+              <button onClick={() => setCategory('')}><X size={16} /></button>
+            </span>
+          )}
+          <button onClick={clearFilters} className="text-sm text-gray-500 underline hover:text-primary ml-2">
+            Limpar tudo
+          </button>
         </div>
       )}
 
+      {/* Lista de Produtos */}
       {loading ? (
-        <div className="card p-10 text-center text-gray-500">Carregando produtos...</div>
+        <div className="card p-12 text-center">
+          <div className="animate-spin h-10 w-10 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
+          <p>Carregando produtos...</p>
+        </div>
       ) : filteredProducts.length === 0 ? (
-        <div className="card p-10 text-center">
-          <p className="text-gray-500 mb-4">Nenhum produto encontrado com esses filtros.</p>
-          <button onClick={clearFilters} className="btn btn-primary">Limpar Filtros</button>
+        <div className="card p-12 text-center">
+          <p className="text-xl text-gray-500 mb-6">Nenhum produto encontrado.</p>
+          <button onClick={clearFilters} className="btn btn-primary">
+            Limpar Filtros
+          </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-          {filteredProducts.map((product) => <ProductCard key={product.id} product={product} />)}
-        </div>
+        <>
+          <div className="flex justify-between items-center mb-6">
+            <p className="text-gray-600">
+              {filteredProducts.length} produto{filteredProducts.length !== 1 ? 's' : ''} encontrado{filteredProducts.length !== 1 ? 's' : ''}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
+            {filteredProducts.map((product) => (
+              <ProductCard key={product.id} product={product} />
+            ))}
+          </div>
+        </>
       )}
 
-      <BottomSheet isOpen={filterOpen} onClose={() => setFilterOpen(false)} title="Filtros">
-        <div className="space-y-6">
+      {/* BottomSheet de Filtros */}
+      <BottomSheet isOpen={filterOpen} onClose={() => setFilterOpen(false)} title="Filtros Avançados">
+        <div className="space-y-8 py-2">
           <div>
-            <label className="block text-sm font-bold text-gray-700 mb-3">Categoria</label>
-            <div className="flex flex-wrap gap-2">
-              <button onClick={() => setCategory('')} className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors ${!category ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600'}`}>Todas</button>
+            <label className="block text-sm font-bold text-gray-700 mb-4">Categoria</label>
+            <div className="flex flex-wrap gap-3">
+              <button 
+                onClick={() => setCategory('')} 
+                className={`px-5 py-3 rounded-2xl text-sm font-medium transition-all ${!category ? 'bg-primary text-white' : 'bg-gray-100 hover:bg-gray-200'}`}
+              >
+                Todas as Categorias
+              </button>
               {categories.map((cat) => (
-                <button key={cat.id} onClick={() => setCategory(cat.slug || cat.id)} className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors ${category === cat.slug || category === cat.id ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600'}`}>{cat.nome}</button>
+                <button 
+                  key={cat.id} 
+                  onClick={() => setCategory(cat.slug || String(cat.id))} 
+                  className={`px-5 py-3 rounded-2xl text-sm font-medium transition-all ${category === (cat.slug || cat.id) ? 'bg-primary text-white' : 'bg-gray-100 hover:bg-gray-200'}`}
+                >
+                  {cat.nome}
+                </button>
               ))}
             </div>
           </div>
+
           <div>
             <label className="block text-sm font-bold text-gray-700 mb-3">Ordenar por</label>
-            <select value={sort} onChange={(e) => setSort(e.target.value)} className="input">
-              <option value="destaque">Destaques</option>
-              <option value="preco">Menor Preço</option>
-              <option value="avaliacao">Melhor Avaliação</option>
+            <select 
+              value={sort} 
+              onChange={(e) => setSort(e.target.value)} 
+              className="w-full p-4 rounded-2xl border border-gray-200 text-base"
+            >
+              <option value="destaque">Destaques primeiro</option>
+              <option value="preco">Menor preço</option>
+              <option value="avaliacao">Melhor avaliados</option>
             </select>
           </div>
-          <div className="flex gap-3 pt-4 border-t border-gray-100">
-            <button onClick={clearFilters} className="btn btn-outline flex-1">Limpar</button>
-            <button onClick={() => setFilterOpen(false)} className="btn btn-primary flex-1">Aplicar Filtros</button>
+
+          <div className="flex gap-3 pt-6 border-t">
+            <button onClick={clearFilters} className="btn btn-outline flex-1">Limpar Filtros</button>
+            <button onClick={() => setFilterOpen(false)} className="btn btn-primary flex-1">Ver Resultados</button>
           </div>
         </div>
       </BottomSheet>
