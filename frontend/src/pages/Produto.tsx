@@ -4,6 +4,7 @@ import { Star, Clock, ChevronLeft, ChevronRight, ShoppingCart, Zap, Share2 } fro
 import { Product, ProductVariation, apiFetch, formatMoney, normalizeProduct } from '../lib/api';
 import { useApp } from '../contexts/AppContext';
 import { BottomSheet } from '../components/BottomSheet';
+import { shareProduct } from '../lib/share';
 
 function activeVariations(product?: Product | null) {
   return Array.isArray(product?.variacoes)
@@ -203,7 +204,20 @@ export function Produto() {
       alert('Não foi possível adicionar ao carrinho. Recarregue a página e tente novamente.');
     }
   };
+const handleShare = async () => {
+  if (!product) return;
 
+  try {
+    await shareProduct(product, {
+      price: unitPrice,
+      variationLabel: selectedVariation ? variationLabel(selectedVariation) : undefined,
+      prazoEntrega: `${deliveryDays} dias úteis`,
+    });
+  } catch (error) {
+    console.error(error);
+    alert('Não foi possível compartilhar este produto. Tente novamente.');
+  }
+};
   const handleBuyNow = () => {
     if (!cartProduct) return;
 
@@ -355,10 +369,34 @@ export function Produto() {
             </div>
           </div>
 
-          <div className="hidden sm:flex gap-4">
-            <button onClick={handleAddToCart} className="btn btn-outline flex-1 text-base"><ShoppingCart size={20} />Adicionar ao Carrinho</button>
-            <button onClick={handleBuyNow} className="btn btn-primary flex-1 text-base"><Zap size={20} />Comprar Agora</button>
-          </div>
+          <div className="hidden sm:grid sm:grid-cols-3 gap-3">
+  <button
+    type="button"
+    onClick={handleShare}
+    className="btn btn-outline text-base"
+  >
+    <Share2 size={20} />
+    Compartilhar
+  </button>
+
+  <button
+    type="button"
+    onClick={handleAddToCart}
+    className="btn btn-outline text-base"
+  >
+    <ShoppingCart size={20} />
+    Adicionar
+  </button>
+
+  <button
+    type="button"
+    onClick={handleBuyNow}
+    className="btn btn-primary text-base"
+  >
+    <Zap size={20} />
+    Comprar
+  </button>
+</div>
         </div>
       </div>
 
@@ -374,7 +412,34 @@ export function Produto() {
           <div><p className="text-xs text-gray-500">Total</p><p className="font-display text-2xl font-bold text-primary">{formatMoney(totalPrice)}</p></div>
           <div className="flex items-center gap-3 bg-gray-100 rounded-xl p-1"><button onClick={() => setQuantity((q) => Math.max(1, q - 1))} className="w-9 h-9 rounded-lg bg-white flex items-center justify-center text-primary font-bold shadow-sm">-</button><span className="font-bold text-primary w-8 text-center">{quantity}</span><button onClick={() => setQuantity((q) => q + 1)} className="w-9 h-9 rounded-lg bg-white flex items-center justify-center text-primary font-bold shadow-sm">+</button></div>
         </div>
-        <div className="flex gap-3"><button onClick={handleAddToCart} className="btn btn-outline flex-1"><ShoppingCart size={18} /></button><button onClick={handleBuyNow} className="btn btn-primary flex-[2]"><Zap size={18} />Comprar Agora</button></div>
+        <div className="flex gap-3">
+  <button
+    type="button"
+    onClick={handleShare}
+    className="btn btn-outline flex-1"
+    aria-label="Compartilhar produto"
+  >
+    <Share2 size={18} />
+  </button>
+
+  <button
+    type="button"
+    onClick={handleAddToCart}
+    className="btn btn-outline flex-1"
+    aria-label="Adicionar ao carrinho"
+  >
+    <ShoppingCart size={18} />
+  </button>
+
+  <button
+    type="button"
+    onClick={handleBuyNow}
+    className="btn btn-primary flex-[2]"
+  >
+    <Zap size={18} />
+    Comprar
+  </button>
+</div>
       </div>
 
       <BottomSheet isOpen={showCartSheet} onClose={() => setShowCartSheet(false)} title="Adicionado ao Carrinho!">
