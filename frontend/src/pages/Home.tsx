@@ -58,7 +58,7 @@ export function Home() {
 
             <p className="text-xl text-gray-200 max-w-lg">
               Impressos, brindes, bordados e personalizados com padrão profissional. 
-              Mais de 30 anos transformando ideias em resultados.
+              Mais de 18 anos transformando ideias em resultados.
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4">
@@ -115,7 +115,7 @@ export function Home() {
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
               <div className="absolute bottom-8 left-8 right-8">
-                <p className="text-white/90 text-sm uppercase tracking-widest">Mais de 30 anos de experiência</p>
+                <p className="text-white/90 text-sm uppercase tracking-widest">Mais de 18 anos de experiência</p>
               </div>
             </div>
           </div>
