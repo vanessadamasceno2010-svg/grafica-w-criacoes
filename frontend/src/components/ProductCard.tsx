@@ -1,6 +1,8 @@
 import { Link } from 'react-router-dom';
-import { Star } from 'lucide-react';
+import { Share2, Star } from 'lucide-react';
+
 import { Product, formatMoney } from '../lib/api';
+import { safeProductPath, shareProduct } from '../lib/share';
 
 interface ProductCardProps {
   product: Product;
@@ -22,56 +24,73 @@ function minPrice(product: Product) {
   return Math.min(...vars.map((v) => Number(v.preco || 0)));
 }
 
-function safeProductPath(product: Product) {
-  // Usa primeiro o ID, porque ele não tem acento, não muda e evita erro de slug/nome.
-  // Isso corrige o problema de clicar no produto da home e cair em /produto/Cartao com tela branca.
-  const raw = product.id || product.slug || product.nome || '';
-  return encodeURIComponent(String(raw).trim());
-}
-
 export function ProductCard({ product }: ProductCardProps) {
   const vars = activeVariations(product);
   const price = minPrice(product);
   const target = safeProductPath(product);
   const image = product.imagem_principal || '/assets/chaveiros-personalizados.jpeg';
 
+  const prazoEntrega =
+    vars[0]?.prazo_entrega_dias
+      ? `${vars[0].prazo_entrega_dias} dias úteis`
+      : product.tempo_producao
+        ? `${product.tempo_producao} dias úteis`
+        : undefined;
+
+  const handleShare = async () => {
+    try {
+      await shareProduct(product, {
+        price,
+        prazoEntrega,
+      });
+    } catch (error) {
+      console.error(error);
+      alert('Não foi possível compartilhar este produto. Tente novamente.');
+    }
+  };
+
   return (
-    <Link
-      to={`/produto/${target}`}
-      className="group card flex flex-col h-full active:scale-[0.98] transition-transform duration-200 cursor-pointer"
-    >
-      <div className="relative aspect-[4/3] bg-gray-100 overflow-hidden">
-        <img
-          src={image}
-          alt={product.nome}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-          loading="lazy"
-          onError={(event) => {
-            event.currentTarget.src = '/assets/chaveiros-personalizados.jpeg';
-          }}
-        />
+    <article className="group card flex flex-col h-full transition-transform duration-200">
+      <Link
+        to={`/produto/${target}`}
+        className="block active:scale-[0.98] transition-transform duration-200"
+        aria-label={`Ver produto ${product.nome}`}
+      >
+        <div className="relative aspect-[4/3] bg-gray-100 overflow-hidden">
+          <img
+            src={image}
+            alt={product.nome}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            loading="lazy"
+            onError={(event) => {
+              event.currentTarget.src = '/assets/chaveiros-personalizados.jpeg';
+            }}
+          />
 
-        {product.destaque && (
-          <span className="absolute top-3 left-3 badge bg-gold text-primary shadow-lg">
-            Destaque
-          </span>
-        )}
+          {product.destaque && (
+            <span className="absolute top-3 left-3 badge bg-gold text-primary shadow-lg">
+              Destaque
+            </span>
+          )}
 
-        {product.preco_original && product.preco_original > price && (
-          <span className="absolute top-3 right-3 badge bg-danger text-white shadow-lg">
-            Oferta
-          </span>
-        )}
-      </div>
+          {product.preco_original && product.preco_original > price && (
+            <span className="absolute top-3 right-3 badge bg-danger text-white shadow-lg">
+              Oferta
+            </span>
+          )}
+        </div>
+      </Link>
 
       <div className="p-4 flex flex-col flex-1">
         <p className="text-xs font-semibold text-gold uppercase tracking-wider mb-1">
           {product.categoria_nome || 'Produto'}
         </p>
 
-        <h3 className="font-display font-bold text-primary text-lg leading-tight mb-2 line-clamp-2">
-          {product.nome}
-        </h3>
+        <Link to={`/produto/${target}`} className="block">
+          <h3 className="font-display font-bold text-primary text-lg leading-tight mb-2 line-clamp-2 hover:text-gold transition-colors">
+            {product.nome}
+          </h3>
+        </Link>
 
         <p className="text-gray-500 text-sm line-clamp-2 mb-4 flex-1">
           {product.descricao || 'Produto personalizado.'}
@@ -79,9 +98,11 @@ export function ProductCard({ product }: ProductCardProps) {
 
         <div className="flex items-center gap-1.5 mb-3">
           <Star size={14} className="text-gold fill-current" />
+
           <span className="text-sm font-bold text-gray-700">
             {Number(product.avaliacao_media || 5).toFixed(1)}
           </span>
+
           <span className="text-xs text-gray-400">
             · {product.tempo_producao || 3} dias úteis
           </span>
@@ -98,11 +119,30 @@ export function ProductCard({ product }: ProductCardProps) {
             <p className="text-xs text-gray-500 font-semibold">A partir de</p>
           )}
 
-          <p className="font-display font-bold text-2xl text-primary">
+          <p className="font-display font-bold text-2xl text-primary mb-3">
             {formatMoney(price)}
           </p>
+
+          <div className="grid grid-cols-2 gap-2">
+            <Link
+              to={`/produto/${target}`}
+              className="btn btn-primary w-full text-sm px-3 py-2"
+            >
+              Ver produto
+            </Link>
+
+            <button
+              type="button"
+              onClick={handleShare}
+              className="btn btn-outline w-full text-sm px-3 py-2"
+              aria-label={`Compartilhar produto ${product.nome}`}
+            >
+              <Share2 size={16} />
+              Compartilhar
+            </button>
+          </div>
         </div>
       </div>
-    </Link>
+    </article>
   );
 }
