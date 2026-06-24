@@ -26,7 +26,7 @@ export async function shareProduct(product: Product, options: ShareProductOption
   const url = options.url || productShareUrl(product);
   const price = options.price !== undefined ? Number(options.price || 0) : Number(product.preco || 0);
 
-  const lines = [
+  const message = [
     `Olha esse produto da ${BRAND.name}:`,
     '',
     `*${product.nome}*`,
@@ -35,13 +35,15 @@ export async function shareProduct(product: Product, options: ShareProductOption
     options.prazoEntrega ? `Prazo de entrega: ${options.prazoEntrega}` : '',
     product.descricao ? `\n${product.descricao}` : '',
     '',
-    `Ver produto: ${url}`
-  ].filter(Boolean).join('\n');
+    `Ver produto: ${url}`,
+  ]
+    .filter(Boolean)
+    .join('\n');
 
   const shareData: ShareData = {
     title: product.nome,
-    text: lines,
-    url
+    text: message,
+    url,
   };
 
   if (typeof navigator !== 'undefined' && navigator.share) {
@@ -54,12 +56,12 @@ export async function shareProduct(product: Product, options: ShareProductOption
   }
 
   if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(lines);
+    await navigator.clipboard.writeText(message);
     window.alert('Link do produto copiado para compartilhar.');
     return;
   }
 
   if (typeof window !== 'undefined') {
-    window.open(`https://wa.me/?text=${encodeURIComponent(lines)}`, '_blank', 'noopener,noreferrer');
+    window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer');
   }
 }
