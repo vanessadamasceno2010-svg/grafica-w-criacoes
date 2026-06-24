@@ -2,124 +2,76 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
-  html {
-    scroll-behavior: smooth;
-    -webkit-tap-highlight-color: transparent;
-  }
-  
-  body {
-    @apply bg-bg text-gray-800 font-sans antialiased;
-    padding-bottom: env(safe-area-inset-bottom);
-  }
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Playfair+Display:wght@700;900&display=swap');
 
-  input, textarea, select, button {
-    @apply text-base; /* Prevents iOS zoom on focus */
-  }
+:root {
+  --primary: #1e3a8a;
+  --primary-dark: #172554;
+  --gold: #f59e0b;
+  --success: #10b981;
 }
 
-@layer components {
-  .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3.5 font-bold transition-all duration-200 active:scale-95 disabled:opacity-50 disabled:active:scale-100 touch-manipulation;
-  }
+/* Cores Personalizadas */
+.primary { color: var(--primary); }
+.gold { color: var(--gold); }
+.gold-text { color: var(--gold); }
+.bg-primary { background-color: var(--primary); }
+.bg-gold { background-color: var(--gold); }
+.success { color: var(--success); }
 
-  .btn-primary {
-    @apply bg-gradient-to-br from-gold to-gold2 text-primary shadow-lg shadow-gold/20;
-  }
-
-  .btn-dark {
-    @apply bg-primary text-white shadow-lg shadow-primary/20;
-  }
-
-  .btn-whats {
-    @apply bg-success text-white shadow-lg shadow-success/20;
-  }
-
-  .btn-outline {
-    @apply bg-white border-2 border-gray-200 text-primary hover:border-gold hover:text-gold;
-  }
-
-  .btn-danger {
-    @apply bg-red-50 text-danger border border-red-200 hover:bg-red-100;
-  }
-
-  .btn-ghost {
-    @apply bg-transparent text-gray-600 hover:bg-gray-100;
-  }
-
-  .input {
-    @apply w-full rounded-xl border-2 border-gray-200 bg-white px-4 py-3.5 outline-none transition-all duration-200 focus:border-gold focus:ring-4 focus:ring-gold/10;
-  }
-
-  .card {
-    @apply bg-white rounded-2xl border border-gray-100 shadow-premium overflow-hidden;
-  }
-
-  .badge {
-    @apply inline-flex items-center rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wide;
-  }
-
-  .gold-text {
-    @apply bg-gradient-to-r from-gold2 via-gold to-accent bg-clip-text text-transparent;
-  }
-
-  .brand-gradient {
-    @apply bg-gradient-to-br from-secondary via-primary to-[#020713];
-  }
-
-  /* Modal padrão do painel */
-  .bottom-sheet-backdrop {
-    @apply fixed inset-0 z-[99999] bg-slate-950/70 backdrop-blur-sm;
-  }
-
-  .bottom-sheet {
-    @apply relative mx-auto my-4 flex w-[calc(100%-24px)] max-w-3xl max-h-[calc(100dvh-32px)] flex-col overflow-hidden rounded-3xl bg-white shadow-2xl;
-  }
-
-  .bottom-sheet-handle {
-    @apply hidden;
-  }
-
-  /* Mobile Table Alternative */
-  .mobile-list {
-    @apply grid gap-3;
-  }
-
-  .mobile-list-item {
-    @apply card p-4 flex flex-col gap-3;
-  }
-
-  /* Hide scrollbar for clean UI */
-  .no-scrollbar::-webkit-scrollbar {
-    display: none;
-  }
-  .no-scrollbar {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
-  }
+/* Tipografia Premium */
+.font-display {
+  font-family: 'Playfair Display', sans-serif;
 }
 
-@layer utilities {
-  .fade-in {
-    animation: fadeIn 0.4s ease-out both;
-  }
+h1, h2, h3, h4 {
+  font-family: 'Playfair Display', sans-serif;
+  font-weight: 700;
+}
 
-  @keyframes fadeIn {
-    from {
-      opacity: 0;
-      transform: translateY(12px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
+/* Botões Modernos */
+.btn {
+  @apply px-6 py-3 rounded-2xl font-semibold transition-all active:scale-95 flex items-center justify-center gap-2;
+}
 
-  .safe-top {
-    padding-top: env(safe-area-inset-top);
-  }
+.btn-primary {
+  @apply bg-primary hover:bg-primary/90 text-white shadow-md shadow-primary/30;
+}
 
-  .safe-bottom {
-    padding-bottom: env(safe-area-inset-bottom);
-  }
+.btn-whats {
+  @apply bg-green-500 hover:bg-green-600 text-white shadow-md shadow-green-500/30;
+}
+
+.btn-secondary {
+  @apply border-2 border-primary text-primary hover:bg-primary hover:text-white;
+}
+
+/* Cards */
+.card {
+  @apply bg-white rounded-3xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-all duration-300;
+}
+
+/* Hero Gradient */
+.brand-gradient {
+  background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%);
+}
+
+/* Melhoria de Scroll e Focus */
+input:focus, textarea:focus {
+  @apply ring-2 ring-gold/50 border-gold;
+}
+
+/* Animações suaves */
+.fade-in {
+  animation: fadeIn 0.6s ease forwards;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Melhor responsividade em mobile */
+.safe-top {
+  padding-top: env(safe-area-inset-top);
 }
