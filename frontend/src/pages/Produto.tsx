@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Star, Clock, ChevronLeft, ChevronRight, ShoppingCart, Zap } from 'lucide-react';
+import { Star, Clock, ChevronLeft, ChevronRight, ShoppingCart, Zap, Share2 } from 'lucide-react';
 import { Product, ProductVariation, apiFetch, formatMoney, normalizeProduct } from '../lib/api';
 import { useApp } from '../contexts/AppContext';
 import { BottomSheet } from '../components/BottomSheet';
