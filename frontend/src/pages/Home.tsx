@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react'; // Corrigido de "Import" para "import"
 import { Link, useNavigate } from 'react-router-dom';
 import { Sparkles, Clock, ShieldCheck, Truck, MessageCircle, ArrowRight, Search } from 'lucide-react';
 import { ProductCard } from '../components/ProductCard';
@@ -13,17 +13,29 @@ export function Home() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    getPublicConfig().then(setConfig);
+    // Busca as configurações públicas com segurança
+    getPublicConfig()
+      .then(setConfig)
+      .catch((err) => console.error("Erro ao carregar configurações públicas:", err));
+
+    // Busca os produtos com tratamento seguro de respostas nulas/indefinidas
     apiFetch<{ data: any[] }>('/produtos?limit=12')
       .then((res) => {
-        const list = (res.data || []).map(normalizeProduct);
+        const list = (res?.data || []).map(normalizeProduct);
         setProducts(list.sort((a, b) => Number(b.destaque) - Number(a.destaque)));
       })
-      .catch(() => setProducts([]));
+      .catch((err) => {
+        console.error("Erro ao buscar produtos da API:", err);
+        setProducts([]);
+      });
 
+    // Busca as categorias de forma segura
     apiFetch<any[]>('/categorias')
       .then((rows) => setCategories((rows || []).map(normalizeCategory)))
-      .catch(() => setCategories([]));
+      .catch((err) => {
+        console.error("Erro ao buscar categorias da API:", err);
+        setCategories([]);
+      });
   }, []);
 
   const features = [
@@ -98,8 +110,58 @@ export function Home() {
           </div>
         </section>
 
-        {/* Produtos em Destaque e Categorias (mantidos) */}
-        {/* ... (o resto do seu código de produtos e categorias pode ficar igual) ... */}
+        {/* Categorias */}
+        <section className="max-w-6xl mx-auto px-4 py-12">
+          <h2 className="font-display font-bold text-3xl text-primary mb-8 text-center md:text-left">Categorias</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+            {categories.map((cat) => (
+              <Link key={cat.id} to={`/catalogo?categoria=${cat.slug}`} className="card p-4 text-center hover:border-gold hover:shadow-md transition-all">
+                {cat.imagem && (
+                  <img src={cat.imagem} alt={cat.nome} className="w-16 h-16 object-contain mx-auto mb-3 rounded" />
+                )}
+                <span className="font-medium text-sm text-gray-800 break-words">{cat.nome}</span>
+              </Link>
+            ))}
+          </div>
+        </section>
+
+        {/* Produtos em Destaque */}
+        <section className="max-w-6xl mx-auto px-4 py-12 mb-12">
+          <div className="flex flex-col sm:flex-row justify-between items-center mb-8 gap-4">
+            <h2 className="font-display font-bold text-3xl text-primary">Produtos em Destaque</h2>
+            <Link to="/catalogo" className="text-primary hover:text-gold font-medium flex items-center gap-1 transition-colors">
+              Ver todos os produtos <ArrowRight size={18} />
+            </Link>
+          </div>
+          <div className="grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+            {products.map((product) => (
+              <ProductCard key={product.id} product={product} />
+            ))}
+          </div>
+        </section>
+
+        {/* Caixa de Acompanhamento de Pedido */}
+        <section className="max-w-md mx-auto px-4 py-12">
+          <div className="card p-6 border-2 border-dashed border-gray-300 rounded-2xl bg-gray-50/50">
+            <h3 className="font-display font-bold text-lg text-primary mb-2 flex items-center gap-2">
+              <Search size={20} className="text-gold" /> Já tem um projeto conosco?
+            </h3>
+            <p className="text-gray-600 text-sm mb-4">Insira o código do seu pedido para acompanhar o andamento.</p>
+            <div className="flex gap-2">
+              <input 
+                type="text" 
+                placeholder="Ex: #1234" 
+                value={codigo}
+                onChange={(e) => setCodigo(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && acompanhar()}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:border-primary text-gray-800"
+              />
+              <button onClick={acompanhar} className="btn btn-primary px-4 py-2 rounded-xl text-sm font-semibold">
+                Buscar
+              </button>
+            </div>
+          </div>
+        </section>
       </div>
     </>
   );
