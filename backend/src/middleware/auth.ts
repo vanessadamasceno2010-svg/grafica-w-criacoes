@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+
 import { config } from '../config.js';
 import { HttpError } from '../utils/http.js';
 
@@ -17,18 +18,28 @@ declare module 'express-serve-static-core' {
   }
 }
 
-const JWT_SECRET = String(config.jwtSecret || process.env.JWT_SECRET || 'segredo-temporario-dev');
+const JWT_SECRET = config.jwtSecret;
+
+function normalizePermissions(value: unknown) {
+  return Array.isArray(value) ? value.map(String) : [];
+}
 
 export function signToken(user: AuthUser): string {
+  if (!JWT_SECRET || JWT_SECRET.length < 16) {
+    throw new HttpError(500, 'JWT_SECRET não configurado corretamente.');
+  }
+
   const payload = {
     id: user.id,
     email: user.email,
     role: user.role,
     nome: user.nome || '',
-    funcionario_permissoes: Array.isArray(user.funcionario_permissoes) ? user.funcionario_permissoes : []
+    funcionario_permissoes: normalizePermissions(user.funcionario_permissoes),
   };
 
-  return (jwt.sign as any)(payload, JWT_SECRET, { expiresIn: 604800 });
+  return (jwt.sign as any)(payload, JWT_SECRET, {
+    expiresIn: config.jwtExpiresIn || '7d',
+  });
 }
 
 export function auth(req: Request, _res: Response, next: NextFunction) {
@@ -42,31 +53,53 @@ export function auth(req: Request, _res: Response, next: NextFunction) {
     const token = header.replace('Bearer ', '').trim();
     const decoded = jwt.verify(token, JWT_SECRET) as AuthUser;
 
+    if (!decoded?.id || !decoded?.email) {
+      throw new Error('Token sem dados obrigatórios.');
+    }
+
+    if (decoded.role === 'inactive') {
+      throw new HttpError(403, 'Usuário inativo.');
+    }
+
     req.user = {
       id: decoded.id,
       email: decoded.email,
       role: decoded.role,
       nome: decoded.nome || '',
-      funcionario_permissoes: Array.isArray(decoded.funcionario_permissoes) ? decoded.funcionario_permissoes : []
+      funcionario_permissoes: normalizePermissions(decoded.funcionario_permissoes),
     };
 
     return next();
-  } catch {
+  } catch (error) {
+    if (error instanceof HttpError) {
+      throw error;
+    }
+
     throw new HttpError(401, 'Token inválido ou expirado.');
   }
 }
 
 export function admin(req: Request, _res: Response, next: NextFunction) {
-  if (!req.user) throw new HttpError(401, 'Usuário não autenticado.');
-  if (req.user.role !== 'admin') throw new HttpError(403, 'Acesso restrito ao administrador.');
+  if (!req.user) {
+    throw new HttpError(401, 'Usuário não autenticado.');
+  }
+
+  if (req.user.role !== 'admin') {
+    throw new HttpError(403, 'Acesso restrito ao administrador.');
+  }
+
   return next();
 }
 
 export function staff(req: Request, _res: Response, next: NextFunction) {
-  if (!req.user) throw new HttpError(401, 'Usuário não autenticado.');
+  if (!req.user) {
+    throw new HttpError(401, 'Usuário não autenticado.');
+  }
+
   if (!['admin', 'funcionario', 'staff', 'employee'].includes(String(req.user.role))) {
     throw new HttpError(403, 'Acesso restrito.');
   }
+
   return next();
 }
 
