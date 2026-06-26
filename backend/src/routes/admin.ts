@@ -790,6 +790,87 @@ function rangeForContasPagar(dateFrom: string, dateTo: string) {
   };
 }
 
+function maxParcelaNumero(rows: any[]) {
+  return rows.reduce((max, row) => Math.max(max, Number(row.parcela_numero || 1)), 1);
+}
+
+async function ajustarQuantidadeParcelasDaConta(params: {
+  contaAtual: any;
+  novaQuantidade: number;
+  valorParcela: number;
+  contaFixa: boolean;
+  descricao?: string;
+  fornecedor?: string;
+  categoria?: string;
+  observacoes?: string;
+  usuarioId?: string | null;
+  usuarioNome?: string;
+}) {
+  const grupoId = params.contaAtual.grupo_id || params.contaAtual.id;
+  const novaQuantidade = Math.max(1, Math.min(120, Number(params.novaQuantidade || 1)));
+
+  const grupoRows = await supabaseRest<any[]>(
+    `/contas_pagar?select=*&grupo_id=eq.${restEq(grupoId)}&order=parcela_numero.asc&limit=200`
+  ).catch(() => []);
+
+  const rows = grupoRows.length > 0 ? grupoRows : [params.contaAtual];
+  const quantidadeAtual = maxParcelaNumero(rows);
+  const primeiraParcela = rows.find((row) => Number(row.parcela_numero || 1) === 1) || rows[0] || params.contaAtual;
+  const primeiroVencimento = String(primeiraParcela.vencimento || params.contaAtual.vencimento || currentMonthRange().today).slice(0, 10);
+  const now = new Date().toISOString();
+  const valorParcela = asNumber(params.valorParcela || primeiraParcela.valor_parcela || 0);
+  const valorTotal = params.contaFixa ? 0 : valorParcela * novaQuantidade;
+
+  await supabaseRest(`/contas_pagar?grupo_id=eq.${restEq(grupoId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      quantidade_parcelas: novaQuantidade,
+      valor_total: valorTotal,
+      updated_at: now
+    })
+  });
+
+  if (novaQuantidade > quantidadeAtual) {
+    const novasParcelas = Array.from({ length: novaQuantidade - quantidadeAtual }, (_, index) => {
+      const parcelaNumero = quantidadeAtual + index + 1;
+
+      return {
+        grupo_id: grupoId,
+        descricao: params.descricao ?? primeiraParcela.descricao,
+        fornecedor: params.fornecedor ?? primeiraParcela.fornecedor ?? '',
+        categoria: params.categoria ?? primeiraParcela.categoria ?? '',
+        valor_total: valorTotal,
+        valor_parcela: valorParcela,
+        parcela_numero: parcelaNumero,
+        quantidade_parcelas: novaQuantidade,
+        vencimento: addMonthsToDate(primeiroVencimento, parcelaNumero - 1),
+        status: 'pendente',
+        data_pagamento: null,
+        conta_fixa: params.contaFixa,
+        observacoes: params.observacoes ?? primeiraParcela.observacoes ?? '',
+        usuario_id: params.usuarioId || primeiraParcela.usuario_id || null,
+        usuario_nome: params.usuarioNome || primeiraParcela.usuario_nome || 'Administrador',
+        created_at: now,
+        updated_at: now
+      };
+    });
+
+    if (novasParcelas.length > 0) {
+      await supabaseRest('/contas_pagar', {
+        method: 'POST',
+        body: JSON.stringify(novasParcelas)
+      });
+    }
+  }
+
+  if (novaQuantidade < quantidadeAtual) {
+    await supabaseRest(
+      `/contas_pagar?grupo_id=eq.${restEq(grupoId)}&parcela_numero=gt.${novaQuantidade}&status=eq.pendente`,
+      { method: 'DELETE' }
+    ).catch(() => null);
+  }
+}
+
 adminRoutes.get('/contas-pagar', onlyAdmin, asyncHandler(async (req, res) => {
   const dateFrom = String(req.query.date_from || '');
   const dateTo = String(req.query.date_to || '');
@@ -957,14 +1038,39 @@ adminRoutes.put('/contas-pagar/:id', onlyAdmin, asyncHandler(async (req, res) =>
     fornecedor: z.string().optional(),
     categoria: z.string().optional(),
     valor_parcela: z.coerce.number().positive().optional(),
+    quantidade_parcelas: z.coerce.number().int().min(1).max(120).optional(),
     vencimento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
     status: z.enum(['pendente', 'pago', 'cancelado']).optional(),
     conta_fixa: z.boolean().optional(),
     observacoes: z.string().optional()
   }).parse(req.body);
 
+  const atualRows = await supabaseRest<any[]>(
+    `/contas_pagar?select=*&id=eq.${restEq(req.params.id)}&limit=1`
+  ).catch(() => []);
+
+  const contaAtual = atualRows[0];
+
+  if (!contaAtual) {
+    return res.status(404).json({ message: 'Conta não encontrada.' });
+  }
+
+  const quantidadeNova = d.quantidade_parcelas
+    ? Math.max(1, Math.min(120, Number(d.quantidade_parcelas || 1)))
+    : Number(contaAtual.quantidade_parcelas || 1);
+
+  const valorParcelaNovo = d.valor_parcela !== undefined
+    ? asNumber(d.valor_parcela)
+    : asNumber(contaAtual.valor_parcela || 0);
+
+  const contaFixaNova = d.conta_fixa !== undefined
+    ? Boolean(d.conta_fixa)
+    : Boolean(contaAtual.conta_fixa);
+
   const payload: any = {
     ...d,
+    quantidade_parcelas: quantidadeNova,
+    valor_total: contaFixaNova ? 0 : valorParcelaNovo * quantidadeNova,
     updated_at: new Date().toISOString()
   };
 
@@ -979,6 +1085,21 @@ adminRoutes.put('/contas-pagar/:id', onlyAdmin, asyncHandler(async (req, res) =>
       body: JSON.stringify(payload)
     }
   );
+
+  if (d.quantidade_parcelas && contaAtual.grupo_id) {
+    await ajustarQuantidadeParcelasDaConta({
+      contaAtual,
+      novaQuantidade: quantidadeNova,
+      valorParcela: valorParcelaNovo,
+      contaFixa: contaFixaNova,
+      descricao: d.descricao,
+      fornecedor: d.fornecedor,
+      categoria: d.categoria,
+      observacoes: d.observacoes,
+      usuarioId: req.user?.id || null,
+      usuarioNome: req.user?.nome || req.user?.email || 'Administrador'
+    });
+  }
 
   res.json(rows[0] || { ok: true });
 }));
@@ -998,7 +1119,6 @@ adminRoutes.delete('/contas-pagar/:id', onlyAdmin, asyncHandler(async (req, res)
 
   res.json({ ok: true });
 }));
-
 
 
 
