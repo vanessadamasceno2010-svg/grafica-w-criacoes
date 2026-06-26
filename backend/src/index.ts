@@ -17,27 +17,50 @@ export const app = express();
 app.disable('x-powered-by');
 app.set('trust proxy', 1);
 
-app.use(helmet());
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginResourcePolicy: false,
+  })
+);
 
-const allowedOrigins = [
-  'http://localhost:5173',
-  'http://localhost:3000',
-  'https://grafica-w-criacoes-frontend.vercel.app',
-  process.env.FRONTEND_URL
-].filter(Boolean);
-const vercelPreviewOrigin = /^https:\/\/grafica-w-criacoes-frontend(?:-[a-z0-9-]+)?\.vercel\.app$/i;
+function normalizeOrigin(origin?: string) {
+  return String(origin || '').replace(/\/$/, '');
+}
+
+const configuredFrontendUrl = normalizeOrigin(config.frontendUrl);
+
+const allowedOrigins = new Set(
+  [
+    'http://localhost:5173',
+    'http://localhost:3000',
+    'https://grafica-w-criacoes-frontend.vercel.app',
+    configuredFrontendUrl,
+  ]
+    .filter(Boolean)
+    .map(normalizeOrigin)
+);
+
+const vercelPreviewOrigin =
+  /^https:\/\/grafica-w-criacoes-frontend(?:-[a-z0-9-]+)?\.vercel\.app$/i;
 
 const corsOptions: CorsOptions = {
-  origin: function (origin, callback) {
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin) || vercelPreviewOrigin.test(origin)) {
+  origin(origin, callback) {
+    if (!origin) {
       return callback(null, true);
     }
+
+    const cleanOrigin = normalizeOrigin(origin);
+
+    if (allowedOrigins.has(cleanOrigin) || vercelPreviewOrigin.test(cleanOrigin)) {
+      return callback(null, true);
+    }
+
     return callback(new Error('Origem não permitida pelo servidor.'));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization'],
 };
 
 app.use(cors(corsOptions));
@@ -48,25 +71,38 @@ app.use(
     windowMs: 60 * 1000,
     limit: 120,
     standardHeaders: true,
-    legacyHeaders: false
+    legacyHeaders: false,
+    message: {
+      message: 'Muitas requisições. Aguarde alguns segundos e tente novamente.',
+    },
   })
 );
 
 app.use(express.json({ limit: '2mb' }));
-app.use(express.urlencoded({ extended: true }));
-app.use(morgan('combined'));
+app.use(express.urlencoded({ extended: true, limit: '2mb' }));
+
+if (config.isProduction) {
+  app.use(
+    morgan('combined', {
+      skip: (req) => req.path === '/health',
+    })
+  );
+} else {
+  app.use(morgan('dev'));
+}
 
 app.get('/', (_req: Request, res: Response) => {
   res.json({
     ok: true,
-    message: 'API Grafica W Criacoes online'
+    message: 'API Gráfica W Criações online',
   });
 });
 
 app.get('/health', (_req: Request, res: Response) => {
   res.json({
     ok: true,
-    service: 'grafica-w-criacoes-api'
+    service: 'grafica-w-criacoes-api',
+    environment: config.nodeEnv,
   });
 });
 
@@ -83,7 +119,7 @@ const port = Number(config.port || process.env.PORT || 3001);
 
 if (!process.env.VERCEL) {
   app.listen(port, () => {
-    console.log(`API Grafica W Criacoes rodando na porta ${port}`);
+    console.log(`API Gráfica W Criações rodando na porta ${port}`);
   });
 }
 
