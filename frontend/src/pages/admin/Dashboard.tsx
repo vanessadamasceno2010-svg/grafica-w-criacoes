@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { DollarSign, ShoppingCart, Users, Package, TrendingUp, WalletCards, AlertTriangle, MessageSquare, ReceiptText, Clock3 } from 'lucide-react';
+import { DollarSign, ShoppingCart, Users, Package, TrendingUp, WalletCards, AlertTriangle, MessageSquare, ReceiptText, Clock3, Repeat } from 'lucide-react';
 import { apiFetch, formatMoney, getStoredUser } from '../../lib/api';
 
 const statusOptions = [
@@ -77,9 +77,12 @@ export function Dashboard() {
 
     return [
       { label: 'Fluxo do mês', value: formatMoney(data?.fluxoCaixaMes || 0), icon: WalletCards, color: 'text-success', bg: 'bg-success/10' },
-      { label: 'Contas do mês', value: formatMoney(data?.contasPagarMes || 0), icon: ReceiptText, color: 'text-primary', bg: 'bg-primary/10' },
-      { label: 'Contas a vencer', value: formatMoney(data?.contasAVencerMes || 0), icon: Clock3, color: 'text-amber-600', bg: 'bg-amber-50' },
-      { label: 'Contas vencidas', value: formatMoney(data?.contasVencidas || 0), icon: AlertTriangle, color: 'text-red-600', bg: 'bg-red-50' },
+
+      { label: 'Contas a pagar', value: formatMoney(data?.contasPagarMes || 0), icon: ReceiptText, color: 'text-primary', bg: 'bg-primary/10' },
+      { label: 'A vencer', value: formatMoney(data?.contasAVencerMes || 0), icon: Clock3, color: 'text-amber-600', bg: 'bg-amber-50' },
+      { label: 'Vencidas', value: formatMoney(data?.contasVencidas || 0), icon: AlertTriangle, color: 'text-red-600', bg: 'bg-red-50' },
+      { label: 'Contas fixas', value: formatMoney(data?.contasFixasMes || 0), icon: Repeat, color: 'text-blue-600', bg: 'bg-blue-50' },
+
       { label: 'Vendas filtradas', value: formatMoney(data?.vendasMes || 0), icon: DollarSign, color: 'text-primary', bg: 'bg-primary/10' },
       { label: 'A receber', value: formatMoney(data?.valoresAReceber || 0), icon: WalletCards, color: 'text-red-600', bg: 'bg-red-50' },
       ...operacional,
@@ -107,12 +110,18 @@ export function Dashboard() {
 
       {loading && <div className="card p-4 mb-5">Carregando dados do Supabase...</div>}
 
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-2 sm:gap-3 mb-6">
         {stats.map(({ label, value, icon: Icon, color, bg }) => (
-          <div key={label} className="card p-5">
-            <div className={`w-10 h-10 rounded-xl ${bg} flex items-center justify-center mb-4`}><Icon size={20} className={color} /></div>
-            <p className="text-sm text-gray-500 mb-1">{label}</p>
-            <p className="font-display text-xl sm:text-2xl font-bold text-primary">{value}</p>
+          <div key={label} className="card p-3 sm:p-4">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-xs text-gray-500 mb-1 truncate">{label}</p>
+                <p className="font-display text-lg sm:text-xl font-bold text-primary leading-tight break-words">{value}</p>
+              </div>
+              <div className={`w-9 h-9 rounded-xl ${bg} flex items-center justify-center shrink-0`}>
+                <Icon size={18} className={color} />
+              </div>
+            </div>
           </div>
         ))}
       </div>
