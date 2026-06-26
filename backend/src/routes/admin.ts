@@ -762,10 +762,14 @@ const contaPagarSchema = z.object({
   descricao: z.string().min(2),
   fornecedor: z.string().optional().default(''),
   categoria: z.string().optional().default(''),
-  valor_total: z.coerce.number().positive(),
+  valor_total: z.coerce.number().positive().optional(),
+  valor_parcela: z.coerce.number().positive().optional(),
   quantidade_parcelas: z.coerce.number().int().min(1).max(120).default(1),
   primeiro_vencimento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  conta_fixa: z.boolean().optional().default(false),
   observacoes: z.string().optional().default('')
+}).refine((data) => Number(data.valor_total || 0) > 0 || Number(data.valor_parcela || 0) > 0, {
+  message: 'Informe o valor total ou o valor da parcela.'
 });
 
 adminRoutes.get('/contas-pagar', onlyAdmin, asyncHandler(async (req, res) => {
@@ -773,6 +777,7 @@ adminRoutes.get('/contas-pagar', onlyAdmin, asyncHandler(async (req, res) => {
   const dateTo = String(req.query.date_to || '');
   const status = String(req.query.status || 'todos');
   const q = String(req.query.q || '').trim().toLowerCase();
+
   const all = await supabaseRest<any[]>('/contas_pagar?select=*&order=vencimento.asc,created_at.desc&limit=5000');
   const month = currentMonthRange();
 
@@ -780,13 +785,40 @@ adminRoutes.get('/contas-pagar', onlyAdmin, asyncHandler(async (req, res) => {
     if (dateFrom && conta.vencimento < dateFrom) return false;
     if (dateTo && conta.vencimento > dateTo) return false;
     if (status !== 'todos' && conta.status !== status) return false;
-    if (q && ![conta.descricao, conta.fornecedor, conta.categoria, conta.observacoes].join(' ').toLowerCase().includes(q)) return false;
+
+    if (
+      q &&
+      ![
+        conta.descricao,
+        conta.fornecedor,
+        conta.categoria,
+        conta.observacoes
+      ].join(' ').toLowerCase().includes(q)
+    ) {
+      return false;
+    }
+
     return true;
   });
 
-  const contasMes = all.filter((conta) => conta.status !== 'cancelado' && conta.vencimento >= month.start && conta.vencimento <= month.end);
-  const aVencerMes = all.filter((conta) => conta.status === 'pendente' && conta.vencimento >= month.today && conta.vencimento <= month.end);
-  const vencidas = all.filter((conta) => conta.status === 'pendente' && conta.vencimento < month.today);
+  const contasMes = all.filter((conta) =>
+    conta.status !== 'cancelado' &&
+    conta.vencimento >= month.start &&
+    conta.vencimento <= month.end
+  );
+
+  const aVencerMes = all.filter((conta) =>
+    conta.status === 'pendente' &&
+    conta.vencimento >= month.today &&
+    conta.vencimento <= month.end
+  );
+
+  const vencidas = all.filter((conta) =>
+    conta.status === 'pendente' &&
+    conta.vencimento < month.today
+  );
+
+  const contasFixasMes = contasMes.filter((conta) => conta.conta_fixa === true);
 
   res.json({
     contas,
@@ -797,6 +829,8 @@ adminRoutes.get('/contas-pagar', onlyAdmin, asyncHandler(async (req, res) => {
       quantidadeAVencer: aVencerMes.length,
       vencidas: vencidas.reduce((sum, conta) => sum + asNumber(conta.valor_parcela), 0),
       quantidadeVencidas: vencidas.length,
+      contasFixasMes: contasFixasMes.reduce((sum, conta) => sum + asNumber(conta.valor_parcela), 0),
+      quantidadeFixasMes: contasFixasMes.length,
       totalFiltrado: contas.reduce((sum, conta) => sum + asNumber(conta.valor_parcela), 0),
       quantidadeFiltrada: contas.length
     }
@@ -806,26 +840,47 @@ adminRoutes.get('/contas-pagar', onlyAdmin, asyncHandler(async (req, res) => {
 adminRoutes.post('/contas-pagar', onlyAdmin, asyncHandler(async (req, res) => {
   const d = contaPagarSchema.parse(req.body);
   const grupoId = randomUUID();
-  const totalCents = Math.round(d.valor_total * 100);
-  if (totalCents < d.quantidade_parcelas) {
-    return res.status(400).json({ message: 'O valor total é muito baixo para a quantidade de parcelas.' });
+  const quantidadeParcelas = Number(d.quantidade_parcelas || 1);
+
+  const valorParcelaBase = asNumber(d.valor_parcela || 0);
+  const valorTotalBase = asNumber(d.valor_total || 0);
+
+  const totalCents = Math.round(
+    valorParcelaBase > 0
+      ? valorParcelaBase * quantidadeParcelas * 100
+      : valorTotalBase * 100
+  );
+
+  if (totalCents < quantidadeParcelas) {
+    return res.status(400).json({
+      message: 'O valor total é muito baixo para a quantidade de parcelas.'
+    });
   }
-  const baseCents = Math.floor(totalCents / d.quantidade_parcelas);
-  const remainder = totalCents - (baseCents * d.quantidade_parcelas);
+
+  const baseCents = valorParcelaBase > 0
+    ? Math.round(valorParcelaBase * 100)
+    : Math.floor(totalCents / quantidadeParcelas);
+
+  const remainder = valorParcelaBase > 0
+    ? 0
+    : totalCents - (baseCents * quantidadeParcelas);
+
+  const valorTotal = totalCents / 100;
   const now = new Date().toISOString();
 
-  const parcelas = Array.from({ length: d.quantidade_parcelas }, (_, index) => ({
+  const parcelas = Array.from({ length: quantidadeParcelas }, (_, index) => ({
     grupo_id: grupoId,
     descricao: d.descricao,
     fornecedor: d.fornecedor || '',
     categoria: d.categoria || '',
-    valor_total: d.valor_total,
-    valor_parcela: (baseCents + (index === d.quantidade_parcelas - 1 ? remainder : 0)) / 100,
+    valor_total: valorTotal,
+    valor_parcela: (baseCents + (index === quantidadeParcelas - 1 ? remainder : 0)) / 100,
     parcela_numero: index + 1,
-    quantidade_parcelas: d.quantidade_parcelas,
+    quantidade_parcelas: quantidadeParcelas,
     vencimento: addMonthsToDate(d.primeiro_vencimento, index),
     status: 'pendente',
     data_pagamento: null,
+    conta_fixa: Boolean(d.conta_fixa),
     observacoes: d.observacoes || '',
     usuario_id: req.user?.id || null,
     usuario_nome: req.user?.nome || req.user?.email || 'Administrador',
@@ -838,7 +893,10 @@ adminRoutes.post('/contas-pagar', onlyAdmin, asyncHandler(async (req, res) => {
     body: JSON.stringify(parcelas)
   });
 
-  res.status(201).json({ grupo_id: grupoId, parcelas: rows });
+  res.status(201).json({
+    grupo_id: grupoId,
+    parcelas: rows
+  });
 }));
 
 adminRoutes.put('/contas-pagar/:id', onlyAdmin, asyncHandler(async (req, res) => {
@@ -849,31 +907,46 @@ adminRoutes.put('/contas-pagar/:id', onlyAdmin, asyncHandler(async (req, res) =>
     valor_parcela: z.coerce.number().positive().optional(),
     vencimento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
     status: z.enum(['pendente', 'pago', 'cancelado']).optional(),
+    conta_fixa: z.boolean().optional(),
     observacoes: z.string().optional()
   }).parse(req.body);
 
-  const payload: any = { ...d, updated_at: new Date().toISOString() };
+  const payload: any = {
+    ...d,
+    updated_at: new Date().toISOString()
+  };
+
   if (d.vencimento) payload.vencimento = d.vencimento.slice(0, 10);
   if (d.status === 'pago') payload.data_pagamento = currentMonthRange().today;
   if (d.status === 'pendente' || d.status === 'cancelado') payload.data_pagamento = null;
 
-  const rows = await supabaseRest<any[]>(`/contas_pagar?id=eq.${restEq(req.params.id)}`, {
-    method: 'PATCH',
-    body: JSON.stringify(payload)
-  });
+  const rows = await supabaseRest<any[]>(
+    `/contas_pagar?id=eq.${restEq(req.params.id)}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(payload)
+    }
+  );
 
   res.json(rows[0] || { ok: true });
 }));
 
 adminRoutes.delete('/contas-pagar/grupo/:grupoId', onlyAdmin, asyncHandler(async (req, res) => {
-  await supabaseRest(`/contas_pagar?grupo_id=eq.${restEq(req.params.grupoId)}`, { method: 'DELETE' });
+  await supabaseRest(`/contas_pagar?grupo_id=eq.${restEq(req.params.grupoId)}`, {
+    method: 'DELETE'
+  });
+
   res.json({ ok: true });
 }));
 
 adminRoutes.delete('/contas-pagar/:id', onlyAdmin, asyncHandler(async (req, res) => {
-  await supabaseRest(`/contas_pagar?id=eq.${restEq(req.params.id)}`, { method: 'DELETE' });
+  await supabaseRest(`/contas_pagar?id=eq.${restEq(req.params.id)}`, {
+    method: 'DELETE'
+  });
+
   res.json({ ok: true });
 }));
+
 
 adminRoutes.get('/relatorios/vendas', onlyAdmin, asyncHandler(async (_req, res) => {
   const rows = await supabaseRest<any[]>('/pedidos?select=created_at,total&order=created_at.desc&limit=90');
