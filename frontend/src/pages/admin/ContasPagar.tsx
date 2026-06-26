@@ -35,6 +35,9 @@ type AccountForm = {
 
 type EditAccountForm = {
   id: string;
+  grupo_id: string;
+  parcela_numero: number;
+  quantidade_parcelas: number;
   descricao: string;
   fornecedor: string;
   categoria: string;
@@ -206,14 +209,15 @@ function SummaryCard({
   value: string | number;
   subtitle: string;
   icon: any;
-  tone?: 'default' | 'danger' | 'warning' | 'success' | 'money';
+  tone?: 'default' | 'danger' | 'warning' | 'success' | 'money' | 'purple';
 }) {
   const tones = {
     default: 'bg-white border-gray-100 text-primary',
     danger: 'bg-red-50 border-red-100 text-red-700',
     warning: 'bg-amber-50 border-amber-100 text-amber-700',
     success: 'bg-emerald-50 border-emerald-100 text-emerald-700',
-    money: 'bg-blue-50 border-blue-100 text-blue-700'
+    money: 'bg-blue-50 border-blue-100 text-blue-700',
+    purple: 'bg-purple-50 border-purple-100 text-purple-700'
   };
 
   return (
@@ -374,19 +378,45 @@ export function ContasPagar() {
   }
 
   async function removeAccount(account: any) {
-    if (!window.confirm(`Excluir a parcela ${account.parcela_numero}/${account.quantidade_parcelas}?`)) return;
+    const isParcelada = Number(account.quantidade_parcelas || 1) > 1 && account.grupo_id;
+
+    let endpoint = '/admin/contas-pagar/' + account.id;
+    let mensagemSucesso = 'Parcela excluída com sucesso.';
+
+    if (isParcelada) {
+      const excluirTodas = window.confirm(
+        `Essa conta possui ${account.quantidade_parcelas} parcelas.\n\n` +
+        'Clique em OK para excluir TODAS as parcelas desta conta.\n' +
+        'Clique em Cancelar para excluir APENAS esta parcela atual.'
+      );
+
+      if (excluirTodas) {
+        if (!window.confirm('Confirma excluir todas as parcelas desta conta?')) return;
+        endpoint = '/admin/contas-pagar/grupo/' + account.grupo_id;
+        mensagemSucesso = 'Todas as parcelas da conta foram excluídas.';
+      } else {
+        if (!window.confirm(`Confirma excluir apenas a parcela ${account.parcela_numero}/${account.quantidade_parcelas}?`)) return;
+      }
+    } else if (!window.confirm('Excluir esta conta?')) {
+      return;
+    }
 
     try {
-      await apiFetch('/admin/contas-pagar/' + account.id, { method: 'DELETE' });
+      await apiFetch(endpoint, { method: 'DELETE' });
+      setEditingAccount(null);
       await load();
+      alert(mensagemSucesso);
     } catch (error: any) {
-      alert(error.message || 'Erro ao excluir parcela.');
+      alert(error.message || 'Erro ao excluir conta.');
     }
   }
 
   function openEditAccount(account: any) {
     setEditingAccount({
       id: account.id,
+      grupo_id: account.grupo_id || '',
+      parcela_numero: Number(account.parcela_numero || 1),
+      quantidade_parcelas: Number(account.quantidade_parcelas || 1),
       descricao: account.descricao || '',
       fornecedor: account.fornecedor || '',
       categoria: account.categoria || '',
@@ -417,6 +447,7 @@ export function ContasPagar() {
           fornecedor: editingAccount.fornecedor,
           categoria: editingAccount.categoria,
           valor_parcela: valorParcela,
+          quantidade_parcelas: Math.max(1, Number(editingAccount.quantidade_parcelas || 1)),
           vencimento: editingAccount.vencimento,
           status: editingAccount.status,
           conta_fixa: editingAccount.conta_fixa,
@@ -520,7 +551,7 @@ export function ContasPagar() {
           value={formatMoney(resumo.contasFixasMes || 0)}
           subtitle={`${resumo.quantidadeFixasMes || contasFixasFiltradas.length} fixa(s)`}
           icon={Repeat}
-          tone="success"
+          tone="purple"
         />
       </div>
 
@@ -659,7 +690,7 @@ export function ContasPagar() {
                       </span>
 
                       {account.conta_fixa && (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-blue-200 bg-blue-50 text-blue-700 text-[11px] font-bold">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-purple-200 bg-purple-50 text-purple-700 text-[11px] font-bold">
                           <Repeat size={13} />
                           Conta fixa
                         </span>
@@ -934,7 +965,7 @@ export function ContasPagar() {
               </label>
             </div>
 
-            <div className="grid sm:grid-cols-3 gap-3">
+            <div className="grid sm:grid-cols-2 gap-3">
               <label>
                 <span className="text-sm font-bold text-primary">Valor da parcela *</span>
                 <input
@@ -943,6 +974,31 @@ export function ContasPagar() {
                   value={editingAccount.valor_parcela}
                   onChange={(e) => setEditingAccount({ ...editingAccount, valor_parcela: e.target.value })}
                 />
+              </label>
+
+              <label>
+                <span className="text-sm font-bold text-primary">Quantidade de parcelas</span>
+                <input
+                  className="input"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={String(editingAccount.quantidade_parcelas || '')}
+                  onChange={(e) => {
+                    const digits = onlyDigits(e.target.value);
+                    setEditingAccount({
+                      ...editingAccount,
+                      quantidade_parcelas: Math.max(1, Math.min(120, Number(digits || 1)))
+                    });
+                  }}
+                  onPaste={(e) => {
+                    const pasted = e.clipboardData.getData('text');
+                    if (/\D/.test(pasted)) e.preventDefault();
+                  }}
+                />
+                <span className="text-xs text-gray-500">
+                  Ao salvar, o sistema ajusta as parcelas futuras desta conta.
+                </span>
               </label>
 
               <label>
@@ -997,9 +1053,21 @@ export function ContasPagar() {
               />
             </label>
 
-            <div className="sticky bottom-0 -mx-5 -mb-5 bg-white border-t border-gray-100 p-4 grid grid-cols-2 gap-3">
+            <div className="sticky bottom-0 -mx-5 -mb-5 bg-white border-t border-gray-100 p-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
               <button className="btn btn-outline" onClick={() => setEditingAccount(null)}>
                 Cancelar
+              </button>
+
+              <button
+                className="btn btn-danger"
+                onClick={() => removeAccount({
+                  id: editingAccount.id,
+                  grupo_id: editingAccount.grupo_id,
+                  parcela_numero: editingAccount.parcela_numero,
+                  quantidade_parcelas: editingAccount.quantidade_parcelas
+                })}
+              >
+                Excluir
               </button>
 
               <button className="btn btn-primary" disabled={saving} onClick={saveAccountChanges}>
