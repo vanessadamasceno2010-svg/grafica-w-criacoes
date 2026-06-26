@@ -1,16 +1,23 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   CalendarDays,
+  Calculator,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Clock3,
   Filter,
   Plus,
   ReceiptText,
+  Repeat,
   RotateCcw,
   Search,
-  Trash2
+  Trash2,
+  WalletCards,
+  X
 } from 'lucide-react';
+
 import { apiFetch, formatMoney } from '../../lib/api';
 import { BottomSheet } from '../../components/BottomSheet';
 
@@ -18,10 +25,29 @@ type AccountForm = {
   descricao: string;
   fornecedor: string;
   categoria: string;
+  valor_parcela: string;
   valor_total: string;
   quantidade_parcelas: number;
   primeiro_vencimento: string;
+  conta_fixa: boolean;
   observacoes: string;
+};
+
+type MonthRange = {
+  date_from: string;
+  date_to: string;
+};
+
+const statusLabels: Record<string, string> = {
+  pendente: 'Pendente',
+  pago: 'Pago',
+  cancelado: 'Cancelado'
+};
+
+const statusClasses: Record<string, string> = {
+  pendente: 'bg-amber-50 text-amber-700 border-amber-200',
+  pago: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  cancelado: 'bg-gray-100 text-gray-600 border-gray-200'
 };
 
 function localDate(value = new Date()) {
@@ -29,16 +55,34 @@ function localDate(value = new Date()) {
   return new Date(value.getTime() - offset).toISOString().slice(0, 10);
 }
 
-function monthStart() {
-  const date = new Date();
-  date.setDate(1);
-  return localDate(date);
+function currentMonthValue() {
+  return localDate().slice(0, 7);
 }
 
-function monthEnd() {
-  const date = new Date();
-  date.setMonth(date.getMonth() + 1, 0);
-  return localDate(date);
+function monthRangeFromValue(value: string): MonthRange {
+  const [year, month] = String(value || currentMonthValue()).split('-').map(Number);
+  const start = new Date(year, month - 1, 1);
+  const end = new Date(year, month, 0);
+
+  return {
+    date_from: localDate(start),
+    date_to: localDate(end)
+  };
+}
+
+function addMonths(monthValue: string, amount: number) {
+  const [year, month] = String(monthValue || currentMonthValue()).split('-').map(Number);
+  const date = new Date(year, month - 1 + amount, 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function monthLabel(monthValue: string) {
+  const [year, month] = String(monthValue || currentMonthValue()).split('-').map(Number);
+
+  return new Intl.DateTimeFormat('pt-BR', {
+    month: 'long',
+    year: 'numeric'
+  }).format(new Date(year, month - 1, 1));
 }
 
 function shortDate(value: string) {
@@ -47,12 +91,30 @@ function shortDate(value: string) {
   return `${day}/${month}/${year}`;
 }
 
-function moneyToNumber(value: string) {
+function moneyToNumber(value: string | number) {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+
   const normalized = String(value || '')
     .replace(/[R$\s]/g, '')
     .replace(/\./g, '')
     .replace(',', '.');
+
   return Number(normalized) || 0;
+}
+
+function moneyInput(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return '';
+  return value.toLocaleString('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+}
+
+function calculateTotal(valorParcela: string, quantidade: number) {
+  const parcela = moneyToNumber(valorParcela);
+  const qtd = Math.max(1, Number(quantidade || 1));
+
+  return parcela * qtd;
 }
 
 function buildForm(): AccountForm {
@@ -60,26 +122,109 @@ function buildForm(): AccountForm {
     descricao: '',
     fornecedor: '',
     categoria: '',
+    valor_parcela: '',
     valor_total: '',
     quantidade_parcelas: 1,
     primeiro_vencimento: localDate(),
+    conta_fixa: false,
     observacoes: ''
   };
 }
 
-const statusLabels: Record<string, string> = {
-  pendente: 'Pendente',
-  pago: 'Pago',
-  cancelado: 'Cancelado'
-};
+function getDueStatus(account: any) {
+  const today = localDate();
+  const vencimento = String(account.vencimento || '').slice(0, 10);
+
+  if (account.status === 'pago') {
+    return {
+      label: 'Pago',
+      icon: CheckCircle2,
+      card: 'border-l-emerald-500 bg-emerald-50/50',
+      badge: 'bg-emerald-50 text-emerald-700 border-emerald-200'
+    };
+  }
+
+  if (account.status === 'cancelado') {
+    return {
+      label: 'Cancelado',
+      icon: X,
+      card: 'border-l-gray-400 bg-gray-50',
+      badge: 'bg-gray-100 text-gray-600 border-gray-200'
+    };
+  }
+
+  if (vencimento && vencimento < today) {
+    return {
+      label: 'Vencida',
+      icon: AlertTriangle,
+      card: 'border-l-red-500 bg-red-50/60',
+      badge: 'bg-red-50 text-red-700 border-red-200'
+    };
+  }
+
+  if (vencimento === today) {
+    return {
+      label: 'Vence hoje',
+      icon: AlertTriangle,
+      card: 'border-l-orange-500 bg-orange-50/60',
+      badge: 'bg-orange-50 text-orange-700 border-orange-200'
+    };
+  }
+
+  return {
+    label: 'A vencer',
+    icon: Clock3,
+    card: 'border-l-amber-500 bg-white',
+    badge: 'bg-amber-50 text-amber-700 border-amber-200'
+  };
+}
+
+function SummaryCard({
+  title,
+  value,
+  subtitle,
+  icon: Icon,
+  tone = 'default'
+}: {
+  title: string;
+  value: string | number;
+  subtitle: string;
+  icon: any;
+  tone?: 'default' | 'danger' | 'warning' | 'success' | 'money';
+}) {
+  const tones = {
+    default: 'bg-white border-gray-100 text-primary',
+    danger: 'bg-red-50 border-red-100 text-red-700',
+    warning: 'bg-amber-50 border-amber-100 text-amber-700',
+    success: 'bg-emerald-50 border-emerald-100 text-emerald-700',
+    money: 'bg-blue-50 border-blue-100 text-blue-700'
+  };
+
+  return (
+    <div className={`rounded-2xl border p-3 ${tones[tone]}`}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-[10px] font-bold uppercase tracking-wide opacity-70">{title}</p>
+          <p className="font-display text-xl font-bold mt-0.5 leading-tight">{value}</p>
+          <p className="text-[11px] opacity-75 mt-0.5 leading-tight">{subtitle}</p>
+        </div>
+
+        <div className="w-9 h-9 rounded-xl bg-white/80 flex items-center justify-center shrink-0">
+          <Icon size={18} />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function ContasPagar() {
+  const [selectedMonth, setSelectedMonth] = useState(currentMonthValue());
   const [filters, setFilters] = useState({
-    date_from: monthStart(),
-    date_to: monthEnd(),
+    ...monthRangeFromValue(currentMonthValue()),
     status: 'todos',
     q: ''
   });
+
   const [data, setData] = useState<any>({ contas: [], resumo: {} });
   const [form, setForm] = useState<AccountForm>(buildForm());
   const [showForm, setShowForm] = useState(false);
@@ -88,12 +233,15 @@ export function ContasPagar() {
 
   async function load() {
     setLoading(true);
+
     try {
       const query = new URLSearchParams();
+
       if (filters.date_from) query.set('date_from', filters.date_from);
       if (filters.date_to) query.set('date_to', filters.date_to);
       if (filters.status !== 'todos') query.set('status', filters.status);
       if (filters.q.trim()) query.set('q', filters.q.trim());
+
       const result = await apiFetch<any>('/admin/contas-pagar?' + query.toString());
       setData(result || { contas: [], resumo: {} });
     } catch (error: any) {
@@ -106,25 +254,67 @@ export function ContasPagar() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [filters.date_from, filters.date_to, filters.status]);
+
+  function applyMonth(monthValue: string) {
+    const range = monthRangeFromValue(monthValue);
+    setSelectedMonth(monthValue);
+    setFilters((prev) => ({
+      ...prev,
+      ...range
+    }));
+  }
+
+  function updateInstallmentValue(value: string) {
+    const total = calculateTotal(value, form.quantidade_parcelas);
+
+    setForm({
+      ...form,
+      valor_parcela: value,
+      valor_total: moneyInput(total)
+    });
+  }
+
+  function updateInstallmentQuantity(value: number) {
+    const quantidade = Math.max(1, Math.min(120, Number(value || 1)));
+    const total = calculateTotal(form.valor_parcela, quantidade);
+
+    setForm({
+      ...form,
+      quantidade_parcelas: quantidade,
+      valor_total: moneyInput(total)
+    });
+  }
 
   async function saveAccount() {
-    const total = moneyToNumber(form.valor_total);
+    const valorParcela = moneyToNumber(form.valor_parcela);
+    const quantidade = Math.max(1, Number(form.quantidade_parcelas || 1));
+    const total = valorParcela * quantidade;
+
     if (!form.descricao.trim()) return alert('Informe a descrição da conta.');
-    if (total <= 0) return alert('Informe um valor maior que zero.');
+    if (valorParcela <= 0) return alert('Informe o valor da parcela.');
+    if (total <= 0) return alert('O valor total precisa ser maior que zero.');
     if (!form.primeiro_vencimento) return alert('Informe o primeiro vencimento.');
-    if (form.quantidade_parcelas < 1) return alert('Informe pelo menos uma parcela.');
+    if (quantidade < 1) return alert('Informe pelo menos uma parcela.');
 
     setSaving(true);
+
     try {
       await apiFetch('/admin/contas-pagar', {
         method: 'POST',
         body: JSON.stringify({
-          ...form,
+          descricao: form.descricao,
+          fornecedor: form.fornecedor,
+          categoria: form.categoria,
+          valor_parcela: valorParcela,
           valor_total: total,
-          quantidade_parcelas: Number(form.quantidade_parcelas)
+          quantidade_parcelas: quantidade,
+          primeiro_vencimento: form.primeiro_vencimento,
+          conta_fixa: form.conta_fixa,
+          observacoes: form.observacoes
         })
       });
+
       setForm(buildForm());
       setShowForm(false);
       await load();
@@ -142,6 +332,7 @@ export function ContasPagar() {
         method: 'PUT',
         body: JSON.stringify({ status })
       });
+
       await load();
     } catch (error: any) {
       alert(error.message || 'Erro ao atualizar conta.');
@@ -150,6 +341,7 @@ export function ContasPagar() {
 
   async function removeAccount(account: any) {
     if (!window.confirm(`Excluir a parcela ${account.parcela_numero}/${account.quantidade_parcelas}?`)) return;
+
     try {
       await apiFetch('/admin/contas-pagar/' + account.id, { method: 'DELETE' });
       await load();
@@ -161,97 +353,430 @@ export function ContasPagar() {
   const contas = Array.isArray(data.contas) ? data.contas : [];
   const resumo = data.resumo || {};
 
+  const contasFixasFiltradas = useMemo(() => {
+    return contas.filter((conta) => conta.conta_fixa && conta.status !== 'cancelado');
+  }, [contas]);
+
+  const valorTotalFormulario = moneyToNumber(form.valor_total);
+  const valorParcelaFormulario = moneyToNumber(form.valor_parcela);
+
   return (
-    <div className="fade-in w-full">
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
+    <div className="fade-in w-full max-w-full overflow-hidden">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-5">
         <div>
+          <p className="text-xs font-bold uppercase tracking-[0.25em] text-gold mb-2">
+            Financeiro
+          </p>
           <h1 className="font-display text-2xl sm:text-3xl font-bold text-primary flex items-center gap-2">
-            <ReceiptText size={30} /> Contas a Pagar
+            <ReceiptText size={30} />
+            Contas a Pagar
           </h1>
-          <p className="text-gray-500 mt-1">Cadastre contas, parcelas e acompanhe os vencimentos.</p>
+          <p className="text-gray-500 mt-1">
+            Controle parcelas, vencimentos, contas fixas e pagamentos por mês.
+          </p>
         </div>
-        <button className="btn btn-primary w-full sm:w-auto" onClick={() => { setForm(buildForm()); setShowForm(true); }}>
-          <Plus size={18} /> Nova conta
+
+        <button
+          className="btn btn-primary w-full sm:w-auto"
+          onClick={() => {
+            setForm(buildForm());
+            setShowForm(true);
+          }}
+        >
+          <Plus size={18} />
+          Nova conta
         </button>
       </div>
 
-      <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
-        <div className="card p-5">
-          <ReceiptText className="text-primary mb-3" size={24} />
-          <p className="text-sm text-gray-500">Total do mês</p>
-          <p className="font-display text-2xl font-bold text-primary">{formatMoney(resumo.totalMes || 0)}</p>
-          <p className="text-xs text-gray-500">{resumo.quantidadeMes || 0} parcela(s)</p>
-        </div>
-        <div className="card p-5">
-          <Clock3 className="text-amber-600 mb-3" size={24} />
-          <p className="text-sm text-gray-500">A vencer no mês</p>
-          <p className="font-display text-2xl font-bold text-primary">{formatMoney(resumo.aVencerMes || 0)}</p>
-          <p className="text-xs text-gray-500">{resumo.quantidadeAVencer || 0} parcela(s)</p>
-        </div>
-        <div className="card p-5">
-          <AlertTriangle className="text-red-600 mb-3" size={24} />
-          <p className="text-sm text-gray-500">Contas vencidas</p>
-          <p className="font-display text-2xl font-bold text-red-600">{formatMoney(resumo.vencidas || 0)}</p>
-          <p className="text-xs text-gray-500">{resumo.quantidadeVencidas || 0} parcela(s)</p>
-        </div>
-        <div className="card p-5">
-          <Filter className="text-blue-600 mb-3" size={24} />
-          <p className="text-sm text-gray-500">Total filtrado</p>
-          <p className="font-display text-2xl font-bold text-primary">{formatMoney(resumo.totalFiltrado || 0)}</p>
-          <p className="text-xs text-gray-500">{resumo.quantidadeFiltrada || 0} parcela(s)</p>
-        </div>
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-2 sm:gap-3 mb-4">
+        <SummaryCard
+          title="Total do mês"
+          value={formatMoney(resumo.totalMes || 0)}
+          subtitle={`${resumo.quantidadeMes || 0} parcela(s)`}
+          icon={ReceiptText}
+          tone="money"
+        />
+
+        <SummaryCard
+          title="A vencer"
+          value={formatMoney(resumo.aVencerMes || 0)}
+          subtitle={`${resumo.quantidadeAVencer || 0} no mês`}
+          icon={Clock3}
+          tone="warning"
+        />
+
+        <SummaryCard
+          title="Vencidas"
+          value={formatMoney(resumo.vencidas || 0)}
+          subtitle={`${resumo.quantidadeVencidas || 0} em atraso`}
+          icon={AlertTriangle}
+          tone={Number(resumo.quantidadeVencidas || 0) > 0 ? 'danger' : 'success'}
+        />
+
+        <SummaryCard
+          title="Contas fixas"
+          value={formatMoney(resumo.contasFixasMes || 0)}
+          subtitle={`${resumo.quantidadeFixasMes || contasFixasFiltradas.length} fixa(s)`}
+          icon={Repeat}
+          tone="success"
+        />
       </div>
 
-      <div className="card p-4 mb-6 grid sm:grid-cols-2 xl:grid-cols-5 gap-3">
-        <label><span className="text-xs font-bold text-primary">De</span><input className="input" type="date" value={filters.date_from} onChange={(e) => setFilters({ ...filters, date_from: e.target.value })} /></label>
-        <label><span className="text-xs font-bold text-primary">Até</span><input className="input" type="date" value={filters.date_to} onChange={(e) => setFilters({ ...filters, date_to: e.target.value })} /></label>
-        <label><span className="text-xs font-bold text-primary">Situação</span><select className="input" value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })}><option value="todos">Todas</option><option value="pendente">Pendentes</option><option value="pago">Pagas</option><option value="cancelado">Canceladas</option></select></label>
-        <label className="relative"><span className="text-xs font-bold text-primary">Buscar</span><Search className="absolute left-3 top-9 text-gray-400" size={17} /><input className="input pl-10" placeholder="Conta ou fornecedor" value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })} /></label>
-        <button className="btn btn-primary self-end" onClick={load}><Filter size={17} /> Aplicar filtro</button>
-      </div>
+      <div className="card p-3 sm:p-4 mb-4 space-y-4">
+        <div className="rounded-2xl border border-gray-100 bg-gray-50 p-3">
+          <p className="text-xs font-bold text-gray-400 uppercase mb-2">Filtro rápido por mês</p>
 
-      {loading && <div className="card p-4 mb-4">Carregando contas...</div>}
+          <div className="grid grid-cols-[44px_1fr_44px] gap-2 items-center">
+            <button
+              type="button"
+              className="btn btn-outline px-2 py-2"
+              onClick={() => applyMonth(addMonths(selectedMonth, -1))}
+              aria-label="Mês anterior"
+            >
+              <ChevronLeft size={18} />
+            </button>
+
+            <input
+              type="month"
+              className="input text-center font-bold capitalize"
+              value={selectedMonth}
+              onChange={(e) => applyMonth(e.target.value || currentMonthValue())}
+            />
+
+            <button
+              type="button"
+              className="btn btn-outline px-2 py-2"
+              onClick={() => applyMonth(addMonths(selectedMonth, 1))}
+              aria-label="Próximo mês"
+            >
+              <ChevronRight size={18} />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2 mt-2">
+            <button
+              type="button"
+              className="rounded-xl border border-gray-200 bg-white px-2 py-2 text-xs font-bold text-primary"
+              onClick={() => applyMonth(currentMonthValue())}
+            >
+              Mês atual
+            </button>
+
+            <button
+              type="button"
+              className="rounded-xl border border-gray-200 bg-white px-2 py-2 text-xs font-bold text-primary"
+              onClick={() => setFilters((prev) => ({ ...prev, status: 'pendente' }))}
+            >
+              Pendentes
+            </button>
+
+            <button
+              type="button"
+              className="rounded-xl border border-gray-200 bg-white px-2 py-2 text-xs font-bold text-primary"
+              onClick={() => setFilters((prev) => ({ ...prev, status: 'pago' }))}
+            >
+              Pagas
+            </button>
+          </div>
+
+          <p className="text-xs text-gray-500 mt-2 capitalize">
+            Período selecionado: <b>{monthLabel(selectedMonth)}</b>
+          </p>
+        </div>
+
+        <div className="grid lg:grid-cols-[1fr_180px_auto] gap-3">
+          <div className="relative">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={19} />
+            <input
+              className="input pl-11"
+              placeholder="Buscar por descrição, fornecedor ou categoria..."
+              value={filters.q}
+              onChange={(e) => setFilters((prev) => ({ ...prev, q: e.target.value }))}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') load();
+              }}
+            />
+          </div>
+
+          <select
+            className="input"
+            value={filters.status}
+            onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
+          >
+            <option value="todos">Todos os status</option>
+            <option value="pendente">Pendentes</option>
+            <option value="pago">Pagas</option>
+            <option value="cancelado">Canceladas</option>
+          </select>
+
+          <button type="button" className="btn btn-outline" onClick={load} disabled={loading}>
+            <Filter size={17} />
+            {loading ? 'Carregando...' : 'Filtrar'}
+          </button>
+        </div>
+      </div>
 
       <div className="card overflow-hidden">
-        <div className="hidden md:block overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-100"><tr><th className="text-left p-4">Conta</th><th className="text-left p-4">Parcela</th><th className="text-left p-4">Vencimento</th><th className="text-left p-4">Valor</th><th className="text-left p-4">Situação</th><th className="text-right p-4">Ações</th></tr></thead>
-            <tbody className="divide-y divide-gray-100">
-              {contas.map((account: any) => (
-                <tr key={account.id}>
-                  <td className="p-4"><p className="font-bold text-primary">{account.descricao}</p><p className="text-xs text-gray-500">{account.fornecedor || account.categoria || 'Sem fornecedor'}</p></td>
-                  <td className="p-4">{account.parcela_numero}/{account.quantidade_parcelas}</td>
-                  <td className="p-4">{shortDate(account.vencimento)}</td>
-                  <td className="p-4 font-bold">{formatMoney(account.valor_parcela)}</td>
-                  <td className="p-4"><span className={`badge ${account.status === 'pago' ? 'bg-green-50 text-green-700' : account.status === 'cancelado' ? 'bg-gray-100 text-gray-500' : account.vencimento < localDate() ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'}`}>{account.status === 'pendente' && account.vencimento < localDate() ? 'Vencida' : statusLabels[account.status] || account.status}</span></td>
-                  <td className="p-4"><div className="flex justify-end gap-2">{account.status === 'pago' ? <button className="p-2 rounded-lg bg-gray-100" title="Voltar para pendente" onClick={() => setStatus(account, 'pendente')}><RotateCcw size={16} /></button> : <button className="p-2 rounded-lg bg-green-50 text-green-700" title="Marcar como paga" onClick={() => setStatus(account, 'pago')}><CheckCircle2 size={16} /></button>}<button className="p-2 rounded-lg bg-red-50 text-red-600" title="Excluir parcela" onClick={() => removeAccount(account)}><Trash2 size={16} /></button></div></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="p-4 border-b border-gray-100 flex items-center justify-between gap-3">
+          <div>
+            <h2 className="font-bold text-primary">Parcelas do período</h2>
+            <p className="text-sm text-gray-500">
+              {contas.length} conta(s) encontrada(s) · Total filtrado {formatMoney(resumo.totalFiltrado || 0)}
+            </p>
+          </div>
         </div>
 
-        <div className="md:hidden divide-y divide-gray-100">
-          {contas.map((account: any) => (
-            <div key={account.id} className="p-4 space-y-3">
-              <div className="flex justify-between gap-3"><div><p className="font-bold text-primary">{account.descricao}</p><p className="text-sm text-gray-500">Parcela {account.parcela_numero}/{account.quantidade_parcelas}</p></div><p className="font-bold text-primary">{formatMoney(account.valor_parcela)}</p></div>
-              <div className="flex items-center justify-between text-sm"><span><CalendarDays size={15} className="inline mr-1" />{shortDate(account.vencimento)}</span><span className="font-bold">{account.status === 'pendente' && account.vencimento < localDate() ? 'Vencida' : statusLabels[account.status]}</span></div>
-              <div className="grid grid-cols-2 gap-2">{account.status === 'pago' ? <button className="btn btn-outline px-2" onClick={() => setStatus(account, 'pendente')}><RotateCcw size={16} />Reabrir</button> : <button className="btn btn-outline px-2" onClick={() => setStatus(account, 'pago')}><CheckCircle2 size={16} />Pagar</button>}<button className="btn btn-danger px-2" onClick={() => removeAccount(account)}><Trash2 size={16} />Excluir</button></div>
-            </div>
-          ))}
+        {loading && <div className="p-4 text-gray-500">Carregando contas...</div>}
+
+        <div className="grid gap-3 p-3 sm:p-4">
+          {contas.map((account: any) => {
+            const due = getDueStatus(account);
+            const DueIcon = due.icon;
+
+            return (
+              <div
+                key={account.id}
+                className={`rounded-2xl border border-gray-100 border-l-4 ${due.card} p-3 sm:p-4`}
+              >
+                <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                      <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-[11px] font-bold ${due.badge}`}>
+                        <DueIcon size={13} />
+                        {due.label}
+                      </span>
+
+                      <span className={`px-2.5 py-1 rounded-full border text-[11px] font-bold ${statusClasses[account.status] || statusClasses.pendente}`}>
+                        {statusLabels[account.status] || account.status}
+                      </span>
+
+                      {account.conta_fixa && (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-blue-200 bg-blue-50 text-blue-700 text-[11px] font-bold">
+                          <Repeat size={13} />
+                          Conta fixa
+                        </span>
+                      )}
+
+                      <span className="px-2.5 py-1 rounded-full border border-gray-200 bg-white/80 text-gray-600 text-[11px] font-bold">
+                        {account.parcela_numero}/{account.quantidade_parcelas}
+                      </span>
+                    </div>
+
+                    <h3 className="font-display text-lg font-bold text-primary leading-tight">
+                      {account.descricao}
+                    </h3>
+
+                    <p className="text-sm text-gray-500 mt-1">
+                      {[account.fornecedor, account.categoria].filter(Boolean).join(' · ') || 'Sem fornecedor/categoria'}
+                    </p>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3">
+                      <div className="rounded-xl bg-white/80 border border-gray-100 p-2">
+                        <p className="text-[10px] font-bold text-gray-400 uppercase">Vencimento</p>
+                        <p className="font-bold text-primary">{shortDate(account.vencimento)}</p>
+                      </div>
+
+                      <div className="rounded-xl bg-white/80 border border-gray-100 p-2">
+                        <p className="text-[10px] font-bold text-gray-400 uppercase">Parcela</p>
+                        <p className="font-bold text-primary">{formatMoney(account.valor_parcela || 0)}</p>
+                      </div>
+
+                      <div className="rounded-xl bg-white/80 border border-gray-100 p-2">
+                        <p className="text-[10px] font-bold text-gray-400 uppercase">Total</p>
+                        <p className="font-bold text-primary">{formatMoney(account.valor_total || 0)}</p>
+                      </div>
+
+                      <div className="rounded-xl bg-white/80 border border-gray-100 p-2">
+                        <p className="text-[10px] font-bold text-gray-400 uppercase">Pagamento</p>
+                        <p className="font-bold text-primary">
+                          {account.data_pagamento ? shortDate(account.data_pagamento) : 'Não pago'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {account.observacoes && (
+                      <p className="text-sm text-gray-600 mt-3 whitespace-pre-line">
+                        {account.observacoes}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 lg:grid-cols-1 gap-2 lg:w-40">
+                    {account.status === 'pago' ? (
+                      <button className="btn btn-outline px-2" onClick={() => setStatus(account, 'pendente')}>
+                        <RotateCcw size={16} />
+                        Reabrir
+                      </button>
+                    ) : (
+                      <button className="btn btn-primary px-2" onClick={() => setStatus(account, 'pago')}>
+                        <CheckCircle2 size={16} />
+                        Pagar
+                      </button>
+                    )}
+
+                    <button className="btn btn-danger px-2" onClick={() => removeAccount(account)}>
+                      <Trash2 size={16} />
+                      Excluir
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
 
-        {!loading && contas.length === 0 && <div className="p-8 text-center text-gray-500">Nenhuma conta encontrada neste período.</div>}
+        {!loading && contas.length === 0 && (
+          <div className="p-8 text-center text-gray-500">
+            Nenhuma conta encontrada neste período.
+          </div>
+        )}
       </div>
 
       <BottomSheet isOpen={showForm} onClose={() => setShowForm(false)} title="Nova conta a pagar">
         <div className="space-y-4">
-          <label className="block"><span className="text-sm font-bold text-primary">Descrição *</span><input className="input" placeholder="Ex: Aluguel da gráfica" value={form.descricao} onChange={(e) => setForm({ ...form, descricao: e.target.value })} /></label>
-          <div className="grid sm:grid-cols-2 gap-3"><label><span className="text-sm font-bold text-primary">Fornecedor</span><input className="input" placeholder="Nome do fornecedor" value={form.fornecedor} onChange={(e) => setForm({ ...form, fornecedor: e.target.value })} /></label><label><span className="text-sm font-bold text-primary">Categoria</span><input className="input" placeholder="Ex: Material, aluguel" value={form.categoria} onChange={(e) => setForm({ ...form, categoria: e.target.value })} /></label></div>
-          <div className="grid sm:grid-cols-3 gap-3"><label><span className="text-sm font-bold text-primary">Valor total *</span><input className="input" inputMode="decimal" placeholder="Ex: 1.200,00" value={form.valor_total} onChange={(e) => setForm({ ...form, valor_total: e.target.value })} /></label><label><span className="text-sm font-bold text-primary">Quantidade de parcelas *</span><input className="input" type="number" min="1" max="120" value={form.quantidade_parcelas} onChange={(e) => setForm({ ...form, quantidade_parcelas: Math.max(1, Number(e.target.value || 1)) })} /></label><label><span className="text-sm font-bold text-primary">Primeiro vencimento *</span><input className="input" type="date" value={form.primeiro_vencimento} onChange={(e) => setForm({ ...form, primeiro_vencimento: e.target.value })} /></label></div>
-          <div className="rounded-xl bg-amber-50 border border-amber-100 p-3 text-sm text-gray-600">As próximas parcelas serão criadas mensalmente a partir do primeiro vencimento.</div>
-          <label className="block"><span className="text-sm font-bold text-primary">Observações</span><textarea className="input min-h-24" value={form.observacoes} onChange={(e) => setForm({ ...form, observacoes: e.target.value })} /></label>
-          <div className="grid grid-cols-2 gap-3"><button className="btn btn-outline" onClick={() => setShowForm(false)}>Cancelar</button><button className="btn btn-primary" disabled={saving} onClick={saveAccount}>{saving ? 'Salvando...' : 'Cadastrar conta'}</button></div>
+          <div className="rounded-2xl bg-blue-50 border border-blue-100 p-4">
+            <div className="flex items-start gap-3">
+              <Calculator className="text-blue-700 shrink-0 mt-1" size={22} />
+              <div>
+                <p className="font-bold text-primary">Cálculo automático</p>
+                <p className="text-sm text-gray-600">
+                  Informe o valor da parcela e a quantidade. O valor total será calculado automaticamente.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <label className="block">
+            <span className="text-sm font-bold text-primary">Descrição *</span>
+            <input
+              className="input"
+              placeholder="Ex: Aluguel da gráfica"
+              value={form.descricao}
+              onChange={(e) => setForm({ ...form, descricao: e.target.value })}
+            />
+          </label>
+
+          <div className="grid sm:grid-cols-2 gap-3">
+            <label>
+              <span className="text-sm font-bold text-primary">Fornecedor</span>
+              <input
+                className="input"
+                placeholder="Nome do fornecedor"
+                value={form.fornecedor}
+                onChange={(e) => setForm({ ...form, fornecedor: e.target.value })}
+              />
+            </label>
+
+            <label>
+              <span className="text-sm font-bold text-primary">Categoria</span>
+              <input
+                className="input"
+                placeholder="Ex: Material, aluguel, sistema"
+                value={form.categoria}
+                onChange={(e) => setForm({ ...form, categoria: e.target.value })}
+              />
+            </label>
+          </div>
+
+          <div className="grid sm:grid-cols-3 gap-3">
+            <label>
+              <span className="text-sm font-bold text-primary">Valor da parcela *</span>
+              <input
+                className="input border-2 border-blue-200 focus:border-blue-500"
+                inputMode="decimal"
+                placeholder="Ex: 100,00"
+                value={form.valor_parcela}
+                onChange={(e) => updateInstallmentValue(e.target.value)}
+              />
+            </label>
+
+            <label>
+              <span className="text-sm font-bold text-primary">Quantidade *</span>
+              <input
+                className="input"
+                type="number"
+                min="1"
+                max="120"
+                value={form.quantidade_parcelas}
+                onChange={(e) => updateInstallmentQuantity(Number(e.target.value || 1))}
+              />
+            </label>
+
+            <label>
+              <span className="text-sm font-bold text-primary">Valor total automático</span>
+              <input
+                className="input bg-gray-50 font-bold"
+                readOnly
+                value={form.valor_total}
+                placeholder="0,00"
+              />
+            </label>
+          </div>
+
+          <div className="rounded-2xl bg-gray-50 border border-gray-100 p-4 grid sm:grid-cols-2 gap-3 items-center">
+            <label>
+              <span className="text-sm font-bold text-primary">Primeiro vencimento *</span>
+              <input
+                className="input"
+                type="date"
+                value={form.primeiro_vencimento}
+                onChange={(e) => setForm({ ...form, primeiro_vencimento: e.target.value })}
+              />
+            </label>
+
+            <label className="flex items-center gap-3 rounded-2xl bg-white border border-gray-100 p-3 cursor-pointer">
+              <input
+                type="checkbox"
+                className="w-5 h-5"
+                checked={form.conta_fixa}
+                onChange={(e) => setForm({ ...form, conta_fixa: e.target.checked })}
+              />
+
+              <span>
+                <span className="font-bold text-primary flex items-center gap-2">
+                  <Repeat size={16} />
+                  Conta fixa
+                </span>
+                <span className="block text-xs text-gray-500">
+                  Marque para aluguel, internet, sistema, energia etc.
+                </span>
+              </span>
+            </label>
+          </div>
+
+          <div className="rounded-2xl bg-primary text-white p-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="text-xs text-white/60 uppercase font-bold">Parcela</p>
+                <p className="font-display text-xl font-bold">{formatMoney(valorParcelaFormulario)}</p>
+              </div>
+
+              <div>
+                <p className="text-xs text-white/60 uppercase font-bold">Total</p>
+                <p className="font-display text-xl font-bold">{formatMoney(valorTotalFormulario)}</p>
+              </div>
+            </div>
+          </div>
+
+          <label className="block">
+            <span className="text-sm font-bold text-primary">Observações</span>
+            <textarea
+              className="input min-h-24"
+              value={form.observacoes}
+              onChange={(e) => setForm({ ...form, observacoes: e.target.value })}
+              placeholder="Observações internas sobre esta conta"
+            />
+          </label>
+
+          <div className="sticky bottom-0 -mx-5 -mb-5 bg-white border-t border-gray-100 p-4 grid grid-cols-2 gap-3">
+            <button className="btn btn-outline" onClick={() => setShowForm(false)}>
+              Cancelar
+            </button>
+
+            <button className="btn btn-primary" disabled={saving} onClick={saveAccount}>
+              {saving ? 'Salvando...' : 'Cadastrar conta'}
+            </button>
+          </div>
         </div>
       </BottomSheet>
     </div>
