@@ -15,7 +15,12 @@ import {
   Share2,
   Copy,
   MessageCircle,
-  X
+  X,
+  RefreshCw,
+  BadgeDollarSign,
+  ClipboardList,
+  PackageCheck,
+  Filter
 } from 'lucide-react';
 import { apiFetch, confirmAction, formatMoney, formatPhoneDigits } from '../../lib/api';
 import { BottomSheet } from '../../components/BottomSheet';
@@ -35,6 +40,23 @@ const paymentLabels: Record<string, string> = {
   parcial: 'Pagamento parcial',
   confirmado: 'Pagamento confirmado',
   recusado: 'Pagamento recusado'
+};
+
+const statusClasses: Record<string, string> = {
+  pendente: 'bg-amber-50 text-amber-700 border-amber-200',
+  confirmado: 'bg-blue-50 text-blue-700 border-blue-200',
+  em_producao: 'bg-purple-50 text-purple-700 border-purple-200',
+  pronto: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  enviado: 'bg-sky-50 text-sky-700 border-sky-200',
+  entregue: 'bg-green-50 text-green-700 border-green-200',
+  cancelado: 'bg-gray-100 text-gray-600 border-gray-200'
+};
+
+const paymentClasses: Record<string, string> = {
+  pendente: 'bg-red-50 text-red-700 border-red-200',
+  parcial: 'bg-amber-50 text-amber-700 border-amber-200',
+  confirmado: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  recusado: 'bg-red-100 text-red-800 border-red-200'
 };
 
 type PedidoForm = {
@@ -66,18 +88,111 @@ function dateOnly(value: any) {
   return value ? String(value).slice(0, 10) : '';
 }
 
-function prazoStatus(order: any) {
-  if (!order.prazo_entrega || ['entregue', 'cancelado'].includes(order.status)) {
-    return { label: 'Sem prazo', cls: 'bg-gray-100 text-gray-600', icon: Clock };
+function formatDate(value: any) {
+  const clean = dateOnly(value);
+
+  if (!clean) return 'A combinar';
+
+  try {
+    return new Date(clean + 'T12:00:00').toLocaleDateString('pt-BR');
+  } catch {
+    return 'A combinar';
   }
+}
+
+function daysUntilDeadline(order: any) {
+  if (!order.prazo_entrega) return null;
 
   const today = new Date();
-  const deadline = new Date(dateOnly(order.prazo_entrega) + 'T23:59:59');
-  const diff = Math.ceil((deadline.getTime() - today.getTime()) / 86400000);
+  today.setHours(0, 0, 0, 0);
 
-  if (diff < 0) return { label: 'Atrasado', cls: 'bg-red-50 text-red-700', icon: AlertTriangle };
-  if (diff <= 2) return { label: 'Atenção', cls: 'bg-amber-50 text-amber-700', icon: AlertTriangle };
-  return { label: 'No prazo', cls: 'bg-emerald-50 text-emerald-700', icon: CheckCircle2 };
+  const deadline = new Date(dateOnly(order.prazo_entrega) + 'T00:00:00');
+
+  return Math.ceil((deadline.getTime() - today.getTime()) / 86400000);
+}
+
+function prazoStatus(order: any) {
+  if (!order.prazo_entrega || ['entregue', 'cancelado'].includes(order.status)) {
+    return {
+      label: 'Sem prazo',
+      shortLabel: 'Sem prazo',
+      cls: 'bg-gray-100 text-gray-600 border-gray-200',
+      border: 'border-l-gray-300',
+      icon: Clock,
+      priority: 6
+    };
+  }
+
+  const diff = daysUntilDeadline(order);
+
+  if (diff !== null && diff < 0) {
+    return {
+      label: 'Atrasado',
+      shortLabel: `${Math.abs(diff)} dia(s) atrasado`,
+      cls: 'bg-red-50 text-red-700 border-red-200',
+      border: 'border-l-red-500',
+      icon: AlertTriangle,
+      priority: 1
+    };
+  }
+
+  if (diff === 0) {
+    return {
+      label: 'Hoje',
+      shortLabel: 'Entrega hoje',
+      cls: 'bg-orange-50 text-orange-700 border-orange-200',
+      border: 'border-l-orange-500',
+      icon: AlertTriangle,
+      priority: 2
+    };
+  }
+
+  if (diff !== null && diff <= 2) {
+    return {
+      label: 'Atenção',
+      shortLabel: `Faltam ${diff} dia(s)`,
+      cls: 'bg-amber-50 text-amber-700 border-amber-200',
+      border: 'border-l-amber-500',
+      icon: AlertTriangle,
+      priority: 3
+    };
+  }
+
+  return {
+    label: 'No prazo',
+    shortLabel: `Faltam ${diff} dia(s)`,
+    cls: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    border: 'border-l-emerald-500',
+    icon: CheckCircle2,
+    priority: 5
+  };
+}
+
+function orderPriority(order: any) {
+  if (order.status === 'cancelado') return 99;
+  if (order.status === 'entregue') return 90;
+  if (order.status === 'pronto') return 20;
+
+  const prazo = prazoStatus(order);
+
+  if (prazo.priority <= 3) return prazo.priority;
+  if (order.status === 'pendente') return 4;
+  if (order.status === 'confirmado') return 5;
+  if (order.status === 'em_producao') return 6;
+
+  return prazo.priority;
+}
+
+function getOrderDescription(order: any) {
+  return String(order.observacoes || order.descricao || order.numero_pedido || 'Pedido sem descrição').trim();
+}
+
+function getOrderRemaining(order: any) {
+  return moneyToNumber(
+    order.valor_restante !== undefined && order.valor_restante !== null
+      ? order.valor_restante
+      : Math.max(moneyToNumber(order.total) - moneyToNumber(order.valor_entrada), 0)
+  );
 }
 
 function buildInitialPedidoForm(): PedidoForm {
@@ -96,12 +211,51 @@ function buildInitialPedidoForm(): PedidoForm {
   };
 }
 
+function SummaryCard({
+  title,
+  value,
+  subtitle,
+  icon: Icon,
+  tone = 'default'
+}: {
+  title: string;
+  value: string | number;
+  subtitle: string;
+  icon: any;
+  tone?: 'default' | 'danger' | 'warning' | 'success' | 'money';
+}) {
+  const tones = {
+    default: 'bg-white border-gray-100 text-primary',
+    danger: 'bg-red-50 border-red-100 text-red-700',
+    warning: 'bg-amber-50 border-amber-100 text-amber-700',
+    success: 'bg-emerald-50 border-emerald-100 text-emerald-700',
+    money: 'bg-blue-50 border-blue-100 text-blue-700'
+  };
+
+  return (
+    <div className={`rounded-2xl border p-4 ${tones[tone]}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wide opacity-70">{title}</p>
+          <p className="font-display text-2xl font-bold mt-1">{value}</p>
+          <p className="text-xs opacity-75 mt-1">{subtitle}</p>
+        </div>
+
+        <div className="w-10 h-10 rounded-xl bg-white/80 flex items-center justify-center shrink-0">
+          <Icon size={20} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function Pedidos() {
   const [orders, setOrders] = useState<any[]>([]);
   const [clientes, setClientes] = useState<any[]>([]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('todos');
   const [prazoFilter, setPrazoFilter] = useState('todos');
+  const [quickFilter, setQuickFilter] = useState('todos');
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
   const [history, setHistory] = useState<any[]>([]);
   const [newOrder, setNewOrder] = useState<PedidoForm | null>(null);
@@ -136,7 +290,7 @@ export function Pedidos() {
       ...order,
       total: Number(order.total || 0),
       valor_entrada: Number(order.valor_entrada || 0),
-      valor_restante: Number(order.valor_restante || Math.max(Number(order.total || 0) - Number(order.valor_entrada || 0), 0)),
+      valor_restante: getOrderRemaining(order),
       prazo_entrega: dateOnly(order.prazo_entrega)
     });
 
@@ -148,16 +302,84 @@ export function Pedidos() {
     }
   }
 
+  const summary = useMemo(() => {
+    const ativos = orders.filter((o) => !['cancelado', 'entregue'].includes(o.status));
+    const atrasados = orders.filter((o) => prazoStatus(o).label === 'Atrasado');
+    const hoje = orders.filter((o) => prazoStatus(o).label === 'Hoje');
+    const producao = orders.filter((o) => o.status === 'em_producao');
+    const prontos = orders.filter((o) => o.status === 'pronto');
+    const pendentes = orders.filter((o) => o.status === 'pendente');
+    const aReceber = orders.reduce((sum, o) => sum + getOrderRemaining(o), 0);
+
+    return {
+      total: orders.length,
+      ativos: ativos.length,
+      atrasados: atrasados.length,
+      hoje: hoje.length,
+      producao: producao.length,
+      prontos: prontos.length,
+      pendentes: pendentes.length,
+      aReceber
+    };
+  }, [orders]);
+
   const filtered = useMemo(() => {
-    return orders.filter((o) => {
-      const text = [o.numero_pedido, o.cliente_nome, o.cliente_email, o.cliente_telefone].join(' ').toLowerCase();
-      const matchesSearch = text.includes(search.toLowerCase());
-      const matchesStatus = statusFilter === 'todos' || o.status === statusFilter;
-      const prazo = prazoStatus(o).label;
-      const matchesPrazo = prazoFilter === 'todos' || prazo === prazoFilter;
-      return matchesSearch && matchesStatus && matchesPrazo;
-    });
-  }, [orders, search, statusFilter, prazoFilter]);
+    return [...orders]
+      .filter((o) => {
+        const text = [
+          o.numero_pedido,
+          o.cliente_nome,
+          o.cliente_email,
+          o.cliente_telefone,
+          o.observacoes,
+          o.descricao
+        ]
+          .join(' ')
+          .toLowerCase();
+
+        const matchesSearch = text.includes(search.toLowerCase().trim());
+        const matchesStatus = statusFilter === 'todos' || o.status === statusFilter;
+
+        const prazo = prazoStatus(o);
+        const diff = daysUntilDeadline(o);
+
+        const matchesPrazo =
+          prazoFilter === 'todos' ||
+          prazo.label === prazoFilter ||
+          (prazoFilter === 'Hoje' && diff === 0) ||
+          (prazoFilter === 'Proximos' && diff !== null && diff >= 0 && diff <= 2);
+
+        const matchesQuick =
+          quickFilter === 'todos' ||
+          (quickFilter === 'atrasados' && prazo.label === 'Atrasado') ||
+          (quickFilter === 'hoje' && diff === 0) ||
+          (quickFilter === 'proximos' && diff !== null && diff >= 0 && diff <= 2) ||
+          (quickFilter === 'pendentes' && o.status === 'pendente') ||
+          (quickFilter === 'producao' && o.status === 'em_producao') ||
+          (quickFilter === 'prontos' && o.status === 'pronto') ||
+          (quickFilter === 'pagamento' && o.status_pagamento !== 'confirmado');
+
+        return matchesSearch && matchesStatus && matchesPrazo && matchesQuick;
+      })
+      .sort((a, b) => {
+        const priority = orderPriority(a) - orderPriority(b);
+        if (priority !== 0) return priority;
+
+        const aPrazo = dateOnly(a.prazo_entrega) || '9999-12-31';
+        const bPrazo = dateOnly(b.prazo_entrega) || '9999-12-31';
+
+        if (aPrazo !== bPrazo) return aPrazo.localeCompare(bPrazo);
+
+        return String(b.created_at || '').localeCompare(String(a.created_at || ''));
+      });
+  }, [orders, search, statusFilter, prazoFilter, quickFilter]);
+
+  function clearFilters() {
+    setSearch('');
+    setStatusFilter('todos');
+    setPrazoFilter('todos');
+    setQuickFilter('todos');
+  }
 
   function setNewClient(id: string) {
     if (!newOrder) return;
@@ -280,14 +502,11 @@ export function Pedidos() {
     }
   }
 
-
   function buildShareMessage(order: any) {
     const numero = order.numero_pedido || order.numero || order.id;
-    const prazo = order.prazo_entrega
-      ? new Date(order.prazo_entrega).toLocaleDateString('pt-BR')
-      : 'A combinar';
+    const prazo = order.prazo_entrega ? formatDate(order.prazo_entrega) : 'A combinar';
     const link = window.location.origin + '/acompanhar?pedido=' + encodeURIComponent(numero);
-    const descricao = String(order.observacoes || order.descricao || 'Pedido registrado no painel.').trim();
+    const descricao = getOrderDescription(order);
 
     return [
       `*Pedido número:* ${numero}`,
@@ -362,7 +581,7 @@ export function Pedidos() {
           <p><b>Status:</b> ${statusLabels[pedido.status] || pedido.status}</p>
           <p><b>Status pagamento:</b> ${paymentLabels[pedido.status_pagamento] || pedido.status_pagamento}</p>
           <p><b>Total:</b> ${formatMoney(pedido.total)} | <b>Pago:</b> ${formatMoney(pedido.valor_entrada || 0)} | <b>Resta:</b> ${formatMoney(pedido.valor_restante || 0)}</p>
-          <p><b>Prazo de entrega:</b> ${pedido.prazo_entrega ? new Date(pedido.prazo_entrega).toLocaleDateString('pt-BR') : 'A combinar'}</p>
+          <p><b>Prazo de entrega:</b> ${pedido.prazo_entrega ? formatDate(pedido.prazo_entrega) : 'A combinar'}</p>
           <p><b>Observações:</b> ${pedido.observacoes || '-'}</p>
           <hr/>
           <p><b>WhatsApp:</b> ${data.empresa?.whatsapp || ''}</p>
@@ -382,55 +601,243 @@ export function Pedidos() {
     }
   };
 
+  const quickButtons = [
+    { key: 'todos', label: 'Todos' },
+    { key: 'atrasados', label: `Atrasados ${summary.atrasados}` },
+    { key: 'hoje', label: `Hoje ${summary.hoje}` },
+    { key: 'proximos', label: 'Próx. 2 dias' },
+    { key: 'pendentes', label: `Pendentes ${summary.pendentes}` },
+    { key: 'producao', label: `Produção ${summary.producao}` },
+    { key: 'prontos', label: `Prontos ${summary.prontos}` },
+    { key: 'pagamento', label: 'Pgto pendente' }
+  ];
+
   return (
     <div className="fade-in w-full max-w-full overflow-hidden px-1 sm:px-0">
       <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="font-display text-2xl sm:text-3xl font-bold text-primary">Gerenciador de Pedidos</h1>
-          <p className="text-gray-500 mt-1">Clique em qualquer pedido para abrir, editar e ver histórico.</p>
+          <p className="text-xs font-bold uppercase tracking-[0.25em] text-gold mb-2">
+            Painel administrativo
+          </p>
+          <h1 className="font-display text-2xl sm:text-3xl font-bold text-primary">
+            Gerenciador de Pedidos
+          </h1>
+          <p className="text-gray-500 mt-1">
+            Pedidos urgentes aparecem primeiro. Use os filtros rápidos para organizar a produção.
+          </p>
         </div>
-        <button className="btn btn-primary w-full sm:w-auto" onClick={() => setNewOrder(buildInitialPedidoForm())}>
-          <Plus size={18} /> Pedido Manual
-        </button>
+
+        <div className="flex flex-col sm:flex-row gap-2 w-full xl:w-auto">
+          <button className="btn btn-outline w-full sm:w-auto" onClick={load} disabled={loading}>
+            <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
+            Atualizar
+          </button>
+
+          <button className="btn btn-primary w-full sm:w-auto" onClick={() => setNewOrder(buildInitialPedidoForm())}>
+            <Plus size={18} />
+            Pedido Manual
+          </button>
+        </div>
       </div>
 
-      <div className="card p-4 mb-6 grid lg:grid-cols-3 gap-3">
-        <div className="relative">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-          <input className="input pl-11" placeholder="Buscar pedido ou cliente..." value={search} onChange={(e) => setSearch(e.target.value)} />
+      <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-3 mb-5">
+        <SummaryCard
+          title="Pedidos ativos"
+          value={summary.ativos}
+          subtitle={`${summary.total} pedidos no total`}
+          icon={ClipboardList}
+        />
+
+        <SummaryCard
+          title="Atrasados"
+          value={summary.atrasados}
+          subtitle="Precisam de atenção"
+          icon={AlertTriangle}
+          tone={summary.atrasados > 0 ? 'danger' : 'success'}
+        />
+
+        <SummaryCard
+          title="Em produção"
+          value={summary.producao}
+          subtitle={`${summary.prontos} pronto(s)`}
+          icon={PackageCheck}
+          tone="warning"
+        />
+
+        <SummaryCard
+          title="A receber"
+          value={formatMoney(summary.aReceber)}
+          subtitle="Saldo restante dos pedidos"
+          icon={BadgeDollarSign}
+          tone="money"
+        />
+      </div>
+
+      <div className="card p-4 mb-4 space-y-4">
+        <div className="grid lg:grid-cols-[1fr_220px_220px_auto] gap-3">
+          <div className="relative">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+            <input
+              className="input pl-11"
+              placeholder="Buscar por pedido, cliente, telefone, email ou descrição..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+
+          <select className="input" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+            <option value="todos">Todos os status</option>
+            {Object.entries(statusLabels).map(([key, label]) => (
+              <option key={key} value={key}>{label}</option>
+            ))}
+          </select>
+
+          <select className="input" value={prazoFilter} onChange={(e) => setPrazoFilter(e.target.value)}>
+            <option value="todos">Todos os prazos</option>
+            <option value="Atrasado">Atrasados</option>
+            <option value="Hoje">Entrega hoje</option>
+            <option value="Proximos">Próximos 2 dias</option>
+            <option value="Atenção">Atenção</option>
+            <option value="No prazo">No prazo</option>
+            <option value="Sem prazo">Sem prazo</option>
+          </select>
+
+          <button type="button" className="btn btn-outline" onClick={clearFilters}>
+            <Filter size={17} />
+            Limpar
+          </button>
         </div>
-        <select className="input" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-          <option value="todos">Todos os status</option>
-          {Object.entries(statusLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
-        </select>
-        <select className="input" value={prazoFilter} onChange={(e) => setPrazoFilter(e.target.value)}>
-          <option value="todos">Todos os prazos</option>
-          <option value="Atrasado">Atrasados</option>
-          <option value="Atenção">Atenção</option>
-          <option value="No prazo">No prazo</option>
-          <option value="Sem prazo">Sem prazo</option>
-        </select>
+
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {quickButtons.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => setQuickFilter(item.key)}
+              className={`shrink-0 px-4 py-2 rounded-full text-sm font-bold border transition ${
+                quickFilter === item.key
+                  ? 'bg-primary text-white border-primary'
+                  : 'bg-white text-primary border-gray-200 hover:border-gold'
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <p className="text-sm text-gray-500">
+          Exibindo <b className="text-primary">{filtered.length}</b> pedido(s), ordenados por urgência.
+        </p>
       </div>
 
       {loading && <div className="card p-4 mb-4">Carregando pedidos...</div>}
+
+      {!loading && filtered.length === 0 && (
+        <div className="card p-8 text-center">
+          <p className="font-bold text-primary">Nenhum pedido encontrado.</p>
+          <p className="text-gray-500 mt-1">Tente limpar os filtros ou buscar por outro cliente.</p>
+        </div>
+      )}
 
       <div className="grid gap-3">
         {filtered.map((o) => {
           const pz = prazoStatus(o);
           const Icon = pz.icon;
+          const remaining = getOrderRemaining(o);
+          const paymentClass = paymentClasses[o.status_pagamento] || 'bg-gray-100 text-gray-600 border-gray-200';
+          const statusClass = statusClasses[o.status] || 'bg-gray-100 text-gray-600 border-gray-200';
+
           return (
-            <button key={o.id} onClick={() => openOrder(o)} className="card p-4 text-left hover:ring-2 hover:ring-gold/40 transition">
-              <div className="grid xl:grid-cols-[1fr_1fr_130px_170px_130px] gap-3 items-center">
-                <div><p className="font-bold text-primary line-clamp-2">{String(o.observacoes || o.descricao || o.numero_pedido || 'Pedido')}</p><p className="text-sm text-gray-500">{o.numero_pedido} • {statusLabels[o.status] || o.status}</p></div>
-                <div><p className="font-semibold text-primary truncate">{o.cliente_nome || o.cliente_email || 'Cliente'}</p><p className="text-sm text-gray-500 truncate">{o.cliente_telefone || o.cliente_email}</p></div>
-                <div><span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold ${pz.cls}`}><Icon size={14} />{pz.label}</span><p className="text-xs text-gray-500 mt-1">{o.prazo_entrega ? new Date(o.prazo_entrega).toLocaleDateString('pt-BR') : 'A combinar'}</p></div>
-                <div><p className="font-bold text-primary">{formatMoney(o.total)}</p><p className="text-xs text-gray-500">Pago {formatMoney(o.valor_entrada || 0)} • Resta {formatMoney(o.valor_restante || 0)}</p></div>
-                <div className="flex gap-2 justify-start xl:justify-end" onClick={(e) => e.stopPropagation()}>
-                  <button className="p-2 rounded-lg bg-gray-50 hover:bg-gray-100" onClick={() => printDocument(o)} title="Documento"><Printer size={17} /></button>
-                  <button className="p-2 rounded-lg bg-red-50 text-red-700 hover:bg-red-100" onClick={() => deleteOrder(o)} title="Excluir"><Trash2 size={17} /></button>
+            <div
+              key={o.id}
+              role="button"
+              tabIndex={0}
+              onClick={() => openOrder(o)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') openOrder(o);
+              }}
+              className={`card overflow-hidden border-l-4 ${pz.border} hover:ring-2 hover:ring-gold/40 transition cursor-pointer`}
+            >
+              <div className="p-4">
+                <div className="flex flex-col xl:flex-row xl:items-start justify-between gap-4">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                      <span className="px-3 py-1 rounded-full bg-primary text-white text-xs font-bold">
+                        {o.numero_pedido || 'Sem número'}
+                      </span>
+
+                      <span className={`px-3 py-1 rounded-full border text-xs font-bold ${statusClass}`}>
+                        {statusLabels[o.status] || o.status || 'Sem status'}
+                      </span>
+
+                      <span className={`px-3 py-1 rounded-full border text-xs font-bold ${paymentClass}`}>
+                        {paymentLabels[o.status_pagamento] || o.status_pagamento || 'Pagamento'}
+                      </span>
+
+                      <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full border text-xs font-bold ${pz.cls}`}>
+                        <Icon size={14} />
+                        {pz.shortLabel}
+                      </span>
+                    </div>
+
+                    <h3 className="font-display font-bold text-lg text-primary line-clamp-2">
+                      {getOrderDescription(o)}
+                    </h3>
+
+                    <div className="mt-3 grid sm:grid-cols-2 xl:grid-cols-4 gap-3 text-sm">
+                      <div className="rounded-xl bg-gray-50 p-3">
+                        <p className="text-xs font-bold text-gray-400 uppercase">Cliente</p>
+                        <p className="font-bold text-primary truncate">{o.cliente_nome || 'Cliente não informado'}</p>
+                        <p className="text-gray-500 truncate">{o.cliente_telefone || o.cliente_email || 'Sem contato'}</p>
+                      </div>
+
+                      <div className="rounded-xl bg-gray-50 p-3">
+                        <p className="text-xs font-bold text-gray-400 uppercase">Prazo</p>
+                        <p className="font-bold text-primary">{formatDate(o.prazo_entrega)}</p>
+                        <p className="text-gray-500">{pz.label}</p>
+                      </div>
+
+                      <div className="rounded-xl bg-gray-50 p-3">
+                        <p className="text-xs font-bold text-gray-400 uppercase">Valor</p>
+                        <p className="font-bold text-primary">{formatMoney(o.total)}</p>
+                        <p className="text-gray-500">Pago {formatMoney(o.valor_entrada || 0)}</p>
+                      </div>
+
+                      <div className={`rounded-xl p-3 ${remaining > 0 ? 'bg-red-50' : 'bg-emerald-50'}`}>
+                        <p className="text-xs font-bold text-gray-400 uppercase">Restante</p>
+                        <p className={`font-bold ${remaining > 0 ? 'text-red-700' : 'text-emerald-700'}`}>
+                          {formatMoney(remaining)}
+                        </p>
+                        <p className="text-gray-500">{remaining > 0 ? 'A receber' : 'Quitado'}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-1 gap-2 xl:w-40" onClick={(e) => e.stopPropagation()}>
+                    <button className="btn btn-primary text-sm px-3 py-2" onClick={() => openOrder(o)}>
+                      Abrir
+                    </button>
+
+                    <button className="btn btn-outline text-sm px-3 py-2" onClick={() => printDocument(o)} title="Documento">
+                      <Printer size={16} />
+                      Doc.
+                    </button>
+
+                    <button className="btn btn-outline text-sm px-3 py-2" onClick={() => shareOrder(o)}>
+                      <Share2 size={16} />
+                      Enviar
+                    </button>
+
+                    <button className="btn btn-outline text-red-700 text-sm px-3 py-2" onClick={() => deleteOrder(o)} title="Excluir">
+                      <Trash2 size={16} />
+                      Excluir
+                    </button>
+                  </div>
                 </div>
               </div>
-            </button>
+            </div>
           );
         })}
       </div>
@@ -438,34 +845,166 @@ export function Pedidos() {
       <BottomSheet isOpen={!!selectedOrder} onClose={() => setSelectedOrder(null)} title="Pedido">
         {selectedOrder && (
           <div className="space-y-4">
-            <div className="grid sm:grid-cols-2 gap-3">
-              <input className="input" value={selectedOrder.cliente_nome || ''} onChange={(e) => setSelectedOrder({ ...selectedOrder, cliente_nome: e.target.value })} placeholder="Cliente" />
-              <input className="input" value={selectedOrder.cliente_telefone || ''} onChange={(e) => setSelectedOrder({ ...selectedOrder, cliente_telefone: formatPhoneDigits(e.target.value) })} placeholder="Telefone" inputMode="numeric" />
-              <input className="input" value={selectedOrder.cliente_email || ''} onChange={(e) => setSelectedOrder({ ...selectedOrder, cliente_email: e.target.value })} placeholder="Email" />
-              <input className="input" type="date" value={selectedOrder.prazo_entrega || ''} onChange={(e) => setSelectedOrder({ ...selectedOrder, prazo_entrega: e.target.value })} />
+            <div className="rounded-2xl bg-primary text-white p-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-white/70">Pedido</p>
+                  <h2 className="font-display text-xl font-bold">
+                    {selectedOrder.numero_pedido || selectedOrder.id}
+                  </h2>
+                  <p className="text-sm text-white/70 mt-1">
+                    {selectedOrder.cliente_nome || 'Cliente não informado'}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <span className="rounded-xl bg-white/10 px-3 py-2 font-bold">
+                    {statusLabels[selectedOrder.status] || selectedOrder.status}
+                  </span>
+                  <span className="rounded-xl bg-white/10 px-3 py-2 font-bold">
+                    {paymentLabels[selectedOrder.status_pagamento] || selectedOrder.status_pagamento}
+                  </span>
+                </div>
+              </div>
             </div>
+
+            <div className="grid sm:grid-cols-2 gap-3">
+              <input
+                className="input"
+                value={selectedOrder.cliente_nome || ''}
+                onChange={(e) => setSelectedOrder({ ...selectedOrder, cliente_nome: e.target.value })}
+                placeholder="Cliente"
+              />
+              <input
+                className="input"
+                value={selectedOrder.cliente_telefone || ''}
+                onChange={(e) => setSelectedOrder({ ...selectedOrder, cliente_telefone: formatPhoneDigits(e.target.value) })}
+                placeholder="Telefone"
+                inputMode="numeric"
+              />
+              <input
+                className="input"
+                value={selectedOrder.cliente_email || ''}
+                onChange={(e) => setSelectedOrder({ ...selectedOrder, cliente_email: e.target.value })}
+                placeholder="Email"
+              />
+              <input
+                className="input"
+                type="date"
+                value={selectedOrder.prazo_entrega || ''}
+                onChange={(e) => setSelectedOrder({ ...selectedOrder, prazo_entrega: e.target.value })}
+              />
+            </div>
+
             <div className="grid sm:grid-cols-3 gap-3">
-              <input className="input" type="number" step="0.01" value={selectedOrder.total || 0} onChange={(e) => { const total = moneyToNumber(e.target.value); const entrada = moneyToNumber(selectedOrder.valor_entrada); setSelectedOrder({ ...selectedOrder, total, valor_restante: Math.max(total - entrada, 0) }); }} placeholder="Total" />
-              <input className="input" type="number" step="0.01" value={selectedOrder.valor_entrada || 0} onChange={(e) => { const entrada = moneyToNumber(e.target.value); const total = moneyToNumber(selectedOrder.total); setSelectedOrder({ ...selectedOrder, valor_entrada: entrada, valor_restante: Math.max(total - entrada, 0) }); }} placeholder="Pago/entrada" />
-              <input className="input bg-gray-50" readOnly value={formatMoney(selectedOrder.valor_restante || 0)} placeholder="Resta" />
+              <input
+                className="input"
+                type="number"
+                step="0.01"
+                value={selectedOrder.total || 0}
+                onChange={(e) => {
+                  const total = moneyToNumber(e.target.value);
+                  const entrada = moneyToNumber(selectedOrder.valor_entrada);
+                  setSelectedOrder({ ...selectedOrder, total, valor_restante: Math.max(total - entrada, 0) });
+                }}
+                placeholder="Total"
+              />
+              <input
+                className="input"
+                type="number"
+                step="0.01"
+                value={selectedOrder.valor_entrada || 0}
+                onChange={(e) => {
+                  const entrada = moneyToNumber(e.target.value);
+                  const total = moneyToNumber(selectedOrder.total);
+                  setSelectedOrder({ ...selectedOrder, valor_entrada: entrada, valor_restante: Math.max(total - entrada, 0) });
+                }}
+                placeholder="Pago/entrada"
+              />
+              <input
+                className="input bg-gray-50"
+                readOnly
+                value={formatMoney(selectedOrder.valor_restante || 0)}
+                placeholder="Resta"
+              />
             </div>
+
             <div className="grid sm:grid-cols-2 gap-3">
-              <select className="input" value={selectedOrder.status} onChange={(e) => setSelectedOrder({ ...selectedOrder, status: e.target.value })}>{Object.entries(statusLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select>
-              <select className="input" value={selectedOrder.status_pagamento || 'pendente'} onChange={(e) => { const status = e.target.value; const total = moneyToNumber(selectedOrder.total); const entradaAtual = moneyToNumber(selectedOrder.valor_entrada); const entrada = status === 'confirmado' ? total : status === 'pendente' ? 0 : entradaAtual; setSelectedOrder({ ...selectedOrder, status_pagamento: status, valor_entrada: entrada, valor_restante: Math.max(total - entrada, 0) }); }}>{Object.entries(paymentLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select>
+              <select
+                className="input"
+                value={selectedOrder.status}
+                onChange={(e) => setSelectedOrder({ ...selectedOrder, status: e.target.value })}
+              >
+                {Object.entries(statusLabels).map(([key, label]) => (
+                  <option key={key} value={key}>{label}</option>
+                ))}
+              </select>
+
+              <select
+                className="input"
+                value={selectedOrder.status_pagamento || 'pendente'}
+                onChange={(e) => {
+                  const status = e.target.value;
+                  const total = moneyToNumber(selectedOrder.total);
+                  const entradaAtual = moneyToNumber(selectedOrder.valor_entrada);
+                  const entrada = status === 'confirmado' ? total : status === 'pendente' ? 0 : entradaAtual;
+
+                  setSelectedOrder({
+                    ...selectedOrder,
+                    status_pagamento: status,
+                    valor_entrada: entrada,
+                    valor_restante: Math.max(total - entrada, 0)
+                  });
+                }}
+              >
+                {Object.entries(paymentLabels).map(([key, label]) => (
+                  <option key={key} value={key}>{label}</option>
+                ))}
+              </select>
             </div>
-            <textarea className="input min-h-24" placeholder="Observações" value={selectedOrder.observacoes || ''} onChange={(e) => setSelectedOrder({ ...selectedOrder, observacoes: e.target.value })} />
-            <div className="sticky bottom-0 -mx-5 -mb-5 bg-white border-t border-gray-100 p-4 grid grid-cols-1 sm:grid-cols-4 gap-2">
-              <button className="btn btn-outline" onClick={() => printDocument(selectedOrder)}>Documento</button>
-              <button className="btn btn-outline" onClick={() => shareOrder(selectedOrder)}><Share2 size={16} /> Compartilhar</button>
-              <button className="btn btn-outline text-red-700" onClick={() => deleteOrder(selectedOrder)}>Excluir</button>
-              <button className="btn btn-primary" onClick={saveStatus}>Salvar</button>
-            </div>
+
+            <textarea
+              className="input min-h-24"
+              placeholder="Observações"
+              value={selectedOrder.observacoes || ''}
+              onChange={(e) => setSelectedOrder({ ...selectedOrder, observacoes: e.target.value })}
+            />
+
             <div className="border-t border-gray-100 pt-4">
               <h3 className="font-bold text-primary mb-3">Histórico do pedido</h3>
               {history.length === 0 && <p className="text-sm text-gray-500">Nenhuma alteração registrada.</p>}
+
               <div className="space-y-2 max-h-56 overflow-y-auto">
-                {history.map((h) => <div key={h.id || h.created_at} className="bg-gray-50 rounded-xl p-3 text-sm"><p className="font-bold text-primary">{h.usuario_nome || 'Sistema'} {h.acao} {h.campo}</p><p className="text-gray-500">De: {h.valor_anterior || '-'} • Para: {h.valor_novo || '-'}</p><p className="text-xs text-gray-400">{new Date(h.created_at).toLocaleString('pt-BR')}</p></div>)}
+                {history.map((h) => (
+                  <div key={h.id || h.created_at} className="bg-gray-50 rounded-xl p-3 text-sm">
+                    <p className="font-bold text-primary">
+                      {h.usuario_nome || 'Sistema'} {h.acao} {h.campo}
+                    </p>
+                    <p className="text-gray-500">
+                      De: {h.valor_anterior || '-'} • Para: {h.valor_novo || '-'}
+                    </p>
+                    <p className="text-xs text-gray-400">
+                      {new Date(h.created_at).toLocaleString('pt-BR')}
+                    </p>
+                  </div>
+                ))}
               </div>
+            </div>
+
+            <div className="sticky bottom-0 -mx-5 -mb-5 bg-white border-t border-gray-100 p-4 grid grid-cols-1 sm:grid-cols-4 gap-2">
+              <button className="btn btn-outline" onClick={() => printDocument(selectedOrder)}>
+                Documento
+              </button>
+              <button className="btn btn-outline" onClick={() => shareOrder(selectedOrder)}>
+                <Share2 size={16} />
+                Compartilhar
+              </button>
+              <button className="btn btn-outline text-red-700" onClick={() => deleteOrder(selectedOrder)}>
+                Excluir
+              </button>
+              <button className="btn btn-primary" onClick={saveStatus}>
+                Salvar
+              </button>
             </div>
           </div>
         )}
@@ -474,14 +1013,116 @@ export function Pedidos() {
       <BottomSheet isOpen={!!newOrder} onClose={() => setNewOrder(null)} title="Novo Pedido Manual">
         {newOrder && (
           <div className="space-y-4">
-            <div className="rounded-2xl bg-amber-50 border border-amber-100 p-4"><p className="font-bold text-primary">Cliente do pedido</p><p className="text-sm text-gray-600">Escolha um cliente já cadastrado ou preencha os dados manualmente.</p></div>
-            <label className="block"><span className="text-sm font-bold text-primary mb-1 flex items-center gap-2"><UserRound size={16} />Nome do cliente</span><input className="input border-2 border-amber-300 focus:border-amber-500" placeholder="Digite o nome do cliente" value={newOrder.cliente_nome} onChange={(e) => setNewOrder({ ...newOrder, cliente_nome: e.target.value })} /></label>
-            <label className="block"><span className="text-sm font-bold text-primary mb-1 flex items-center gap-2"><UserRound size={16} />Selecionar cliente cadastrado</span><select className="input" value={newOrder.usuario_id || ''} onChange={(e) => setNewClient(e.target.value)}><option value="">Selecionar cliente cadastrado ou preencher manualmente</option>{clientes.map((c) => <option key={c.id} value={c.id}>{c.nome} - {c.email || c.telefone || 'sem contato'}</option>)}</select></label>
-            <div className="grid sm:grid-cols-2 gap-3"><label className="block"><span className="text-sm font-bold text-primary mb-1 flex items-center gap-2"><Phone size={16} />Telefone</span><input className="input" placeholder="Somente números. Ex: 5588996240470" inputMode="numeric" value={newOrder.cliente_telefone} onChange={(e) => setNewOrder({ ...newOrder, cliente_telefone: formatPhoneDigits(e.target.value) })} /></label><label className="block"><span className="text-sm font-bold text-primary mb-1 flex items-center gap-2"><Mail size={16} />Email</span><input className="input" placeholder="Email do cliente" value={newOrder.cliente_email} onChange={(e) => setNewOrder({ ...newOrder, cliente_email: e.target.value })} /></label></div>
-            <label className="block"><span className="text-sm font-bold text-primary mb-1 flex items-center gap-2"><FileText size={16} />Descrição do pedido</span><textarea className="input min-h-28" placeholder="Descreva o pedido, produto, tamanho, material, observações..." value={newOrder.descricao} onChange={(e) => setNewOrder({ ...newOrder, descricao: e.target.value })} /></label>
-            <div className="grid sm:grid-cols-3 gap-3"><label className="block"><span className="text-sm font-bold text-primary mb-1">Total R$</span><input className="input" placeholder="Total R$" value={newOrder.total} onChange={(e) => updateNewOrderMoney('total', e.target.value)} /></label><label className="block"><span className="text-sm font-bold text-primary mb-1">Entrada R$</span><input className="input" placeholder="Entrada R$" value={newOrder.valor_entrada} onChange={(e) => updateNewOrderMoney('valor_entrada', e.target.value)} /></label><label className="block"><span className="text-sm font-bold text-primary mb-1">Resta</span><input className="input bg-gray-50" readOnly value={formatMoney(newOrder.valor_restante || 0)} /></label></div>
-            <label className="block"><span className="text-sm font-bold text-primary mb-1 flex items-center gap-2"><CalendarDays size={16} />Prazo de entrega</span><input className="input" type="date" value={newOrder.prazo_entrega} onChange={(e) => setNewOrder({ ...newOrder, prazo_entrega: e.target.value })} /></label>
-            <div className="sticky bottom-0 -mx-5 -mb-5 bg-white border-t border-gray-100 p-4 grid grid-cols-2 gap-3"><button type="button" className="btn btn-outline" onClick={() => setNewOrder(null)}>Cancelar</button><button className="btn btn-primary" onClick={createOrder}>Salvar pedido</button></div>
+            <div className="rounded-2xl bg-amber-50 border border-amber-100 p-4">
+              <p className="font-bold text-primary">Cliente do pedido</p>
+              <p className="text-sm text-gray-600">
+                Escolha um cliente já cadastrado ou preencha os dados manualmente.
+              </p>
+            </div>
+
+            <label className="block">
+              <span className="text-sm font-bold text-primary mb-1 flex items-center gap-2">
+                <UserRound size={16} />
+                Nome do cliente
+              </span>
+              <input
+                className="input border-2 border-amber-300 focus:border-amber-500"
+                placeholder="Digite o nome do cliente"
+                value={newOrder.cliente_nome}
+                onChange={(e) => setNewOrder({ ...newOrder, cliente_nome: e.target.value })}
+              />
+            </label>
+
+            <label className="block">
+              <span className="text-sm font-bold text-primary mb-1 flex items-center gap-2">
+                <UserRound size={16} />
+                Selecionar cliente cadastrado
+              </span>
+              <select className="input" value={newOrder.usuario_id || ''} onChange={(e) => setNewClient(e.target.value)}>
+                <option value="">Selecionar cliente cadastrado ou preencher manualmente</option>
+                {clientes.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.nome} - {c.email || c.telefone || 'sem contato'}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div className="grid sm:grid-cols-2 gap-3">
+              <label className="block">
+                <span className="text-sm font-bold text-primary mb-1 flex items-center gap-2">
+                  <Phone size={16} />
+                  Telefone
+                </span>
+                <input
+                  className="input"
+                  placeholder="Somente números. Ex: 5588996240470"
+                  inputMode="numeric"
+                  value={newOrder.cliente_telefone}
+                  onChange={(e) => setNewOrder({ ...newOrder, cliente_telefone: formatPhoneDigits(e.target.value) })}
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-sm font-bold text-primary mb-1 flex items-center gap-2">
+                  <Mail size={16} />
+                  Email
+                </span>
+                <input
+                  className="input"
+                  placeholder="Email do cliente"
+                  value={newOrder.cliente_email}
+                  onChange={(e) => setNewOrder({ ...newOrder, cliente_email: e.target.value })}
+                />
+              </label>
+            </div>
+
+            <label className="block">
+              <span className="text-sm font-bold text-primary mb-1 flex items-center gap-2">
+                <FileText size={16} />
+                Descrição do pedido
+              </span>
+              <textarea
+                className="input min-h-28"
+                placeholder="Descreva o pedido, produto, tamanho, material, observações..."
+                value={newOrder.descricao}
+                onChange={(e) => setNewOrder({ ...newOrder, descricao: e.target.value })}
+              />
+            </label>
+
+            <div className="grid sm:grid-cols-3 gap-3">
+              <label className="block">
+                <span className="text-sm font-bold text-primary mb-1">Total R$</span>
+                <input className="input" placeholder="Total R$" value={newOrder.total} onChange={(e) => updateNewOrderMoney('total', e.target.value)} />
+              </label>
+
+              <label className="block">
+                <span className="text-sm font-bold text-primary mb-1">Entrada R$</span>
+                <input className="input" placeholder="Entrada R$" value={newOrder.valor_entrada} onChange={(e) => updateNewOrderMoney('valor_entrada', e.target.value)} />
+              </label>
+
+              <label className="block">
+                <span className="text-sm font-bold text-primary mb-1">Resta</span>
+                <input className="input bg-gray-50" readOnly value={formatMoney(newOrder.valor_restante || 0)} />
+              </label>
+            </div>
+
+            <label className="block">
+              <span className="text-sm font-bold text-primary mb-1 flex items-center gap-2">
+                <CalendarDays size={16} />
+                Prazo de entrega
+              </span>
+              <input className="input" type="date" value={newOrder.prazo_entrega} onChange={(e) => setNewOrder({ ...newOrder, prazo_entrega: e.target.value })} />
+            </label>
+
+            <div className="sticky bottom-0 -mx-5 -mb-5 bg-white border-t border-gray-100 p-4 grid grid-cols-2 gap-3">
+              <button type="button" className="btn btn-outline" onClick={() => setNewOrder(null)}>
+                Cancelar
+              </button>
+              <button className="btn btn-primary" onClick={createOrder}>
+                Salvar pedido
+              </button>
+            </div>
           </div>
         )}
       </BottomSheet>
@@ -491,8 +1132,12 @@ export function Pedidos() {
           <div className="w-full max-w-3xl max-h-[94dvh] bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col">
             <div className="px-5 sm:px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-3">
               <div>
-                <h2 className="font-display text-xl sm:text-2xl font-bold text-primary">Compartilhar pedido</h2>
-                <p className="text-sm text-gray-500">Confira, edite, copie ou envie o texto pelo WhatsApp.</p>
+                <h2 className="font-display text-xl sm:text-2xl font-bold text-primary">
+                  Compartilhar pedido
+                </h2>
+                <p className="text-sm text-gray-500">
+                  Confira, edite, copie ou envie o texto pelo WhatsApp.
+                </p>
               </div>
 
               <button
@@ -531,7 +1176,6 @@ export function Pedidos() {
           </div>
         </div>
       )}
-
     </div>
   );
 }

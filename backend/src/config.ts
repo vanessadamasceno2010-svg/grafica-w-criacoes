@@ -18,14 +18,6 @@ if (isProduction && jwtSecret.length < 32) {
   throw new Error('JWT_SECRET fraco. Use uma chave com pelo menos 32 caracteres.');
 }
 
-if (isProduction && !process.env.SUPABASE_URL) {
-  throw new Error('SUPABASE_URL obrigatória em produção.');
-}
-
-if (isProduction && !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-  throw new Error('SUPABASE_SERVICE_ROLE_KEY obrigatória em produção.');
-}
-
 export const config = {
   nodeEnv: process.env.NODE_ENV || 'development',
   isProduction,
@@ -35,8 +27,8 @@ export const config = {
 
   databaseUrl: process.env.DATABASE_URL || '',
 
-  supabaseUrl: process.env.SUPABASE_URL || '',
-  supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
+  supabaseUrl: getEnv('SUPABASE_URL'),
+  supabaseServiceRoleKey: getEnv('SUPABASE_SERVICE_ROLE_KEY'),
 
   jwtSecret,
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
@@ -46,6 +38,6 @@ export const config = {
     port: Number(process.env.SMTP_PORT || 587),
     user: process.env.SMTP_USER || '',
     pass: process.env.SMTP_PASS || '',
-    from: process.env.MAIL_FROM || 'Gráfica W Criações',
+    from: process.env.MAIL_FROM || 'Gráfica W Criações <no-reply@graficawcriacoes.com>',
   },
 };

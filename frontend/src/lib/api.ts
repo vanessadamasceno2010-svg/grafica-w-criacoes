@@ -1,10 +1,7 @@
-const isVercelSite =
-  typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app');
 const configuredApiUrl = String(import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 
-export const API_BASE = configuredApiUrl || (isVercelSite
-  ? '/api'
-  : 'https://grafica-w-criacoes-backend.vercel.app/api');
+export const API_BASE =
+  configuredApiUrl || 'https://grafica-w-criacoes-backend.vercel.app/api';
 
 export const API_URL = API_BASE;
 
