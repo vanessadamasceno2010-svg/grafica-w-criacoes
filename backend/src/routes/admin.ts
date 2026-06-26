@@ -762,7 +762,7 @@ const contaPagarSchema = z.object({
   descricao: z.string().min(2),
   fornecedor: z.string().optional().default(''),
   categoria: z.string().optional().default(''),
-  valor_total: z.coerce.number().positive().optional(),
+  valor_total: z.coerce.number().nonnegative().optional(),
   valor_parcela: z.coerce.number().positive().optional(),
   quantidade_parcelas: z.coerce.number().int().min(1).max(120).default(1),
   primeiro_vencimento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -799,6 +799,19 @@ adminRoutes.get('/contas-pagar', onlyAdmin, asyncHandler(async (req, res) => {
 
   const all = await supabaseRest<any[]>('/contas_pagar?select=*&order=vencimento.asc,created_at.desc&limit=5000');
 
+  const valorRestantePorGrupo = new Map<string, number>();
+
+  all.forEach((conta) => {
+    if (conta.conta_fixa === true) return;
+    if (conta.status !== 'pendente') return;
+
+    const grupo = conta.grupo_id || conta.id;
+    valorRestantePorGrupo.set(
+      grupo,
+      (valorRestantePorGrupo.get(grupo) || 0) + asNumber(conta.valor_parcela)
+    );
+  });
+
   let contas = all.filter((conta) => {
     if (range.start && conta.vencimento < range.start) return false;
     if (range.end && conta.vencimento > range.end) return false;
@@ -817,7 +830,12 @@ adminRoutes.get('/contas-pagar', onlyAdmin, asyncHandler(async (req, res) => {
     }
 
     return true;
-  });
+  }).map((conta) => ({
+    ...conta,
+    valor_restante_conta: conta.conta_fixa === true
+      ? 0
+      : valorRestantePorGrupo.get(conta.grupo_id || conta.id) || 0
+  }));
 
   const contasDoPeriodo = all.filter((conta) =>
     conta.status !== 'cancelado' &&
@@ -839,6 +857,12 @@ adminRoutes.get('/contas-pagar', onlyAdmin, asyncHandler(async (req, res) => {
     conta.vencimento <= range.end
   );
 
+  const contasPagasPeriodo = all.filter((conta) =>
+    conta.status === 'pago' &&
+    conta.vencimento >= range.start &&
+    conta.vencimento <= range.end
+  );
+
   const contasFixasPeriodo = contasDoPeriodo.filter((conta) => conta.conta_fixa === true);
 
   res.json({
@@ -848,6 +872,8 @@ adminRoutes.get('/contas-pagar', onlyAdmin, asyncHandler(async (req, res) => {
       quantidadeMes: contasDoPeriodo.length,
       aVencerMes: aVencerPeriodo.reduce((sum, conta) => sum + asNumber(conta.valor_parcela), 0),
       quantidadeAVencer: aVencerPeriodo.length,
+      contasPagasMes: contasPagasPeriodo.reduce((sum, conta) => sum + asNumber(conta.valor_parcela), 0),
+      quantidadePagasMes: contasPagasPeriodo.length,
       vencidas: vencidas.reduce((sum, conta) => sum + asNumber(conta.valor_parcela), 0),
       quantidadeVencidas: vencidas.length,
       contasFixasMes: contasFixasPeriodo.reduce((sum, conta) => sum + asNumber(conta.valor_parcela), 0),
@@ -891,7 +917,7 @@ adminRoutes.post('/contas-pagar', onlyAdmin, asyncHandler(async (req, res) => {
     ? 0
     : totalCents - (baseCents * quantidadeParcelas);
 
-  const valorTotal = totalCents / 100;
+  const valorTotal = Boolean(d.conta_fixa) ? 0 : totalCents / 100;
   const now = new Date().toISOString();
 
   const parcelas = Array.from({ length: quantidadeParcelas }, (_, index) => ({
@@ -972,6 +998,7 @@ adminRoutes.delete('/contas-pagar/:id', onlyAdmin, asyncHandler(async (req, res)
 
   res.json({ ok: true });
 }));
+
 
 
 
