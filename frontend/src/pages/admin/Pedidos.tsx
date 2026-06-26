@@ -304,16 +304,16 @@ function SummaryCard({
   };
 
   return (
-    <div className={`rounded-2xl border p-4 ${tones[tone]}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-wide opacity-70">{title}</p>
-          <p className="font-display text-2xl font-bold mt-1">{value}</p>
-          <p className="text-xs opacity-75 mt-1">{subtitle}</p>
+    <div className={`rounded-2xl border p-2.5 sm:p-3 ${tones[tone]}`}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-[10px] sm:text-xs font-bold uppercase tracking-wide opacity-70 truncate">{title}</p>
+          <p className="font-display text-lg sm:text-xl font-bold mt-0.5 leading-tight break-words">{value}</p>
+          <p className="text-[10px] sm:text-xs opacity-75 mt-0.5 leading-tight">{subtitle}</p>
         </div>
 
-        <div className="w-10 h-10 rounded-xl bg-white/80 flex items-center justify-center shrink-0">
-          <Icon size={20} />
+        <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-white/80 flex items-center justify-center shrink-0">
+          <Icon size={17} />
         </div>
       </div>
     </div>
@@ -380,7 +380,8 @@ export function Pedidos() {
     const producao = orders.filter((o) => o.status === 'em_producao');
     const prontos = orders.filter((o) => o.status === 'pronto');
     const pendentes = orders.filter((o) => o.status === 'pendente');
-    const aReceber = orders.reduce((sum, o) => sum + getOrderRemaining(o), 0);
+    const pedidosValidosParaReceber = orders.filter((o) => !['cancelado', 'pendente'].includes(String(o.status || '').toLowerCase()));
+    const aReceber = pedidosValidosParaReceber.reduce((sum, o) => sum + getOrderRemaining(o), 0);
 
     return {
       total: orders.length,
@@ -800,7 +801,7 @@ export function Pedidos() {
         </div>
       </div>
 
-      <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-3 mb-5">
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-2 sm:gap-3 mb-4">
         <SummaryCard
           title="Pedidos ativos"
           value={summary.ativos}
@@ -827,7 +828,7 @@ export function Pedidos() {
         <SummaryCard
           title="A receber"
           value={formatMoney(summary.aReceber)}
-          subtitle="Saldo restante dos pedidos"
+          subtitle="Sem cancelados e pendentes"
           icon={BadgeDollarSign}
           tone="money"
         />
