@@ -33,6 +33,18 @@ type AccountForm = {
   observacoes: string;
 };
 
+type EditAccountForm = {
+  id: string;
+  descricao: string;
+  fornecedor: string;
+  categoria: string;
+  valor_parcela: string;
+  vencimento: string;
+  status: 'pendente' | 'pago' | 'cancelado';
+  conta_fixa: boolean;
+  observacoes: string;
+};
+
 type MonthRange = {
   date_from: string;
   date_to: string;
@@ -100,6 +112,10 @@ function moneyToNumber(value: string | number) {
     .replace(',', '.');
 
   return Number(normalized) || 0;
+}
+
+function onlyDigits(value: string) {
+  return String(value || '').replace(/\D/g, '');
 }
 
 function moneyInput(value: number) {
@@ -228,6 +244,7 @@ export function ContasPagar() {
   const [data, setData] = useState<any>({ contas: [], resumo: {} });
   const [form, setForm] = useState<AccountForm>(buildForm());
   const [showForm, setShowForm] = useState(false);
+  const [editingAccount, setEditingAccount] = useState<EditAccountForm | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -275,12 +292,28 @@ export function ContasPagar() {
     });
   }
 
-  function updateInstallmentQuantity(value: number) {
-    const quantidade = Math.max(1, Math.min(120, Number(value || 1)));
+  function updateInstallmentQuantity(value: string | number) {
+    const digits = onlyDigits(String(value));
+    const quantidade = Math.max(1, Math.min(120, Number(digits || 1)));
     const total = calculateTotal(form.valor_parcela, quantidade);
 
     setForm({
       ...form,
+      quantidade_parcelas: quantidade,
+      valor_total: moneyInput(total)
+    });
+  }
+
+  function toggleContaFixa(checked: boolean) {
+    const quantidade = checked && Number(form.quantidade_parcelas || 1) <= 1
+      ? 12
+      : Math.max(1, Number(form.quantidade_parcelas || 1));
+
+    const total = calculateTotal(form.valor_parcela, quantidade);
+
+    setForm({
+      ...form,
+      conta_fixa: checked,
       quantidade_parcelas: quantidade,
       valor_total: moneyInput(total)
     });
@@ -347,6 +380,56 @@ export function ContasPagar() {
       await load();
     } catch (error: any) {
       alert(error.message || 'Erro ao excluir parcela.');
+    }
+  }
+
+  function openEditAccount(account: any) {
+    setEditingAccount({
+      id: account.id,
+      descricao: account.descricao || '',
+      fornecedor: account.fornecedor || '',
+      categoria: account.categoria || '',
+      valor_parcela: moneyInput(moneyToNumber(account.valor_parcela || 0)),
+      vencimento: String(account.vencimento || '').slice(0, 10),
+      status: account.status || 'pendente',
+      conta_fixa: Boolean(account.conta_fixa),
+      observacoes: account.observacoes || ''
+    });
+  }
+
+  async function saveAccountChanges() {
+    if (!editingAccount) return;
+
+    const valorParcela = moneyToNumber(editingAccount.valor_parcela);
+
+    if (!editingAccount.descricao.trim()) return alert('Informe a descrição da conta.');
+    if (valorParcela <= 0) return alert('Informe o valor da parcela.');
+    if (!editingAccount.vencimento) return alert('Informe o vencimento.');
+
+    setSaving(true);
+
+    try {
+      await apiFetch('/admin/contas-pagar/' + editingAccount.id, {
+        method: 'PUT',
+        body: JSON.stringify({
+          descricao: editingAccount.descricao,
+          fornecedor: editingAccount.fornecedor,
+          categoria: editingAccount.categoria,
+          valor_parcela: valorParcela,
+          vencimento: editingAccount.vencimento,
+          status: editingAccount.status,
+          conta_fixa: editingAccount.conta_fixa,
+          observacoes: editingAccount.observacoes
+        })
+      });
+
+      setEditingAccount(null);
+      await load();
+      alert('Conta atualizada com sucesso.');
+    } catch (error: any) {
+      alert(error.message || 'Erro ao atualizar conta.');
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -536,7 +619,13 @@ export function ContasPagar() {
             return (
               <div
                 key={account.id}
-                className={`rounded-2xl border border-gray-100 border-l-4 ${due.card} p-3 sm:p-4`}
+                role="button"
+                tabIndex={0}
+                onClick={() => openEditAccount(account)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') openEditAccount(account);
+                }}
+                className={`rounded-2xl border border-gray-100 border-l-4 ${due.card} p-3 sm:p-4 cursor-pointer hover:ring-2 hover:ring-gold/40 transition`}
               >
                 <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
@@ -601,7 +690,7 @@ export function ContasPagar() {
                     )}
                   </div>
 
-                  <div className="grid grid-cols-2 lg:grid-cols-1 gap-2 lg:w-40">
+                  <div className="grid grid-cols-2 lg:grid-cols-1 gap-2 lg:w-40" onClick={(e) => e.stopPropagation()}>
                     {account.status === 'pago' ? (
                       <button className="btn btn-outline px-2" onClick={() => setStatus(account, 'pendente')}>
                         <RotateCcw size={16} />
@@ -694,11 +783,15 @@ export function ContasPagar() {
               <span className="text-sm font-bold text-primary">Quantidade *</span>
               <input
                 className="input"
-                type="number"
-                min="1"
-                max="120"
-                value={form.quantidade_parcelas}
-                onChange={(e) => updateInstallmentQuantity(Number(e.target.value || 1))}
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={String(form.quantidade_parcelas || '')}
+                onChange={(e) => updateInstallmentQuantity(e.target.value)}
+                onPaste={(e) => {
+                  const pasted = e.clipboardData.getData('text');
+                  if (/\D/.test(pasted)) e.preventDefault();
+                }}
               />
             </label>
 
@@ -729,7 +822,7 @@ export function ContasPagar() {
                 type="checkbox"
                 className="w-5 h-5"
                 checked={form.conta_fixa}
-                onChange={(e) => setForm({ ...form, conta_fixa: e.target.checked })}
+                onChange={(e) => toggleContaFixa(e.target.checked)}
               />
 
               <span>
@@ -738,7 +831,7 @@ export function ContasPagar() {
                   Conta fixa
                 </span>
                 <span className="block text-xs text-gray-500">
-                  Marque para aluguel, internet, sistema, energia etc.
+                  Marque para aluguel, internet, sistema, energia etc. Se estiver em 1 parcela, o sistema muda para 12 meses.
                 </span>
               </span>
             </label>
@@ -778,6 +871,121 @@ export function ContasPagar() {
             </button>
           </div>
         </div>
+      </BottomSheet>
+
+      <BottomSheet isOpen={!!editingAccount} onClose={() => setEditingAccount(null)} title="Editar conta">
+        {editingAccount && (
+          <div className="space-y-4">
+            <div className="rounded-2xl bg-amber-50 border border-amber-100 p-4">
+              <p className="font-bold text-primary">Editar parcela</p>
+              <p className="text-sm text-gray-600">
+                Altere os dados desta conta, marque como paga ou sinalize como conta fixa.
+              </p>
+            </div>
+
+            <label className="block">
+              <span className="text-sm font-bold text-primary">Descrição *</span>
+              <input
+                className="input"
+                value={editingAccount.descricao}
+                onChange={(e) => setEditingAccount({ ...editingAccount, descricao: e.target.value })}
+              />
+            </label>
+
+            <div className="grid sm:grid-cols-2 gap-3">
+              <label>
+                <span className="text-sm font-bold text-primary">Fornecedor</span>
+                <input
+                  className="input"
+                  value={editingAccount.fornecedor}
+                  onChange={(e) => setEditingAccount({ ...editingAccount, fornecedor: e.target.value })}
+                />
+              </label>
+
+              <label>
+                <span className="text-sm font-bold text-primary">Categoria</span>
+                <input
+                  className="input"
+                  value={editingAccount.categoria}
+                  onChange={(e) => setEditingAccount({ ...editingAccount, categoria: e.target.value })}
+                />
+              </label>
+            </div>
+
+            <div className="grid sm:grid-cols-3 gap-3">
+              <label>
+                <span className="text-sm font-bold text-primary">Valor da parcela *</span>
+                <input
+                  className="input"
+                  inputMode="decimal"
+                  value={editingAccount.valor_parcela}
+                  onChange={(e) => setEditingAccount({ ...editingAccount, valor_parcela: e.target.value })}
+                />
+              </label>
+
+              <label>
+                <span className="text-sm font-bold text-primary">Vencimento *</span>
+                <input
+                  className="input"
+                  type="date"
+                  value={editingAccount.vencimento}
+                  onChange={(e) => setEditingAccount({ ...editingAccount, vencimento: e.target.value })}
+                />
+              </label>
+
+              <label>
+                <span className="text-sm font-bold text-primary">Status</span>
+                <select
+                  className="input"
+                  value={editingAccount.status}
+                  onChange={(e) => setEditingAccount({ ...editingAccount, status: e.target.value as EditAccountForm['status'] })}
+                >
+                  <option value="pendente">Pendente</option>
+                  <option value="pago">Pago</option>
+                  <option value="cancelado">Cancelado</option>
+                </select>
+              </label>
+            </div>
+
+            <label className="flex items-center gap-3 rounded-2xl bg-gray-50 border border-gray-100 p-3 cursor-pointer">
+              <input
+                type="checkbox"
+                className="w-5 h-5"
+                checked={editingAccount.conta_fixa}
+                onChange={(e) => setEditingAccount({ ...editingAccount, conta_fixa: e.target.checked })}
+              />
+
+              <span>
+                <span className="font-bold text-primary flex items-center gap-2">
+                  <Repeat size={16} />
+                  Conta fixa
+                </span>
+                <span className="block text-xs text-gray-500">
+                  Use para contas recorrentes mensais.
+                </span>
+              </span>
+            </label>
+
+            <label className="block">
+              <span className="text-sm font-bold text-primary">Observações</span>
+              <textarea
+                className="input min-h-24"
+                value={editingAccount.observacoes}
+                onChange={(e) => setEditingAccount({ ...editingAccount, observacoes: e.target.value })}
+              />
+            </label>
+
+            <div className="sticky bottom-0 -mx-5 -mb-5 bg-white border-t border-gray-100 p-4 grid grid-cols-2 gap-3">
+              <button className="btn btn-outline" onClick={() => setEditingAccount(null)}>
+                Cancelar
+              </button>
+
+              <button className="btn btn-primary" disabled={saving} onClick={saveAccountChanges}>
+                {saving ? 'Salvando...' : 'Salvar alterações'}
+              </button>
+            </div>
+          </div>
+        )}
       </BottomSheet>
     </div>
   );
