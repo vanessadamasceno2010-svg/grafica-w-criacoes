@@ -25,7 +25,7 @@ function normalizePermissions(value: unknown) {
 }
 
 export function signToken(user: AuthUser): string {
-  if (!JWT_SECRET || JWT_SECRET.length < 16) {
+  if (!JWT_SECRET || JWT_SECRET.length < 32) {
     throw new HttpError(500, 'JWT_SECRET não configurado corretamente.');
   }
 
@@ -51,6 +51,11 @@ export function auth(req: Request, _res: Response, next: NextFunction) {
 
   try {
     const token = header.replace('Bearer ', '').trim();
+
+    if (!token) {
+      throw new HttpError(401, 'Token não informado.');
+    }
+
     const decoded = jwt.verify(token, JWT_SECRET) as AuthUser;
 
     if (!decoded?.id || !decoded?.email) {
@@ -96,8 +101,8 @@ export function staff(req: Request, _res: Response, next: NextFunction) {
     throw new HttpError(401, 'Usuário não autenticado.');
   }
 
-  if (!['admin', 'funcionario', 'staff', 'employee'].includes(String(req.user.role))) {
-    throw new HttpError(403, 'Acesso restrito.');
+  if (!['admin', 'funcionario'].includes(String(req.user.role))) {
+    throw new HttpError(403, 'Acesso restrito ao administrador ou funcionário.');
   }
 
   return next();
