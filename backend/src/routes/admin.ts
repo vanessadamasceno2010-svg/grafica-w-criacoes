@@ -757,7 +757,6 @@ adminRoutes.delete('/fluxo-caixa/:id', onlyAdmin, asyncHandler(async (req, res) 
   await supabaseRest(`/caixa_movimentacoes?id=eq.${restEq(req.params.id)}`, { method: 'DELETE' });
   res.json({ ok: true });
 }));
-
 const contaPagarSchema = z.object({
   descricao: z.string().min(2),
   fornecedor: z.string().optional().default(''),
@@ -808,18 +807,87 @@ async function ajustarQuantidadeParcelasDaConta(params: {
 }) {
   const grupoId = params.contaAtual.grupo_id || params.contaAtual.id;
   const novaQuantidade = Math.max(1, Math.min(120, Number(params.novaQuantidade || 1)));
+  const now = new Date().toISOString();
 
-  const grupoRows = await supabaseRest<any[]>(
+  if (!params.contaAtual.grupo_id) {
+    await supabaseRest(`/contas_pagar?id=eq.${restEq(params.contaAtual.id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        grupo_id: grupoId,
+        parcela_numero: Number(params.contaAtual.parcela_numero || 1),
+        updated_at: now
+      })
+    });
+  }
+
+  const rowsDepoisDoGrupo = await supabaseRest<any[]>(
     `/contas_pagar?select=*&grupo_id=eq.${restEq(grupoId)}&order=parcela_numero.asc&limit=200`
   ).catch(() => []);
 
-  const rows = grupoRows.length > 0 ? grupoRows : [params.contaAtual];
-  const quantidadeAtual = maxParcelaNumero(rows);
+  const rows = rowsDepoisDoGrupo.length > 0 ? rowsDepoisDoGrupo : [params.contaAtual];
   const primeiraParcela = rows.find((row) => Number(row.parcela_numero || 1) === 1) || rows[0] || params.contaAtual;
   const primeiroVencimento = String(primeiraParcela.vencimento || params.contaAtual.vencimento || currentMonthRange().today).slice(0, 10);
-  const now = new Date().toISOString();
+
   const valorParcela = asNumber(params.valorParcela || primeiraParcela.valor_parcela || 0);
   const valorTotal = params.contaFixa ? 0 : valorParcela * novaQuantidade;
+
+  const basePayload: any = {
+    quantidade_parcelas: novaQuantidade,
+    valor_total: valorTotal,
+    conta_fixa: Boolean(params.contaFixa),
+    updated_at: now
+  };
+
+  if (params.descricao !== undefined) basePayload.descricao = params.descricao;
+  if (params.fornecedor !== undefined) basePayload.fornecedor = params.fornecedor;
+  if (params.categoria !== undefined) basePayload.categoria = params.categoria;
+  if (params.observacoes !== undefined) basePayload.observacoes = params.observacoes;
+  if (valorParcela > 0) basePayload.valor_parcela = valorParcela;
+
+  await supabaseRest(`/contas_pagar?grupo_id=eq.${restEq(grupoId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(basePayload)
+  });
+
+  const rowsAtualizados = await supabaseRest<any[]>(
+    `/contas_pagar?select=*&grupo_id=eq.${restEq(grupoId)}&order=parcela_numero.asc&limit=200`
+  ).catch(() => []);
+
+  const existentes = new Set(rowsAtualizados.map((row) => Number(row.parcela_numero || 1)));
+
+  const novasParcelas = Array.from({ length: novaQuantidade }, (_, index) => index + 1)
+    .filter((parcelaNumero) => !existentes.has(parcelaNumero))
+    .map((parcelaNumero) => ({
+      grupo_id: grupoId,
+      descricao: params.descricao ?? primeiraParcela.descricao,
+      fornecedor: params.fornecedor ?? primeiraParcela.fornecedor ?? '',
+      categoria: params.categoria ?? primeiraParcela.categoria ?? '',
+      valor_total: valorTotal,
+      valor_parcela: valorParcela,
+      parcela_numero: parcelaNumero,
+      quantidade_parcelas: novaQuantidade,
+      vencimento: addMonthsToDate(primeiroVencimento, parcelaNumero - 1),
+      status: 'pendente',
+      data_pagamento: null,
+      conta_fixa: Boolean(params.contaFixa),
+      observacoes: params.observacoes ?? primeiraParcela.observacoes ?? '',
+      usuario_id: params.usuarioId || primeiraParcela.usuario_id || null,
+      usuario_nome: params.usuarioNome || primeiraParcela.usuario_nome || 'Administrador',
+      created_at: now,
+      updated_at: now
+    }));
+
+  if (novasParcelas.length > 0) {
+    await supabaseRest('/contas_pagar', {
+      method: 'POST',
+      body: JSON.stringify(novasParcelas)
+    });
+  }
+
+  await supabaseRest(
+    `/contas_pagar?grupo_id=eq.${restEq(grupoId)}&parcela_numero=gt.${novaQuantidade}`,
+    { method: 'DELETE' }
+  ).catch(() => null);
 
   await supabaseRest(`/contas_pagar?grupo_id=eq.${restEq(grupoId)}`, {
     method: 'PATCH',
@@ -829,46 +897,6 @@ async function ajustarQuantidadeParcelasDaConta(params: {
       updated_at: now
     })
   });
-
-  if (novaQuantidade > quantidadeAtual) {
-    const novasParcelas = Array.from({ length: novaQuantidade - quantidadeAtual }, (_, index) => {
-      const parcelaNumero = quantidadeAtual + index + 1;
-
-      return {
-        grupo_id: grupoId,
-        descricao: params.descricao ?? primeiraParcela.descricao,
-        fornecedor: params.fornecedor ?? primeiraParcela.fornecedor ?? '',
-        categoria: params.categoria ?? primeiraParcela.categoria ?? '',
-        valor_total: valorTotal,
-        valor_parcela: valorParcela,
-        parcela_numero: parcelaNumero,
-        quantidade_parcelas: novaQuantidade,
-        vencimento: addMonthsToDate(primeiroVencimento, parcelaNumero - 1),
-        status: 'pendente',
-        data_pagamento: null,
-        conta_fixa: params.contaFixa,
-        observacoes: params.observacoes ?? primeiraParcela.observacoes ?? '',
-        usuario_id: params.usuarioId || primeiraParcela.usuario_id || null,
-        usuario_nome: params.usuarioNome || primeiraParcela.usuario_nome || 'Administrador',
-        created_at: now,
-        updated_at: now
-      };
-    });
-
-    if (novasParcelas.length > 0) {
-      await supabaseRest('/contas_pagar', {
-        method: 'POST',
-        body: JSON.stringify(novasParcelas)
-      });
-    }
-  }
-
-  if (novaQuantidade < quantidadeAtual) {
-    await supabaseRest(
-      `/contas_pagar?grupo_id=eq.${restEq(grupoId)}&parcela_numero=gt.${novaQuantidade}&status=eq.pendente`,
-      { method: 'DELETE' }
-    ).catch(() => null);
-  }
 }
 
 adminRoutes.get('/contas-pagar', onlyAdmin, asyncHandler(async (req, res) => {
@@ -1055,7 +1083,7 @@ adminRoutes.put('/contas-pagar/:id', onlyAdmin, asyncHandler(async (req, res) =>
     return res.status(404).json({ message: 'Conta não encontrada.' });
   }
 
-  const quantidadeNova = d.quantidade_parcelas
+  const quantidadeNova = d.quantidade_parcelas !== undefined
     ? Math.max(1, Math.min(120, Number(d.quantidade_parcelas || 1)))
     : Number(contaAtual.quantidade_parcelas || 1);
 
@@ -1067,10 +1095,14 @@ adminRoutes.put('/contas-pagar/:id', onlyAdmin, asyncHandler(async (req, res) =>
     ? Boolean(d.conta_fixa)
     : Boolean(contaAtual.conta_fixa);
 
+  const quantidadeMudou = d.quantidade_parcelas !== undefined &&
+    Number(d.quantidade_parcelas) !== Number(contaAtual.quantidade_parcelas || 1);
+
   const payload: any = {
     ...d,
     quantidade_parcelas: quantidadeNova,
     valor_total: contaFixaNova ? 0 : valorParcelaNovo * quantidadeNova,
+    grupo_id: contaAtual.grupo_id || contaAtual.id,
     updated_at: new Date().toISOString()
   };
 
@@ -1086,9 +1118,12 @@ adminRoutes.put('/contas-pagar/:id', onlyAdmin, asyncHandler(async (req, res) =>
     }
   );
 
-  if (d.quantidade_parcelas && contaAtual.grupo_id) {
+  if (d.quantidade_parcelas !== undefined || quantidadeMudou) {
     await ajustarQuantidadeParcelasDaConta({
-      contaAtual,
+      contaAtual: {
+        ...contaAtual,
+        grupo_id: contaAtual.grupo_id || contaAtual.id
+      },
       novaQuantidade: quantidadeNova,
       valorParcela: valorParcelaNovo,
       contaFixa: contaFixaNova,
