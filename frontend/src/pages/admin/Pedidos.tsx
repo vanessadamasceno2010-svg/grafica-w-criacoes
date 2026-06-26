@@ -184,7 +184,7 @@ function orderPriority(order: any) {
 }
 
 function getOrderDescription(order: any) {
-  return String(order.observacoes || order.descricao || order.numero_pedido || 'Pedido sem descrição').trim();
+  return String(order.observacoes || order.descricao || 'Pedido sem descrição').trim();
 }
 
 function getOrderRemaining(order: any) {
@@ -564,40 +564,94 @@ export function Pedidos() {
   }
 
   const printDocument = async (order: any) => {
+    const win = window.open('', '_blank');
+
+    if (!win) {
+      alert('O navegador bloqueou a abertura do documento. Permita pop-ups para este site e tente novamente.');
+      return;
+    }
+
+    win.document.write(`
+      <html>
+        <head>
+          <title>Carregando documento...</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+        </head>
+        <body style="font-family:Arial;padding:24px;color:#0b1b3a">
+          <p>Carregando documento...</p>
+        </body>
+      </html>
+    `);
+    win.document.close();
+
     try {
       const data = await apiFetch<any>('/admin/pedidos/' + order.id + '/documento');
       const pedido = data.pedido;
       const tipoTitulo = data.tipo === 'recibo' ? 'Recibo Digital' : 'Ordem de Serviço';
       const html = `
-        <div style="font-family:Arial;padding:24px;max-width:760px;margin:auto;color:#0b1b3a">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:2px solid #e6aa21;padding-bottom:16px;margin-bottom:20px">
-            <div>${data.empresa?.logo ? `<img src="${data.empresa.logo}" style="max-height:70px;max-width:180px;object-fit:contain"/>` : ''}</div>
-            <div style="text-align:right"><h1 style="margin:0">${tipoTitulo}</h1><p style="margin:4px 0">${data.empresa?.nome || 'Gráfica W Criações'}</p></div>
-          </div>
-          <p><b>Pedido:</b> ${pedido.numero_pedido}</p>
-          <p><b>Cliente:</b> ${pedido.cliente_nome || pedido.cliente_email || ''}</p>
-          <p><b>Telefone:</b> ${pedido.cliente_telefone || '-'}</p>
-          <p><b>Email:</b> ${pedido.cliente_email || '-'}</p>
-          <p><b>Status:</b> ${statusLabels[pedido.status] || pedido.status}</p>
-          <p><b>Status pagamento:</b> ${paymentLabels[pedido.status_pagamento] || pedido.status_pagamento}</p>
-          <p><b>Total:</b> ${formatMoney(pedido.total)} | <b>Pago:</b> ${formatMoney(pedido.valor_entrada || 0)} | <b>Resta:</b> ${formatMoney(pedido.valor_restante || 0)}</p>
-          <p><b>Prazo de entrega:</b> ${pedido.prazo_entrega ? formatDate(pedido.prazo_entrega) : 'A combinar'}</p>
-          <p><b>Observações:</b> ${pedido.observacoes || '-'}</p>
-          <hr/>
-          <p><b>WhatsApp:</b> ${data.empresa?.whatsapp || ''}</p>
-          <p><b>Endereço:</b> ${data.empresa?.endereco || ''}</p>
-          ${data.tipo === 'recibo' && data.empresa?.assinatura ? `<div style="margin-top:40px;text-align:center"><img src="${data.empresa.assinatura}" style="max-height:90px"/><p>Assinatura digital</p></div>` : ''}
-          <p style="margin-top:30px;font-size:12px;color:#666">Emitido em ${new Date().toLocaleString('pt-BR')}</p>
-          <script>window.print()</script>
-        </div>`;
+        <html>
+          <head>
+            <title>${tipoTitulo} - ${pedido.numero_pedido || 'Pedido'}</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1" />
+          </head>
+          <body>
+            <div style="font-family:Arial;padding:24px;max-width:760px;margin:auto;color:#0b1b3a">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:2px solid #e6aa21;padding-bottom:16px;margin-bottom:20px">
+                <div>${data.empresa?.logo ? `<img src="${data.empresa.logo}" style="max-height:70px;max-width:180px;object-fit:contain"/>` : ''}</div>
+                <div style="text-align:right"><h1 style="margin:0">${tipoTitulo}</h1><p style="margin:4px 0">${data.empresa?.nome || 'Gráfica W Criações'}</p></div>
+              </div>
+              <p><b>Pedido:</b> ${pedido.numero_pedido}</p>
+              <p><b>Cliente:</b> ${pedido.cliente_nome || pedido.cliente_email || ''}</p>
+              <p><b>Telefone:</b> ${pedido.cliente_telefone || '-'}</p>
+              <p><b>Email:</b> ${pedido.cliente_email || '-'}</p>
+              <p><b>Status:</b> ${statusLabels[pedido.status] || pedido.status}</p>
+              <p><b>Status pagamento:</b> ${paymentLabels[pedido.status_pagamento] || pedido.status_pagamento}</p>
+              <p><b>Total:</b> ${formatMoney(pedido.total)} | <b>Pago:</b> ${formatMoney(pedido.valor_entrada || 0)} | <b>Resta:</b> ${formatMoney(pedido.valor_restante || 0)}</p>
+              <p><b>Prazo de entrega:</b> ${pedido.prazo_entrega ? formatDate(pedido.prazo_entrega) : 'A combinar'}</p>
+              <p><b>Observações:</b></p>
+              <div style="white-space:pre-line;border:1px solid #eee;border-radius:12px;padding:12px;background:#fafafa">${pedido.observacoes || '-'}</div>
+              <hr style="margin:24px 0"/>
+              <p><b>WhatsApp:</b> ${data.empresa?.whatsapp || ''}</p>
+              <p><b>Endereço:</b> ${data.empresa?.endereco || ''}</p>
+              ${data.tipo === 'recibo' && data.empresa?.assinatura ? `<div style="margin-top:40px;text-align:center"><img src="${data.empresa.assinatura}" style="max-height:90px"/><p>Assinatura digital</p></div>` : ''}
+              <p style="margin-top:30px;font-size:12px;color:#666">Emitido em ${new Date().toLocaleString('pt-BR')}</p>
+              <div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap">
+                <button onclick="window.print()" style="padding:12px 18px;border:0;border-radius:10px;background:#0b1b3a;color:#fff;font-weight:bold">Imprimir / Salvar PDF</button>
+                <button onclick="window.close()" style="padding:12px 18px;border:1px solid #ddd;border-radius:10px;background:#fff;color:#0b1b3a;font-weight:bold">Fechar</button>
+              </div>
+            </div>
+          </body>
+        </html>`;
 
-      const win = window.open('', '_blank');
-      if (win) {
-        win.document.write(html);
-        win.document.close();
-      }
+      win.document.open();
+      win.document.write(html);
+      win.document.close();
+      win.focus();
+
+      setTimeout(() => {
+        try {
+          win.print();
+        } catch {
+          // Em alguns celulares o navegador bloqueia impressão automática.
+          // O botão "Imprimir / Salvar PDF" continua disponível na tela.
+        }
+      }, 500);
     } catch (err: any) {
-      alert(err.message || 'Erro ao emitir documento.');
+      win.document.open();
+      win.document.write(`
+        <html>
+          <head>
+            <title>Erro ao emitir documento</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1" />
+          </head>
+          <body style="font-family:Arial;padding:24px;color:#0b1b3a">
+            <h2>Erro ao emitir documento</h2>
+            <p>${err.message || 'Erro ao emitir documento.'}</p>
+            <button onclick="window.close()" style="padding:12px 18px;border:0;border-radius:10px;background:#0b1b3a;color:#fff;font-weight:bold">Fechar</button>
+          </body>
+        </html>
+      `);
+      win.document.close();
     }
   };
 
@@ -763,55 +817,63 @@ export function Pedidos() {
               <div className="p-4">
                 <div className="flex flex-col xl:flex-row xl:items-start justify-between gap-4">
                   <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2 mb-2">
-                      <span className="px-3 py-1 rounded-full bg-primary text-white text-xs font-bold">
-                        {o.numero_pedido || 'Sem número'}
-                      </span>
+                    <div className="mb-3">
+                      <p className="text-xs font-bold text-gray-400 uppercase mb-1">
+                        Cliente
+                      </p>
+                      <h3 className="font-display font-bold text-lg text-primary">
+                        {o.cliente_nome || 'Cliente não informado'}
+                      </h3>
+                    </div>
 
-                      <span className={`px-3 py-1 rounded-full border text-xs font-bold ${statusClass}`}>
+                    <div className="rounded-2xl bg-gray-50 border border-gray-100 p-3 mb-3">
+                      <p className="text-xs font-bold text-gray-400 uppercase mb-2">
+                        Descrição do pedido
+                      </p>
+                      <p className="text-sm text-primary whitespace-pre-line leading-relaxed">
+                        {getOrderDescription(o)}
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 mb-3">
+                      <span className={`px-2.5 py-1 rounded-full border text-[11px] font-bold ${statusClass}`}>
                         {statusLabels[o.status] || o.status || 'Sem status'}
                       </span>
 
-                      <span className={`px-3 py-1 rounded-full border text-xs font-bold ${paymentClass}`}>
-                        {paymentLabels[o.status_pagamento] || o.status_pagamento || 'Pagamento'}
+                      <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-[11px] font-bold ${pz.cls}`}>
+                        <Icon size={13} />
+                        {pz.shortLabel}
                       </span>
 
-                      <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full border text-xs font-bold ${pz.cls}`}>
-                        <Icon size={14} />
-                        {pz.shortLabel}
+                      <span className="px-2.5 py-1 rounded-full border border-gray-200 bg-white text-gray-600 text-[11px] font-bold">
+                        Data: {formatDate(o.created_at)}
+                      </span>
+
+                      <span className="px-2.5 py-1 rounded-full border border-gray-200 bg-white text-gray-600 text-[11px] font-bold">
+                        Prazo: {formatDate(o.prazo_entrega)}
                       </span>
                     </div>
 
-                    <h3 className="font-display font-bold text-lg text-primary line-clamp-2">
-                      {getOrderDescription(o)}
-                    </h3>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="px-3 py-2 rounded-xl bg-gray-50 border border-gray-100 text-sm">
+                        <b className="text-primary">Valor:</b> {formatMoney(o.total)}
+                      </span>
 
-                    <div className="mt-3 grid sm:grid-cols-2 xl:grid-cols-4 gap-3 text-sm">
-                      <div className="rounded-xl bg-gray-50 p-3">
-                        <p className="text-xs font-bold text-gray-400 uppercase">Cliente</p>
-                        <p className="font-bold text-primary truncate">{o.cliente_nome || 'Cliente não informado'}</p>
-                        <p className="text-gray-500 truncate">{o.cliente_telefone || o.cliente_email || 'Sem contato'}</p>
-                      </div>
+                      <span className="px-3 py-2 rounded-xl bg-gray-50 border border-gray-100 text-sm">
+                        <b className="text-primary">Pago:</b> {formatMoney(o.valor_entrada || 0)}
+                      </span>
 
-                      <div className="rounded-xl bg-gray-50 p-3">
-                        <p className="text-xs font-bold text-gray-400 uppercase">Prazo</p>
-                        <p className="font-bold text-primary">{formatDate(o.prazo_entrega)}</p>
-                        <p className="text-gray-500">{pz.label}</p>
-                      </div>
+                      <span className={`px-3 py-2 rounded-xl border text-sm ${
+                        remaining > 0
+                          ? 'bg-red-50 border-red-100 text-red-700'
+                          : 'bg-emerald-50 border-emerald-100 text-emerald-700'
+                      }`}>
+                        <b>Restante:</b> {formatMoney(remaining)}
+                      </span>
 
-                      <div className="rounded-xl bg-gray-50 p-3">
-                        <p className="text-xs font-bold text-gray-400 uppercase">Valor</p>
-                        <p className="font-bold text-primary">{formatMoney(o.total)}</p>
-                        <p className="text-gray-500">Pago {formatMoney(o.valor_entrada || 0)}</p>
-                      </div>
-
-                      <div className={`rounded-xl p-3 ${remaining > 0 ? 'bg-red-50' : 'bg-emerald-50'}`}>
-                        <p className="text-xs font-bold text-gray-400 uppercase">Restante</p>
-                        <p className={`font-bold ${remaining > 0 ? 'text-red-700' : 'text-emerald-700'}`}>
-                          {formatMoney(remaining)}
-                        </p>
-                        <p className="text-gray-500">{remaining > 0 ? 'A receber' : 'Quitado'}</p>
-                      </div>
+                      <span className={`px-3 py-2 rounded-xl border text-sm ${paymentClass}`}>
+                        {paymentLabels[o.status_pagamento] || o.status_pagamento || 'Pagamento'}
+                      </span>
                     </div>
                   </div>
 
@@ -869,106 +931,141 @@ export function Pedidos() {
             </div>
 
             <div className="grid sm:grid-cols-2 gap-3">
-              <input
-                className="input"
-                value={selectedOrder.cliente_nome || ''}
-                onChange={(e) => setSelectedOrder({ ...selectedOrder, cliente_nome: e.target.value })}
-                placeholder="Cliente"
-              />
-              <input
-                className="input"
-                value={selectedOrder.cliente_telefone || ''}
-                onChange={(e) => setSelectedOrder({ ...selectedOrder, cliente_telefone: formatPhoneDigits(e.target.value) })}
-                placeholder="Telefone"
-                inputMode="numeric"
-              />
-              <input
-                className="input"
-                value={selectedOrder.cliente_email || ''}
-                onChange={(e) => setSelectedOrder({ ...selectedOrder, cliente_email: e.target.value })}
-                placeholder="Email"
-              />
-              <input
-                className="input"
-                type="date"
-                value={selectedOrder.prazo_entrega || ''}
-                onChange={(e) => setSelectedOrder({ ...selectedOrder, prazo_entrega: e.target.value })}
-              />
+              <label className="block">
+                <span className="text-sm font-bold text-primary mb-1 block">Nome do cliente</span>
+                <input
+                  className="input"
+                  value={selectedOrder.cliente_nome || ''}
+                  onChange={(e) => setSelectedOrder({ ...selectedOrder, cliente_nome: e.target.value })}
+                  placeholder="Cliente"
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-sm font-bold text-primary mb-1 block">Telefone do cliente</span>
+                <input
+                  className="input"
+                  value={selectedOrder.cliente_telefone || ''}
+                  onChange={(e) => setSelectedOrder({ ...selectedOrder, cliente_telefone: formatPhoneDigits(e.target.value) })}
+                  placeholder="Telefone"
+                  inputMode="numeric"
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-sm font-bold text-primary mb-1 block">Email do cliente</span>
+                <input
+                  className="input"
+                  value={selectedOrder.cliente_email || ''}
+                  onChange={(e) => setSelectedOrder({ ...selectedOrder, cliente_email: e.target.value })}
+                  placeholder="Email"
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-sm font-bold text-primary mb-1 block">Prazo de entrega</span>
+                <input
+                  className="input"
+                  type="date"
+                  value={selectedOrder.prazo_entrega || ''}
+                  onChange={(e) => setSelectedOrder({ ...selectedOrder, prazo_entrega: e.target.value })}
+                />
+              </label>
             </div>
 
             <div className="grid sm:grid-cols-3 gap-3">
-              <input
-                className="input"
-                type="number"
-                step="0.01"
-                value={selectedOrder.total || 0}
-                onChange={(e) => {
-                  const total = moneyToNumber(e.target.value);
-                  const entrada = moneyToNumber(selectedOrder.valor_entrada);
-                  setSelectedOrder({ ...selectedOrder, total, valor_restante: Math.max(total - entrada, 0) });
-                }}
-                placeholder="Total"
-              />
-              <input
-                className="input"
-                type="number"
-                step="0.01"
-                value={selectedOrder.valor_entrada || 0}
-                onChange={(e) => {
-                  const entrada = moneyToNumber(e.target.value);
-                  const total = moneyToNumber(selectedOrder.total);
-                  setSelectedOrder({ ...selectedOrder, valor_entrada: entrada, valor_restante: Math.max(total - entrada, 0) });
-                }}
-                placeholder="Pago/entrada"
-              />
-              <input
-                className="input bg-gray-50"
-                readOnly
-                value={formatMoney(selectedOrder.valor_restante || 0)}
-                placeholder="Resta"
-              />
+              <label className="block">
+                <span className="text-sm font-bold text-primary mb-1 block">Valor total</span>
+                <input
+                  className="input"
+                  type="number"
+                  step="0.01"
+                  value={selectedOrder.total || 0}
+                  onChange={(e) => {
+                    const total = moneyToNumber(e.target.value);
+                    const entrada = moneyToNumber(selectedOrder.valor_entrada);
+                    setSelectedOrder({ ...selectedOrder, total, valor_restante: Math.max(total - entrada, 0) });
+                  }}
+                  placeholder="Total"
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-sm font-bold text-primary mb-1 block">Valor pago / entrada</span>
+                <input
+                  className="input"
+                  type="number"
+                  step="0.01"
+                  value={selectedOrder.valor_entrada || 0}
+                  onChange={(e) => {
+                    const entrada = moneyToNumber(e.target.value);
+                    const total = moneyToNumber(selectedOrder.total);
+                    setSelectedOrder({ ...selectedOrder, valor_entrada: entrada, valor_restante: Math.max(total - entrada, 0) });
+                  }}
+                  placeholder="Pago/entrada"
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-sm font-bold text-primary mb-1 block">Valor restante</span>
+                <input
+                  className="input bg-gray-50"
+                  readOnly
+                  value={formatMoney(selectedOrder.valor_restante || 0)}
+                  placeholder="Resta"
+                />
+              </label>
             </div>
 
             <div className="grid sm:grid-cols-2 gap-3">
-              <select
-                className="input"
-                value={selectedOrder.status}
-                onChange={(e) => setSelectedOrder({ ...selectedOrder, status: e.target.value })}
-              >
-                {Object.entries(statusLabels).map(([key, label]) => (
-                  <option key={key} value={key}>{label}</option>
-                ))}
-              </select>
+              <label className="block">
+                <span className="text-sm font-bold text-primary mb-1 block">Status do pedido</span>
+                <select
+                  className="input"
+                  value={selectedOrder.status}
+                  onChange={(e) => setSelectedOrder({ ...selectedOrder, status: e.target.value })}
+                >
+                  {Object.entries(statusLabels).map(([key, label]) => (
+                    <option key={key} value={key}>{label}</option>
+                  ))}
+                </select>
+              </label>
 
-              <select
-                className="input"
-                value={selectedOrder.status_pagamento || 'pendente'}
-                onChange={(e) => {
-                  const status = e.target.value;
-                  const total = moneyToNumber(selectedOrder.total);
-                  const entradaAtual = moneyToNumber(selectedOrder.valor_entrada);
-                  const entrada = status === 'confirmado' ? total : status === 'pendente' ? 0 : entradaAtual;
+              <label className="block">
+                <span className="text-sm font-bold text-primary mb-1 block">Status do pagamento</span>
+                <select
+                  className="input"
+                  value={selectedOrder.status_pagamento || 'pendente'}
+                  onChange={(e) => {
+                    const status = e.target.value;
+                    const total = moneyToNumber(selectedOrder.total);
+                    const entradaAtual = moneyToNumber(selectedOrder.valor_entrada);
+                    const entrada = status === 'confirmado' ? total : status === 'pendente' ? 0 : entradaAtual;
 
-                  setSelectedOrder({
-                    ...selectedOrder,
-                    status_pagamento: status,
-                    valor_entrada: entrada,
-                    valor_restante: Math.max(total - entrada, 0)
-                  });
-                }}
-              >
-                {Object.entries(paymentLabels).map(([key, label]) => (
-                  <option key={key} value={key}>{label}</option>
-                ))}
-              </select>
+                    setSelectedOrder({
+                      ...selectedOrder,
+                      status_pagamento: status,
+                      valor_entrada: entrada,
+                      valor_restante: Math.max(total - entrada, 0)
+                    });
+                  }}
+                >
+                  {Object.entries(paymentLabels).map(([key, label]) => (
+                    <option key={key} value={key}>{label}</option>
+                  ))}
+                </select>
+              </label>
             </div>
 
-            <textarea
-              className="input min-h-24"
-              placeholder="Observações"
-              value={selectedOrder.observacoes || ''}
-              onChange={(e) => setSelectedOrder({ ...selectedOrder, observacoes: e.target.value })}
-            />
+            <label className="block">
+              <span className="text-sm font-bold text-primary mb-1 block">Descrição / observações do pedido</span>
+              <textarea
+                className="input min-h-32 whitespace-pre-line"
+                placeholder="Descreva o pedido, itens, medidas, materiais e observações..."
+                value={selectedOrder.observacoes || ''}
+                onChange={(e) => setSelectedOrder({ ...selectedOrder, observacoes: e.target.value })}
+              />
+            </label>
 
             <div className="border-t border-gray-100 pt-4">
               <h3 className="font-bold text-primary mb-3">Histórico do pedido</h3>
