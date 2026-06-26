@@ -997,7 +997,7 @@ export function ContasPagar() {
                   }}
                 />
                 <span className="text-xs text-gray-500">
-                  Ao salvar, o sistema ajusta as parcelas futuras desta conta.
+                  Ao salvar, o sistema recalcula o restante e cria/remove parcelas futuras.
                 </span>
               </label>
 
