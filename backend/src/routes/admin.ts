@@ -772,18 +772,36 @@ const contaPagarSchema = z.object({
   message: 'Informe o valor total ou o valor da parcela.'
 });
 
+function rangeForContasPagar(dateFrom: string, dateTo: string) {
+  if (dateFrom && dateTo) {
+    return {
+      start: dateFrom,
+      end: dateTo,
+      today: currentMonthRange().today
+    };
+  }
+
+  const month = currentMonthRange();
+
+  return {
+    start: month.start,
+    end: month.end,
+    today: month.today
+  };
+}
+
 adminRoutes.get('/contas-pagar', onlyAdmin, asyncHandler(async (req, res) => {
   const dateFrom = String(req.query.date_from || '');
   const dateTo = String(req.query.date_to || '');
   const status = String(req.query.status || 'todos');
   const q = String(req.query.q || '').trim().toLowerCase();
+  const range = rangeForContasPagar(dateFrom, dateTo);
 
   const all = await supabaseRest<any[]>('/contas_pagar?select=*&order=vencimento.asc,created_at.desc&limit=5000');
-  const month = currentMonthRange();
 
   let contas = all.filter((conta) => {
-    if (dateFrom && conta.vencimento < dateFrom) return false;
-    if (dateTo && conta.vencimento > dateTo) return false;
+    if (range.start && conta.vencimento < range.start) return false;
+    if (range.end && conta.vencimento > range.end) return false;
     if (status !== 'todos' && conta.status !== status) return false;
 
     if (
@@ -801,36 +819,39 @@ adminRoutes.get('/contas-pagar', onlyAdmin, asyncHandler(async (req, res) => {
     return true;
   });
 
-  const contasMes = all.filter((conta) =>
+  const contasDoPeriodo = all.filter((conta) =>
     conta.status !== 'cancelado' &&
-    conta.vencimento >= month.start &&
-    conta.vencimento <= month.end
+    conta.vencimento >= range.start &&
+    conta.vencimento <= range.end
   );
 
-  const aVencerMes = all.filter((conta) =>
+  const aVencerPeriodo = all.filter((conta) =>
     conta.status === 'pendente' &&
-    conta.vencimento >= month.today &&
-    conta.vencimento <= month.end
+    conta.vencimento >= range.today &&
+    conta.vencimento >= range.start &&
+    conta.vencimento <= range.end
   );
 
   const vencidas = all.filter((conta) =>
     conta.status === 'pendente' &&
-    conta.vencimento < month.today
+    conta.vencimento < range.today &&
+    conta.vencimento >= range.start &&
+    conta.vencimento <= range.end
   );
 
-  const contasFixasMes = contasMes.filter((conta) => conta.conta_fixa === true);
+  const contasFixasPeriodo = contasDoPeriodo.filter((conta) => conta.conta_fixa === true);
 
   res.json({
     contas,
     resumo: {
-      totalMes: contasMes.reduce((sum, conta) => sum + asNumber(conta.valor_parcela), 0),
-      quantidadeMes: contasMes.length,
-      aVencerMes: aVencerMes.reduce((sum, conta) => sum + asNumber(conta.valor_parcela), 0),
-      quantidadeAVencer: aVencerMes.length,
+      totalMes: contasDoPeriodo.reduce((sum, conta) => sum + asNumber(conta.valor_parcela), 0),
+      quantidadeMes: contasDoPeriodo.length,
+      aVencerMes: aVencerPeriodo.reduce((sum, conta) => sum + asNumber(conta.valor_parcela), 0),
+      quantidadeAVencer: aVencerPeriodo.length,
       vencidas: vencidas.reduce((sum, conta) => sum + asNumber(conta.valor_parcela), 0),
       quantidadeVencidas: vencidas.length,
-      contasFixasMes: contasFixasMes.reduce((sum, conta) => sum + asNumber(conta.valor_parcela), 0),
-      quantidadeFixasMes: contasFixasMes.length,
+      contasFixasMes: contasFixasPeriodo.reduce((sum, conta) => sum + asNumber(conta.valor_parcela), 0),
+      quantidadeFixasMes: contasFixasPeriodo.length,
       totalFiltrado: contas.reduce((sum, conta) => sum + asNumber(conta.valor_parcela), 0),
       quantidadeFiltrada: contas.length
     }
@@ -840,7 +861,12 @@ adminRoutes.get('/contas-pagar', onlyAdmin, asyncHandler(async (req, res) => {
 adminRoutes.post('/contas-pagar', onlyAdmin, asyncHandler(async (req, res) => {
   const d = contaPagarSchema.parse(req.body);
   const grupoId = randomUUID();
-  const quantidadeParcelas = Number(d.quantidade_parcelas || 1);
+
+  // Conta fixa precisa aparecer nos meses seguintes.
+  // Se o usuário marcar como fixa e deixar apenas 1 parcela, criamos 12 meses automaticamente.
+  const quantidadeParcelas = Boolean(d.conta_fixa) && Number(d.quantidade_parcelas || 1) <= 1
+    ? 12
+    : Number(d.quantidade_parcelas || 1);
 
   const valorParcelaBase = asNumber(d.valor_parcela || 0);
   const valorTotalBase = asNumber(d.valor_total || 0);
@@ -946,6 +972,7 @@ adminRoutes.delete('/contas-pagar/:id', onlyAdmin, asyncHandler(async (req, res)
 
   res.json({ ok: true });
 }));
+
 
 
 adminRoutes.get('/relatorios/vendas', onlyAdmin, asyncHandler(async (_req, res) => {
