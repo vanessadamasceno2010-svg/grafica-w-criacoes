@@ -573,6 +573,42 @@ export function Pedidos() {
     }
   }
 
+  async function updateOrderQuick(order: any, changes: { status?: string; status_pagamento?: string }, successMessage: string) {
+    const total = moneyToNumber(order.total);
+    const entradaAtual = moneyToNumber(order.valor_entrada);
+    let valorEntrada = entradaAtual;
+    let valorRestante = getOrderRemaining(order);
+    const nextPaymentStatus = changes.status_pagamento || order.status_pagamento || 'pendente';
+
+    if (nextPaymentStatus === 'confirmado') {
+      valorEntrada = total;
+      valorRestante = 0;
+    }
+
+    try {
+      await apiFetch('/pedidos/' + order.id, {
+        method: 'PUT',
+        body: JSON.stringify({
+          status: changes.status || order.status,
+          status_pagamento: nextPaymentStatus,
+          observacoes: order.observacoes || '',
+          total,
+          valor_entrada: valorEntrada,
+          valor_restante: valorRestante,
+          prazo_entrega: dateOnly(order.prazo_entrega) || null,
+          cliente_nome: order.cliente_nome || '',
+          cliente_email: order.cliente_email || '',
+          cliente_telefone: order.cliente_telefone || ''
+        })
+      });
+
+      await load();
+      alert(successMessage);
+    } catch (err: any) {
+      alert(err.message || 'Erro ao atualizar pedido.');
+    }
+  }
+
   function buildShareMessage(order: any) {
     const numero = order.numero_pedido || order.numero || order.id;
     const prazo = order.prazo_entrega ? formatDate(order.prazo_entrega) : 'A combinar';
@@ -944,23 +980,59 @@ export function Pedidos() {
                   </div>
 
                   <div
-                    className="grid grid-cols-3 gap-2"
+                    className="space-y-2"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <button className="btn btn-outline text-sm px-2 py-2 min-w-0" onClick={() => printDocument(o)} title="Documento">
-                      <Printer size={15} />
-                      Doc.
-                    </button>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      <button
+                        type="button"
+                        className="rounded-xl border border-purple-200 bg-white/85 px-1.5 py-2 text-[10px] font-bold text-purple-700"
+                        onClick={() => updateOrderQuick(o, { status: 'em_producao' }, 'Pedido movido para Em produção.')}
+                      >
+                        Produção
+                      </button>
 
-                    <button className="btn btn-outline text-sm px-2 py-2 min-w-0" onClick={() => shareOrder(o)}>
-                      <Share2 size={15} />
-                      Enviar
-                    </button>
+                      <button
+                        type="button"
+                        className="rounded-xl border border-emerald-200 bg-white/85 px-1.5 py-2 text-[10px] font-bold text-emerald-700"
+                        onClick={() => updateOrderQuick(o, { status: 'pronto' }, 'Pedido marcado como Pronto.')}
+                      >
+                        Pronto
+                      </button>
 
-                    <button className="btn btn-outline text-red-700 text-sm px-2 py-2 min-w-0" onClick={() => deleteOrder(o)} title="Excluir">
-                      <Trash2 size={15} />
-                      Excluir
-                    </button>
+                      <button
+                        type="button"
+                        className="rounded-xl border border-green-200 bg-white/85 px-1.5 py-2 text-[10px] font-bold text-green-700"
+                        onClick={() => updateOrderQuick(o, { status: 'entregue' }, 'Pedido marcado como Entregue.')}
+                      >
+                        Entregue
+                      </button>
+
+                      <button
+                        type="button"
+                        className="rounded-xl border border-blue-200 bg-white/85 px-1.5 py-2 text-[10px] font-bold text-blue-700"
+                        onClick={() => updateOrderQuick(o, { status_pagamento: 'confirmado' }, 'Pagamento marcado como Confirmado.')}
+                      >
+                        Pago
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2">
+                      <button className="btn btn-outline text-sm px-2 py-2 min-w-0" onClick={() => printDocument(o)} title="Documento">
+                        <Printer size={15} />
+                        Doc.
+                      </button>
+
+                      <button className="btn btn-outline text-sm px-2 py-2 min-w-0" onClick={() => shareOrder(o)}>
+                        <Share2 size={15} />
+                        Enviar
+                      </button>
+
+                      <button className="btn btn-outline text-red-700 text-sm px-2 py-2 min-w-0" onClick={() => deleteOrder(o)} title="Excluir">
+                        <Trash2 size={15} />
+                        Excluir
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
