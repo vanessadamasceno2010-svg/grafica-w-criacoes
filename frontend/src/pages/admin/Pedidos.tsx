@@ -112,7 +112,40 @@ function daysUntilDeadline(order: any) {
 }
 
 function prazoStatus(order: any) {
-  if (!order.prazo_entrega || ['entregue', 'cancelado'].includes(order.status)) {
+  if (order.status === 'pronto') {
+    return {
+      label: 'Pronto',
+      shortLabel: 'Pronto',
+      cls: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+      border: 'border-l-emerald-500',
+      icon: CheckCircle2,
+      priority: 20
+    };
+  }
+
+  if (order.status === 'entregue') {
+    return {
+      label: 'Entregue',
+      shortLabel: 'Entregue',
+      cls: 'bg-green-50 text-green-700 border-green-200',
+      border: 'border-l-green-500',
+      icon: CheckCircle2,
+      priority: 90
+    };
+  }
+
+  if (order.status === 'cancelado') {
+    return {
+      label: 'Cancelado',
+      shortLabel: 'Cancelado',
+      cls: 'bg-gray-100 text-gray-600 border-gray-200',
+      border: 'border-l-gray-300',
+      icon: Clock,
+      priority: 99
+    };
+  }
+
+  if (!order.prazo_entrega) {
     return {
       label: 'Sem prazo',
       shortLabel: 'Sem prazo',
@@ -209,6 +242,44 @@ function buildInitialPedidoForm(): PedidoForm {
     status_pagamento: 'pendente',
     prazo_entrega: ''
   };
+}
+
+function getCardTone(order: any) {
+  const prazo = prazoStatus(order);
+
+  if (prazo.label === 'Atrasado') {
+    return 'bg-red-50/70 border-red-100';
+  }
+
+  if (order.status === 'pronto') {
+    return 'bg-emerald-50/70 border-emerald-100';
+  }
+
+  if (order.status === 'entregue') {
+    return 'bg-green-50/70 border-green-100';
+  }
+
+  if (order.status === 'cancelado') {
+    return 'bg-gray-50 border-gray-200';
+  }
+
+  if (order.status === 'em_producao') {
+    return 'bg-purple-50/50 border-purple-100';
+  }
+
+  if (order.status === 'pendente') {
+    return 'bg-amber-50/60 border-amber-100';
+  }
+
+  if (order.status === 'confirmado') {
+    return 'bg-sky-50/50 border-sky-100';
+  }
+
+  if (prazo.label === 'Hoje' || prazo.label === 'Atenção') {
+    return 'bg-orange-50/50 border-orange-100';
+  }
+
+  return 'bg-white border-gray-100';
 }
 
 function SummaryCard({
@@ -633,7 +704,6 @@ export function Pedidos() {
           win.print();
         } catch {
           // Em alguns celulares o navegador bloqueia impressão automática.
-          // O botão "Imprimir / Salvar PDF" continua disponível na tela.
         }
       }, 500);
     } catch (err: any) {
@@ -754,6 +824,7 @@ export function Pedidos() {
             <option value="Atenção">Atenção</option>
             <option value="No prazo">No prazo</option>
             <option value="Sem prazo">Sem prazo</option>
+            <option value="Pronto">Pronto</option>
           </select>
 
           <button type="button" className="btn btn-outline" onClick={clearFilters}>
@@ -795,13 +866,14 @@ export function Pedidos() {
         </div>
       )}
 
-      <div className="grid gap-3">
+      <div className="grid gap-2">
         {filtered.map((o) => {
           const pz = prazoStatus(o);
           const Icon = pz.icon;
           const remaining = getOrderRemaining(o);
           const paymentClass = paymentClasses[o.status_pagamento] || 'bg-gray-100 text-gray-600 border-gray-200';
           const statusClass = statusClasses[o.status] || 'bg-gray-100 text-gray-600 border-gray-200';
+          const cardTone = getCardTone(o);
 
           return (
             <div
@@ -812,88 +884,81 @@ export function Pedidos() {
               onKeyDown={(event) => {
                 if (event.key === 'Enter') openOrder(o);
               }}
-              className={`card overflow-hidden border-l-4 ${pz.border} hover:ring-2 hover:ring-gold/40 transition cursor-pointer`}
+              className={`card overflow-hidden border-l-4 ${pz.border} ${cardTone} hover:ring-2 hover:ring-gold/40 transition cursor-pointer`}
             >
-              <div className="p-4">
-                <div className="flex flex-col xl:flex-row xl:items-start justify-between gap-4">
-                  <div className="min-w-0 flex-1">
-                    <div className="mb-3">
-                      <p className="text-xs font-bold text-gray-400 uppercase mb-1">
-                        Cliente
-                      </p>
-                      <h3 className="font-display font-bold text-lg text-primary">
-                        {o.cliente_nome || 'Cliente não informado'}
-                      </h3>
-                    </div>
+              <div className="p-3 sm:p-4">
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className={`px-2.5 py-1 rounded-full border text-[11px] font-bold ${statusClass}`}>
+                      {statusLabels[o.status] || o.status || 'Sem status'}
+                    </span>
 
-                    <div className="rounded-2xl bg-gray-50 border border-gray-100 p-3 mb-3">
-                      <p className="text-xs font-bold text-gray-400 uppercase mb-2">
-                        Descrição do pedido
-                      </p>
-                      <p className="text-sm text-primary whitespace-pre-line leading-relaxed">
-                        {getOrderDescription(o)}
-                      </p>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-2 mb-3">
-                      <span className={`px-2.5 py-1 rounded-full border text-[11px] font-bold ${statusClass}`}>
-                        {statusLabels[o.status] || o.status || 'Sem status'}
-                      </span>
-
+                    {o.status !== 'pronto' && o.status !== 'entregue' && o.status !== 'cancelado' && (
                       <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-[11px] font-bold ${pz.cls}`}>
                         <Icon size={13} />
                         {pz.shortLabel}
                       </span>
+                    )}
 
-                      <span className="px-2.5 py-1 rounded-full border border-gray-200 bg-white text-gray-600 text-[11px] font-bold">
-                        Data: {formatDate(o.created_at)}
-                      </span>
+                    <span className="px-2.5 py-1 rounded-full border border-gray-200 bg-white/80 text-gray-600 text-[11px] font-bold">
+                      Data: {formatDate(o.created_at)}
+                    </span>
 
-                      <span className="px-2.5 py-1 rounded-full border border-gray-200 bg-white text-gray-600 text-[11px] font-bold">
-                        Prazo: {formatDate(o.prazo_entrega)}
-                      </span>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="px-3 py-2 rounded-xl bg-gray-50 border border-gray-100 text-sm">
-                        <b className="text-primary">Valor:</b> {formatMoney(o.total)}
-                      </span>
-
-                      <span className="px-3 py-2 rounded-xl bg-gray-50 border border-gray-100 text-sm">
-                        <b className="text-primary">Pago:</b> {formatMoney(o.valor_entrada || 0)}
-                      </span>
-
-                      <span className={`px-3 py-2 rounded-xl border text-sm ${
-                        remaining > 0
-                          ? 'bg-red-50 border-red-100 text-red-700'
-                          : 'bg-emerald-50 border-emerald-100 text-emerald-700'
-                      }`}>
-                        <b>Restante:</b> {formatMoney(remaining)}
-                      </span>
-
-                      <span className={`px-3 py-2 rounded-xl border text-sm ${paymentClass}`}>
-                        {paymentLabels[o.status_pagamento] || o.status_pagamento || 'Pagamento'}
-                      </span>
-                    </div>
+                    <span className="px-2.5 py-1 rounded-full border border-gray-200 bg-white/80 text-gray-600 text-[11px] font-bold">
+                      Prazo: {formatDate(o.prazo_entrega)}
+                    </span>
                   </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-1 gap-2 xl:w-40" onClick={(e) => e.stopPropagation()}>
-                    <button className="btn btn-primary text-sm px-3 py-2" onClick={() => openOrder(o)}>
-                      Abrir
-                    </button>
+                  <div>
+                    <h3 className="font-display font-bold text-base sm:text-lg text-primary leading-tight">
+                      {o.cliente_nome || 'Cliente não informado'}
+                    </h3>
+                  </div>
 
-                    <button className="btn btn-outline text-sm px-3 py-2" onClick={() => printDocument(o)} title="Documento">
-                      <Printer size={16} />
+                  <div className="rounded-2xl bg-white/75 border border-white/80 p-3">
+                    <p className="text-sm text-primary whitespace-pre-line leading-relaxed font-semibold">
+                      {getOrderDescription(o)}
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 text-[12px] sm:text-sm">
+                    <span className="px-2.5 py-1.5 rounded-xl bg-white/80 border border-gray-100 text-gray-700">
+                      <b className="text-primary">Valor:</b> {formatMoney(o.total)}
+                    </span>
+
+                    <span className="px-2.5 py-1.5 rounded-xl bg-white/80 border border-gray-100 text-gray-700">
+                      <b className="text-primary">Pago:</b> {formatMoney(o.valor_entrada || 0)}
+                    </span>
+
+                    <span className={`px-2.5 py-1.5 rounded-xl border ${
+                      remaining > 0
+                        ? 'bg-red-50 border-red-100 text-red-700'
+                        : 'bg-emerald-50 border-emerald-100 text-emerald-700'
+                    }`}>
+                      <b>Restante:</b> {formatMoney(remaining)}
+                    </span>
+
+                    <span className={`px-2.5 py-1.5 rounded-xl border ${paymentClass}`}>
+                      {paymentLabels[o.status_pagamento] || o.status_pagamento || 'Pagamento'}
+                    </span>
+                  </div>
+
+                  <div
+                    className="grid grid-cols-3 gap-2"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <button className="btn btn-outline text-sm px-2 py-2 min-w-0" onClick={() => printDocument(o)} title="Documento">
+                      <Printer size={15} />
                       Doc.
                     </button>
 
-                    <button className="btn btn-outline text-sm px-3 py-2" onClick={() => shareOrder(o)}>
-                      <Share2 size={16} />
+                    <button className="btn btn-outline text-sm px-2 py-2 min-w-0" onClick={() => shareOrder(o)}>
+                      <Share2 size={15} />
                       Enviar
                     </button>
 
-                    <button className="btn btn-outline text-red-700 text-sm px-3 py-2" onClick={() => deleteOrder(o)} title="Excluir">
-                      <Trash2 size={16} />
+                    <button className="btn btn-outline text-red-700 text-sm px-2 py-2 min-w-0" onClick={() => deleteOrder(o)} title="Excluir">
+                      <Trash2 size={15} />
                       Excluir
                     </button>
                   </div>
