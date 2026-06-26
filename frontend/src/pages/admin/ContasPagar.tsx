@@ -323,10 +323,11 @@ export function ContasPagar() {
     const valorParcela = moneyToNumber(form.valor_parcela);
     const quantidade = Math.max(1, Number(form.quantidade_parcelas || 1));
     const total = valorParcela * quantidade;
+    const valorTotalPayload = form.conta_fixa ? 0 : total;
 
     if (!form.descricao.trim()) return alert('Informe a descrição da conta.');
     if (valorParcela <= 0) return alert('Informe o valor da parcela.');
-    if (total <= 0) return alert('O valor total precisa ser maior que zero.');
+    if (!form.conta_fixa && total <= 0) return alert('O valor total precisa ser maior que zero.');
     if (!form.primeiro_vencimento) return alert('Informe o primeiro vencimento.');
     if (quantidade < 1) return alert('Informe pelo menos uma parcela.');
 
@@ -340,7 +341,7 @@ export function ContasPagar() {
           fornecedor: form.fornecedor,
           categoria: form.categoria,
           valor_parcela: valorParcela,
-          valor_total: total,
+          valor_total: valorTotalPayload,
           quantidade_parcelas: quantidade,
           primeiro_vencimento: form.primeiro_vencimento,
           conta_fixa: form.conta_fixa,
@@ -440,6 +441,16 @@ export function ContasPagar() {
     return contas.filter((conta) => conta.conta_fixa && conta.status !== 'cancelado');
   }, [contas]);
 
+  function valorRestanteConta(account: any) {
+    if (account.conta_fixa) return '-';
+
+    const restante = account.valor_restante_conta !== undefined && account.valor_restante_conta !== null
+      ? moneyToNumber(account.valor_restante_conta)
+      : moneyToNumber(account.valor_total || 0);
+
+    return formatMoney(restante);
+  }
+
   const valorTotalFormulario = moneyToNumber(form.valor_total);
   const valorParcelaFormulario = moneyToNumber(form.valor_parcela);
 
@@ -471,7 +482,7 @@ export function ContasPagar() {
         </button>
       </div>
 
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-2 sm:gap-3 mb-4">
+      <div className="grid grid-cols-2 xl:grid-cols-5 gap-2 sm:gap-3 mb-4">
         <SummaryCard
           title="Total do mês"
           value={formatMoney(resumo.totalMes || 0)}
@@ -486,6 +497,14 @@ export function ContasPagar() {
           subtitle={`${resumo.quantidadeAVencer || 0} no mês`}
           icon={Clock3}
           tone="warning"
+        />
+
+        <SummaryCard
+          title="Pagas"
+          value={formatMoney(resumo.contasPagasMes || 0)}
+          subtitle={`${resumo.quantidadePagasMes || 0} quitada(s)`}
+          icon={CheckCircle2}
+          tone="success"
         />
 
         <SummaryCard
@@ -671,8 +690,8 @@ export function ContasPagar() {
                       </div>
 
                       <div className="rounded-xl bg-white/80 border border-gray-100 p-2">
-                        <p className="text-[10px] font-bold text-gray-400 uppercase">Total</p>
-                        <p className="font-bold text-primary">{formatMoney(account.valor_total || 0)}</p>
+                        <p className="text-[10px] font-bold text-gray-400 uppercase">Restante</p>
+                        <p className="font-bold text-primary">{valorRestanteConta(account)}</p>
                       </div>
 
                       <div className="rounded-xl bg-white/80 border border-gray-100 p-2">
@@ -796,11 +815,11 @@ export function ContasPagar() {
             </label>
 
             <label>
-              <span className="text-sm font-bold text-primary">Valor total automático</span>
+              <span className="text-sm font-bold text-primary">Total / restante automático</span>
               <input
                 className="input bg-gray-50 font-bold"
                 readOnly
-                value={form.valor_total}
+                value={form.conta_fixa ? '-' : form.valor_total}
                 placeholder="0,00"
               />
             </label>
@@ -845,8 +864,11 @@ export function ContasPagar() {
               </div>
 
               <div>
-                <p className="text-xs text-white/60 uppercase font-bold">Total</p>
-                <p className="font-display text-xl font-bold">{formatMoney(valorTotalFormulario)}</p>
+                <p className="text-xs text-white/60 uppercase font-bold">Total / restante</p>
+                <p className="font-display text-xl font-bold">{form.conta_fixa ? '-' : formatMoney(valorTotalFormulario)}</p>
+                {form.conta_fixa && (
+                  <p className="text-xs text-white/60 mt-1">Conta fixa não soma os 12 meses</p>
+                )}
               </div>
             </div>
           </div>
