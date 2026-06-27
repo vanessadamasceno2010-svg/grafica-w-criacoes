@@ -829,7 +829,7 @@ async function ajustarQuantidadeParcelasDaConta(params: {
   const primeiroVencimento = String(primeiraParcela.vencimento || params.contaAtual.vencimento || currentMonthRange().today).slice(0, 10);
 
   const valorParcela = asNumber(params.valorParcela || primeiraParcela.valor_parcela || 0);
-  const valorTotal = params.contaFixa ? 0 : valorParcela * novaQuantidade;
+  const valorTotal = params.contaFixa ? valorParcela : valorParcela * novaQuantidade;
 
   const basePayload: any = {
     quantidade_parcelas: novaQuantidade,
@@ -1026,7 +1026,7 @@ adminRoutes.post('/contas-pagar', onlyAdmin, asyncHandler(async (req, res) => {
     ? 0
     : totalCents - (baseCents * quantidadeParcelas);
 
-  const valorTotal = Boolean(d.conta_fixa) ? 0 : totalCents / 100;
+  const valorTotal = Boolean(d.conta_fixa) ? (baseCents / 100) : totalCents / 100;
   const now = new Date().toISOString();
 
   const parcelas = Array.from({ length: quantidadeParcelas }, (_, index) => ({
@@ -1049,10 +1049,20 @@ adminRoutes.post('/contas-pagar', onlyAdmin, asyncHandler(async (req, res) => {
     updated_at: now
   }));
 
-  const rows = await supabaseRest<any[]>('/contas_pagar', {
-    method: 'POST',
-    body: JSON.stringify(parcelas)
-  });
+  let rows: any[];
+
+  try {
+    rows = await supabaseRest<any[]>('/contas_pagar', {
+      method: 'POST',
+      body: JSON.stringify(parcelas)
+    });
+  } catch (error: any) {
+    console.error('ERRO AO CRIAR CONTAS A PAGAR:', error?.message || error);
+
+    return res.status(400).json({
+      message: error?.message || 'Erro ao criar conta a pagar.'
+    });
+  }
 
   res.status(201).json({
     grupo_id: grupoId,
@@ -1101,7 +1111,7 @@ adminRoutes.put('/contas-pagar/:id', onlyAdmin, asyncHandler(async (req, res) =>
   const payload: any = {
     ...d,
     quantidade_parcelas: quantidadeNova,
-    valor_total: contaFixaNova ? 0 : valorParcelaNovo * quantidadeNova,
+    valor_total: contaFixaNova ? valorParcelaNovo : valorParcelaNovo * quantidadeNova,
     grupo_id: contaAtual.grupo_id || contaAtual.id,
     updated_at: new Date().toISOString()
   };
