@@ -244,13 +244,84 @@ adminRoutes.get('/dashboard', asyncHandler(async (req, res) => {
 }));
 
 adminRoutes.get('/clientes', asyncHandler(async (_req, res) => {
-  const users = await supabaseRest<any[]>('/users?select=id,nome,email,telefone,role,created_at&role=eq.user&order=created_at.desc&limit=1000');
-  const pedidos = await supabaseRest<any[]>('/pedidos?select=id,usuario_id,total&limit=2000').catch(() => []);
+  const users = await supabaseRest<any[]>(
+    '/users?select=id,nome,email,telefone,role,created_at&role=eq.user&order=created_at.desc&limit=2000'
+  );
 
-  res.json(users.map((u) => {
-    const userOrders = pedidos.filter((p) => p.usuario_id === u.id);
-    return { ...u, total_gasto: userOrders.reduce((sum, p) => sum + asNumber(p.total), 0), pedidos: userOrders.length };
-  }));
+  const pedidos = await supabaseRest<any[]>(
+    '/pedidos?select=id,usuario_id,cliente_email,cliente_telefone,total,valor_entrada,valor_restante,status,status_pagamento,created_at&limit=5000'
+  ).catch(() => []);
+
+  const clientes = users.map((user) => {
+    const userEmail = String(user.email || '').trim().toLowerCase();
+    const userPhone = normalizePhone(user.telefone || '');
+
+    const userOrders = pedidos.filter((pedido) => {
+      if (pedido.usuario_id && pedido.usuario_id === user.id) return true;
+
+      const pedidoEmail = String(pedido.cliente_email || '').trim().toLowerCase();
+      const pedidoPhone = normalizePhone(pedido.cliente_telefone || '');
+
+      if (userEmail && pedidoEmail && userEmail === pedidoEmail) return true;
+      if (userPhone && pedidoPhone && userPhone === pedidoPhone) return true;
+
+      return false;
+    });
+
+    const pedidosValidos = userOrders.filter(
+      (pedido) => pedido.status !== 'cancelado'
+    );
+
+    const totalGasto = pedidosValidos.reduce(
+      (sum, pedido) => sum + asNumber(pedido.total),
+      0
+    );
+
+    const valorEmAberto = pedidosValidos.reduce((sum, pedido) => {
+      if (pedido.status_pagamento === 'confirmado') return sum;
+
+      const restanteSalvo = asNumber(pedido.valor_restante);
+      const restanteCalculado = Math.max(
+        asNumber(pedido.total) - asNumber(pedido.valor_entrada),
+        0
+      );
+
+      return sum + (restanteSalvo > 0 ? restanteSalvo : restanteCalculado);
+    }, 0);
+
+    const pedidosAbertos = pedidosValidos.filter((pedido) => {
+      const restanteSalvo = asNumber(pedido.valor_restante);
+      const restanteCalculado = Math.max(
+        asNumber(pedido.total) - asNumber(pedido.valor_entrada),
+        0
+      );
+
+      return (
+        !['entregue', 'cancelado'].includes(String(pedido.status || '')) ||
+        (
+          pedido.status_pagamento !== 'confirmado' &&
+          (restanteSalvo > 0 || restanteCalculado > 0)
+        )
+      );
+    }).length;
+
+    const ultimoPedidoEm =
+      pedidosValidos
+        .map((pedido) => pedido.created_at)
+        .filter(Boolean)
+        .sort((a, b) => String(b).localeCompare(String(a)))[0] || null;
+
+    return {
+      ...user,
+      total_gasto: totalGasto,
+      valor_em_aberto: valorEmAberto,
+      pedidos: pedidosValidos.length,
+      pedidos_abertos: pedidosAbertos,
+      ultimo_pedido_em: ultimoPedidoEm
+    };
+  });
+
+  res.json(clientes);
 }));
 
 adminRoutes.post('/clientes', onlyAdmin, asyncHandler(async (req, res) => {
