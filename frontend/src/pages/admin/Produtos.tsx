@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Search, Trash2, Copy, X, Wand2 } from 'lucide-react';
+import { Plus, Search, Trash2, Copy, X, Wand2, Package, CheckCircle2, AlertTriangle, Star, Filter, Eye, EyeOff } from 'lucide-react';
 import {
   apiFetch,
   confirmAction,
@@ -272,8 +272,71 @@ function generateVariationsFromSpecs(groups: SpecGroup[], basePrice: number, bas
   });
 }
 
+
+function productStock(product: ProductForm) {
+  const activeVariations = normalizeVariations(product.variacoes).filter(
+    (variation) => variation.ativo !== false
+  );
+
+  if (activeVariations.length > 0) {
+    return activeVariations.reduce(
+      (sum, variation) => sum + Number(variation.estoque || 0),
+      0
+    );
+  }
+
+  return Number(product.estoque || 0);
+}
+
+function ProductSummaryCard({
+  title,
+  value,
+  subtitle,
+  icon: Icon,
+  tone
+}: {
+  title: string;
+  value: string | number;
+  subtitle: string;
+  icon: any;
+  tone: 'primary' | 'success' | 'warning' | 'danger';
+}) {
+  const tones = {
+    primary: 'bg-blue-50 border-blue-100 text-blue-700',
+    success: 'bg-emerald-50 border-emerald-100 text-emerald-700',
+    warning: 'bg-amber-50 border-amber-100 text-amber-700',
+    danger: 'bg-red-50 border-red-100 text-red-700'
+  };
+
+  return (
+    <div className={`rounded-2xl border p-3 ${tones[tone]}`}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-[10px] font-bold uppercase tracking-wide opacity-70">
+            {title}
+          </p>
+          <p className="font-display text-lg sm:text-xl font-bold mt-0.5 leading-tight">
+            {value}
+          </p>
+          <p className="text-[11px] opacity-75 mt-0.5 leading-tight">
+            {subtitle}
+          </p>
+        </div>
+
+        <div className="w-9 h-9 rounded-xl bg-white/80 flex items-center justify-center shrink-0">
+          <Icon size={18} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function Produtos() {
   const [search, setSearch] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('todos');
+  const [statusFilter, setStatusFilter] = useState('todos');
+  const [stockFilter, setStockFilter] = useState('todos');
+  const [savingStatusId, setSavingStatusId] = useState('');
   const [products, setProducts] = useState<ProductForm[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [newCategoryName, setNewCategoryName] = useState('');
@@ -312,15 +375,65 @@ export function Produtos() {
     load();
   }, []);
 
+  const summary = useMemo(() => {
+    const ativos = products.filter((product) => product.ativo !== false).length;
+    const destaques = products.filter((product) => Boolean(product.destaque)).length;
+    const atencao = products.filter(
+      (product) => product.ativo === false || productStock(product) <= 0
+    ).length;
+
+    return {
+      total: products.length,
+      ativos,
+      destaques,
+      atencao
+    };
+  }, [products]);
+
   const filtered = useMemo(() => {
-    return products.filter((p) => {
-      const text = [p.nome, p.categoria_nome, p.sku]
+    const query = search.trim().toLowerCase();
+
+    return products.filter((product) => {
+      const searchable = [
+        product.nome,
+        product.categoria_nome,
+        product.sku
+      ]
         .join(' ')
         .toLowerCase();
 
-      return text.includes(search.toLowerCase());
+      if (query && !searchable.includes(query)) return false;
+
+      if (
+        categoryFilter !== 'todos' &&
+        product.categoria_id !== categoryFilter
+      ) {
+        return false;
+      }
+
+      if (
+        statusFilter === 'ativos' &&
+        product.ativo === false
+      ) {
+        return false;
+      }
+
+      if (
+        statusFilter === 'inativos' &&
+        product.ativo !== false
+      ) {
+        return false;
+      }
+
+      const estoque = productStock(product);
+
+      if (stockFilter === 'com_estoque' && estoque <= 0) return false;
+      if (stockFilter === 'sem_estoque' && estoque > 0) return false;
+      if (stockFilter === 'baixo' && (estoque <= 0 || estoque > 5)) return false;
+
+      return true;
     });
-  }, [products, search]);
+  }, [products, search, categoryFilter, statusFilter, stockFilter]);
 
   const openNew = () => {
     const firstCategory = categories[0]?.id || '';
@@ -554,6 +667,36 @@ export function Produtos() {
     }
   };
 
+  const toggleProductStatus = async (product: ProductForm) => {
+    const nextActive = product.ativo === false;
+
+    setSavingStatusId(product.id);
+
+    try {
+      const body = payloadFromForm({
+        ...product,
+        ativo: nextActive
+      });
+
+      await apiFetch(`/produtos/${product.id}`, {
+        method: 'PUT',
+        body: JSON.stringify(body)
+      });
+
+      setProducts((current) =>
+        current.map((item) =>
+          item.id === product.id
+            ? { ...item, ativo: nextActive }
+            : item
+        )
+      );
+    } catch (err: any) {
+      alert(err.message || 'Erro ao alterar status do produto.');
+    } finally {
+      setSavingStatusId('');
+    }
+  };
+
   const updateVariation = (index: number, field: keyof ProductVariation, value: any) => {
     if (!editingProduct) return;
 
@@ -653,102 +796,329 @@ export function Produtos() {
   );
 
   return (
-    <div className="fade-in">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+    <div className="fade-in w-full max-w-full overflow-hidden">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-5">
         <div>
-          <h1 className="font-display text-2xl sm:text-3xl font-bold text-primary">Gerenciador de Produtos</h1>
-          <p className="text-gray-500 mt-1">Clique no produto para editar. Cadastre opções como acabamento, quantidade e tamanho.</p>
+          <p className="text-xs font-bold uppercase tracking-[0.25em] text-gold mb-2">
+            Catálogo
+          </p>
+
+          <h1 className="font-display text-2xl sm:text-3xl font-bold text-primary flex items-center gap-2">
+            <Package size={30} />
+            Produtos
+          </h1>
+
+          <p className="text-gray-500 mt-1">
+            Gerencie preços, opções, variações, estoque e disponibilidade.
+          </p>
         </div>
 
-        <button className="btn btn-primary" onClick={openNew}>
+        <button
+          type="button"
+          className="btn btn-primary w-full sm:w-auto"
+          onClick={openNew}
+        >
           <Plus size={18} />
-          Novo Produto
+          Novo produto
         </button>
       </div>
 
-      <div className="relative mb-6">
-        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-        <input
-          type="text"
-          placeholder="Buscar por nome ou categoria..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="input pl-11"
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-2 sm:gap-3 mb-4">
+        <ProductSummaryCard
+          title="Produtos"
+          value={summary.total}
+          subtitle="Cadastrados"
+          icon={Package}
+          tone="primary"
+        />
+
+        <ProductSummaryCard
+          title="Ativos"
+          value={summary.ativos}
+          subtitle="Visíveis no catálogo"
+          icon={CheckCircle2}
+          tone="success"
+        />
+
+        <ProductSummaryCard
+          title="Destaques"
+          value={summary.destaques}
+          subtitle="Promovidos na vitrine"
+          icon={Star}
+          tone="warning"
+        />
+
+        <ProductSummaryCard
+          title="Atenção"
+          value={summary.atencao}
+          subtitle="Inativos ou sem estoque"
+          icon={AlertTriangle}
+          tone={summary.atencao > 0 ? 'danger' : 'success'}
         />
       </div>
 
-      {loading && <div className="card p-4 mb-4">Carregando produtos do Supabase...</div>}
+      <div className="card p-3 sm:p-4 mb-4">
+        <div className="grid lg:grid-cols-[1fr_190px_170px_170px_auto] gap-3">
+          <div className="relative">
+            <Search
+              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"
+              size={19}
+            />
 
-      <div className="card overflow-hidden">
-        <div className="hidden sm:block overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="text-left px-6 py-4">Produto</th>
-                <th className="text-left px-6 py-4">Categoria</th>
-                <th className="text-left px-6 py-4">Preço</th>
-                <th className="text-left px-6 py-4">Opções</th>
-                <th className="text-left px-6 py-4">Variações</th>
-                <th className="text-right px-6 py-4">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {filtered.map((product) => {
-                const qtdVariacoes = normalizeVariations(product.variacoes).length;
-                const qtdOpcoes = Object.keys(product.especificacoes || {}).length;
+            <input
+              type="text"
+              placeholder="Buscar por nome, categoria ou SKU..."
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              className="input pl-11"
+            />
+          </div>
 
-                return (
-                  <tr key={product.id} onClick={() => openEdit(product)} className="cursor-pointer hover:bg-amber-50/40 transition">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <img src={product.imagem_principal} alt="" className="w-10 h-10 rounded-lg object-cover bg-gray-100" />
-                        <span className="font-semibold text-primary">{product.nome}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-gray-600">{product.categoria_nome}</td>
-                    <td className="px-6 py-4 font-semibold">
-                      {qtdVariacoes > 0 ? `A partir de ${formatMoney(productMinPrice(product))}` : formatMoney(product.preco)}
-                    </td>
-                    <td className="px-6 py-4 text-gray-600">{qtdOpcoes}</td>
-                    <td className="px-6 py-4 text-gray-600">{qtdVariacoes}</td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center justify-end gap-2">{renderActions(product)}</div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <select
+            className="input"
+            value={categoryFilter}
+            onChange={(event) => setCategoryFilter(event.target.value)}
+          >
+            <option value="todos">Todas as categorias</option>
+            {categories.map((category) => (
+              <option key={category.id} value={category.id}>
+                {category.nome}
+              </option>
+            ))}
+          </select>
+
+          <select
+            className="input"
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value)}
+          >
+            <option value="todos">Todos os status</option>
+            <option value="ativos">Ativos</option>
+            <option value="inativos">Inativos</option>
+          </select>
+
+          <select
+            className="input"
+            value={stockFilter}
+            onChange={(event) => setStockFilter(event.target.value)}
+          >
+            <option value="todos">Todo estoque</option>
+            <option value="com_estoque">Com estoque</option>
+            <option value="baixo">Estoque baixo</option>
+            <option value="sem_estoque">Sem estoque</option>
+          </select>
+
+          <button
+            type="button"
+            className="btn btn-outline"
+            onClick={() => {
+              setSearch('');
+              setCategoryFilter('todos');
+              setStatusFilter('todos');
+              setStockFilter('todos');
+            }}
+          >
+            <Filter size={17} />
+            Limpar
+          </button>
         </div>
 
-        <div className="sm:hidden divide-y divide-gray-100">
-          {filtered.map((product) => {
-            const qtdVariacoes = normalizeVariations(product.variacoes).length;
-            const qtdOpcoes = Object.keys(product.especificacoes || {}).length;
-
-            return (
-              <div key={product.id} className="p-4 cursor-pointer active:bg-amber-50" onClick={() => openEdit(product)}>
-                <div className="flex gap-3">
-                  <img src={product.imagem_principal} alt="" className="w-16 h-16 rounded-xl object-cover bg-gray-100" />
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-bold text-primary truncate">{product.nome}</h3>
-                    <p className="text-sm text-gray-500 truncate">{product.categoria_nome}</p>
-                    <p className="font-bold text-primary mt-1">
-                      {qtdVariacoes > 0 ? `A partir de ${formatMoney(productMinPrice(product))}` : formatMoney(product.preco)}
-                    </p>
-                    <p className="text-xs text-gray-500">{qtdOpcoes} opção(ões) • {qtdVariacoes} variação(ões)</p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 mt-4" onClick={(event) => event.stopPropagation()}>
-                  <button onClick={() => duplicateProduct(product)} className="btn btn-outline px-2"><Copy size={16} />Duplicar</button>
-                  <button onClick={() => deleteProduct(product)} className="btn btn-danger px-2"><Trash2 size={16} />Excluir</button>
-                </div>
-              </div>
-            );
-          })}
+        <div className="flex flex-wrap gap-2 mt-3">
+          {[
+            ['todos', 'Todos'],
+            ['ativos', 'Ativos'],
+            ['inativos', 'Inativos']
+          ].map(([value, label]) => (
+            <button
+              type="button"
+              key={value}
+              onClick={() => setStatusFilter(value)}
+              className={`px-3 py-2 rounded-xl border text-xs font-bold ${
+                statusFilter === value
+                  ? 'bg-primary text-white border-primary'
+                  : 'bg-white text-gray-600 border-gray-200'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
       </div>
+
+      {loading && (
+        <div className="card p-4 mb-4">
+          Carregando produtos do Supabase...
+        </div>
+      )}
+
+      {!loading && (
+        <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
+          {filtered.map((product) => {
+            const variations = normalizeVariations(product.variacoes);
+            const optionCount = Object.keys(product.especificacoes || {}).length;
+            const stock = productStock(product);
+            const active = product.ativo !== false;
+
+            return (
+              <article
+                key={product.id}
+                onClick={() => openEdit(product)}
+                className={`card cursor-pointer overflow-hidden border-l-4 transition hover:ring-2 hover:ring-gold/40 ${
+                  active
+                    ? stock > 0
+                      ? 'border-l-emerald-500 bg-emerald-50/20'
+                      : 'border-l-orange-500 bg-orange-50/30'
+                    : 'border-l-gray-400 bg-gray-50'
+                }`}
+              >
+                <div className="p-3 sm:p-4">
+                  <div className="flex gap-3">
+                    <img
+                      src={product.imagem_principal}
+                      alt={product.nome}
+                      className="w-20 h-20 rounded-2xl object-cover bg-gray-100 shrink-0"
+                      onError={(event) => {
+                        event.currentTarget.src = '/assets/chaveiros-personalizados.jpeg';
+                      }}
+                    />
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap gap-1.5 mb-1">
+                        <span
+                          className={`px-2.5 py-1 rounded-full border text-[10px] font-bold ${
+                            active
+                              ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                              : 'bg-gray-100 border-gray-200 text-gray-600'
+                          }`}
+                        >
+                          {active ? 'Ativo' : 'Inativo'}
+                        </span>
+
+                        {product.destaque && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-amber-200 bg-amber-50 text-amber-700 text-[10px] font-bold">
+                            <Star size={11} />
+                            Destaque
+                          </span>
+                        )}
+
+                        {stock <= 0 && (
+                          <span className="px-2.5 py-1 rounded-full border border-red-200 bg-red-50 text-red-700 text-[10px] font-bold">
+                            Sem estoque
+                          </span>
+                        )}
+                      </div>
+
+                      <h3 className="font-display font-bold text-base sm:text-lg text-primary leading-tight line-clamp-2">
+                        {product.nome}
+                      </h3>
+
+                      <p className="text-xs text-gray-500 mt-1 truncate">
+                        {product.categoria_nome || 'Sem categoria'} · {product.sku || 'Sem SKU'}
+                      </p>
+
+                      <p className="font-bold text-primary mt-2">
+                        {variations.length > 0
+                          ? `A partir de ${formatMoney(productMinPrice(product))}`
+                          : formatMoney(product.preco)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 mt-3">
+                    <div className="rounded-xl bg-white/85 border border-gray-100 p-2">
+                      <p className="text-[10px] font-bold text-gray-400 uppercase">
+                        Opções
+                      </p>
+                      <p className="font-bold text-primary">
+                        {optionCount}
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl bg-white/85 border border-gray-100 p-2">
+                      <p className="text-[10px] font-bold text-gray-400 uppercase">
+                        Variações
+                      </p>
+                      <p className="font-bold text-primary">
+                        {variations.length}
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl bg-white/85 border border-gray-100 p-2">
+                      <p className="text-[10px] font-bold text-gray-400 uppercase">
+                        Estoque
+                      </p>
+                      <p
+                        className={`font-bold ${
+                          stock <= 0
+                            ? 'text-red-700'
+                            : stock <= 5
+                              ? 'text-amber-700'
+                              : 'text-primary'
+                        }`}
+                      >
+                        {stock}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div
+                    className="grid grid-cols-4 gap-1.5 mt-3"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => openEdit(product)}
+                      className="rounded-xl border border-blue-200 bg-blue-50 px-2 py-2 text-blue-700 font-bold text-[11px]"
+                    >
+                      Editar
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => duplicateProduct(product)}
+                      className="rounded-xl border border-amber-200 bg-amber-50 px-2 py-2 text-amber-700 font-bold text-[11px]"
+                    >
+                      <Copy size={14} className="mx-auto" />
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={savingStatusId === product.id}
+                      onClick={() => toggleProductStatus(product)}
+                      className={`rounded-xl border px-2 py-2 font-bold text-[11px] ${
+                        active
+                          ? 'border-gray-200 bg-white text-gray-700'
+                          : 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                      }`}
+                      title={active ? 'Desativar produto' : 'Ativar produto'}
+                    >
+                      {active ? (
+                        <EyeOff size={14} className="mx-auto" />
+                      ) : (
+                        <Eye size={14} className="mx-auto" />
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => deleteProduct(product)}
+                      className="rounded-xl border border-red-200 bg-red-50 px-2 py-2 text-red-700 font-bold text-[11px]"
+                    >
+                      <Trash2 size={14} className="mx-auto" />
+                    </button>
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+
+          {filtered.length === 0 && (
+            <div className="card p-8 text-center text-gray-500 md:col-span-2 xl:col-span-3">
+              Nenhum produto encontrado com os filtros selecionados.
+            </div>
+          )}
+        </div>
+      )}
 
       <BottomSheet isOpen={mode === 'view' && !!selectedProduct} onClose={close} title="Detalhes do Produto">
         {selectedProduct && (
