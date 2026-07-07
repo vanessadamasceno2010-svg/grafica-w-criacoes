@@ -1,60 +1,68 @@
 import { Link } from 'react-router-dom';
-import { Share2, Star } from 'lucide-react';
+import { ArrowRight, Share2, Star } from 'lucide-react';
 
 import { Product, formatMoney } from '../lib/api';
-import { safeProductPath, shareProduct } from '../lib/share';
+import { shareProduct } from '../lib/share';
 
 interface ProductCardProps {
   product: Product;
 }
 
+const FALLBACK_IMAGE = '/assets/chaveiros-personalizados.jpeg';
+
 function activeVariations(product: Product) {
   return Array.isArray(product.variacoes)
-    ? product.variacoes.filter((v) => v && v.ativo !== false && Number(v.preco || 0) > 0)
+    ? product.variacoes.filter(
+        (variation) =>
+          variation &&
+          variation.ativo !== false &&
+          Number(variation.preco || 0) > 0
+      )
     : [];
 }
 
 function minPrice(product: Product) {
-  const vars = activeVariations(product);
+  const variations = activeVariations(product);
 
-  if (!vars.length) {
+  if (variations.length === 0) {
     return Number(product.preco || 0);
   }
 
-  return Math.min(...vars.map((v) => Number(v.preco || 0)));
+  return Math.min(
+    ...variations.map((variation) => Number(variation.preco || 0))
+  );
+}
+
+function safeProductPath(product: Product) {
+  const raw = product.id || product.slug || product.nome || '';
+  return encodeURIComponent(String(raw).trim());
 }
 
 export function ProductCard({ product }: ProductCardProps) {
-  const vars = activeVariations(product);
+  const variations = activeVariations(product);
   const price = minPrice(product);
   const target = safeProductPath(product);
-  const image = product.imagem_principal || '/assets/chaveiros-personalizados.jpeg';
+  const image = product.imagem_principal || FALLBACK_IMAGE;
 
-  const prazoEntrega =
-    vars[0]?.prazo_entrega_dias
-      ? `${vars[0].prazo_entrega_dias} dias úteis`
-      : product.tempo_producao
-        ? `${product.tempo_producao} dias úteis`
-        : undefined;
-
-  const handleShare = async () => {
+  async function handleShare() {
     try {
       await shareProduct(product, {
         price,
-        prazoEntrega,
+        prazoEntrega: `${product.tempo_producao || 3} dias úteis`
       });
     } catch (error) {
       console.error(error);
-      alert('Não foi possível compartilhar este produto. Tente novamente.');
+      window.alert(
+        'Não foi possível compartilhar este produto. Tente novamente.'
+      );
     }
-  };
+  }
 
   return (
-    <article className="group card flex flex-col h-full transition-transform duration-200">
+    <article className="group card flex flex-col h-full overflow-hidden transition hover:ring-2 hover:ring-gold/40">
       <Link
         to={`/produto/${target}`}
-        className="block active:scale-[0.98] transition-transform duration-200"
-        aria-label={`Ver produto ${product.nome}`}
+        className="block active:scale-[0.99] transition-transform"
       >
         <div className="relative aspect-[4/3] bg-gray-100 overflow-hidden">
           <img
@@ -63,7 +71,7 @@ export function ProductCard({ product }: ProductCardProps) {
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
             loading="lazy"
             onError={(event) => {
-              event.currentTarget.src = '/assets/chaveiros-personalizados.jpeg';
+              event.currentTarget.src = FALLBACK_IMAGE;
             }}
           />
 
@@ -73,28 +81,29 @@ export function ProductCard({ product }: ProductCardProps) {
             </span>
           )}
 
-          {product.preco_original && product.preco_original > price && (
-            <span className="absolute top-3 right-3 badge bg-danger text-white shadow-lg">
-              Oferta
-            </span>
-          )}
+          {product.preco_original &&
+            product.preco_original > price && (
+              <span className="absolute top-3 right-3 badge bg-danger text-white shadow-lg">
+                Oferta
+              </span>
+            )}
         </div>
       </Link>
 
       <div className="p-4 flex flex-col flex-1">
-        <p className="text-xs font-semibold text-gold uppercase tracking-wider mb-1">
-          {product.categoria_nome || 'Produto'}
-        </p>
-
         <Link to={`/produto/${target}`} className="block">
-          <h3 className="font-display font-bold text-primary text-lg leading-tight mb-2 line-clamp-2 hover:text-gold transition-colors">
+          <p className="text-xs font-semibold text-gold uppercase tracking-wider mb-1">
+            {product.categoria_nome || 'Produto'}
+          </p>
+
+          <h3 className="font-display font-bold text-primary text-lg leading-tight mb-2 line-clamp-2">
             {product.nome}
           </h3>
-        </Link>
 
-        <p className="text-gray-500 text-sm line-clamp-2 mb-4 flex-1">
-          {product.descricao || 'Produto personalizado.'}
-        </p>
+          <p className="text-gray-500 text-sm line-clamp-2 mb-4">
+            {product.descricao || 'Produto personalizado.'}
+          </p>
+        </Link>
 
         <div className="flex items-center gap-1.5 mb-3">
           <Star size={14} className="text-gold fill-current" />
@@ -109,33 +118,36 @@ export function ProductCard({ product }: ProductCardProps) {
         </div>
 
         <div className="mt-auto pt-3 border-t border-gray-100">
-          {product.preco_original && product.preco_original > price && (
-            <p className="text-sm text-gray-400 line-through mb-1">
-              {formatMoney(product.preco_original)}
+          {product.preco_original &&
+            product.preco_original > price && (
+              <p className="text-sm text-gray-400 line-through mb-1">
+                {formatMoney(product.preco_original)}
+              </p>
+            )}
+
+          {variations.length > 0 && (
+            <p className="text-xs text-gray-500 font-semibold">
+              A partir de
             </p>
           )}
 
-          {vars.length > 0 && (
-            <p className="text-xs text-gray-500 font-semibold">A partir de</p>
-          )}
-
-          <p className="font-display font-bold text-2xl text-primary mb-3">
+          <p className="font-display font-bold text-2xl text-primary">
             {formatMoney(price)}
           </p>
 
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-4">
             <Link
               to={`/produto/${target}`}
-              className="btn btn-primary w-full text-sm px-3 py-2"
+              className="min-h-11 w-full rounded-xl bg-primary text-white font-bold text-sm flex items-center justify-center gap-2 px-3"
             >
               Ver produto
+              <ArrowRight size={16} />
             </Link>
 
             <button
               type="button"
               onClick={handleShare}
-              className="btn btn-outline w-full text-sm px-3 py-2"
-              aria-label={`Compartilhar produto ${product.nome}`}
+              className="min-h-11 w-full rounded-xl border border-gray-200 bg-white text-primary font-bold text-sm flex items-center justify-center gap-2 px-3"
             >
               <Share2 size={16} />
               Compartilhar
@@ -146,3 +158,5 @@ export function ProductCard({ product }: ProductCardProps) {
     </article>
   );
 }
+
+export default ProductCard;
