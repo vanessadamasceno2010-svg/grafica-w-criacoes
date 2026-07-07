@@ -592,48 +592,6 @@ export function Produto() {
               {product.descricao}
             </p>
 
-            <div className="rounded-3xl border border-gray-100 bg-white p-4 sm:p-5 mt-6 shadow-sm">
-              <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
-                <div>
-                  {product.preco_original &&
-                    product.preco_original > unitPrice && (
-                      <p className="text-base text-gray-400 line-through">
-                        {formatMoney(product.preco_original)}
-                      </p>
-                    )}
-
-                  <p className="text-xs font-bold uppercase tracking-wide text-gray-400">
-                    {variations.length > 0
-                      ? 'Preço da opção selecionada'
-                      : 'Preço unitário'}
-                  </p>
-
-                  <p className="font-display text-4xl font-bold text-primary mt-1">
-                    {formatMoney(unitPrice)}
-                  </p>
-                </div>
-
-                <div className="sm:text-right">
-                  <span
-                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-bold ${
-                      !isActive
-                        ? 'bg-gray-100 text-gray-600 border-gray-200'
-                        : selectedStock > 0
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                          : 'bg-blue-50 text-blue-700 border-blue-200'
-                    }`}
-                  >
-                    <CheckCircle2 size={14} />
-                    {!isActive
-                      ? 'Indisponível'
-                      : selectedStock > 0
-                        ? `${selectedStock} disponível(is)`
-                        : 'Produção sob encomenda'}
-                  </span>
-                </div>
-              </div>
-            </div>
-
             {variations.length > 0 && (
               <div className="space-y-5 mt-5 rounded-3xl border border-gray-100 bg-white p-4 sm:p-5 shadow-sm">
                 <div>
@@ -691,29 +649,6 @@ export function Produto() {
                     </div>
                   </div>
                 ))}
-
-                {selectedVariation && (
-                  <div className="rounded-2xl bg-amber-50 border border-amber-100 p-3.5">
-                    <p className="text-xs font-bold uppercase tracking-wide text-amber-700/70">
-                      Combinação selecionada
-                    </p>
-
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mt-1">
-                      <p className="font-bold text-primary">
-                        {variationLabel(selectedVariation)}
-                      </p>
-
-                      <div className="sm:text-right">
-                        <p className="font-bold text-primary">
-                          {formatMoney(unitPrice)}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          Entrega em {deliveryDays} dias úteis
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
             )}
 
@@ -758,6 +693,58 @@ export function Produto() {
                   )}
                 </div>
               )}
+
+            <div className="rounded-3xl border border-gray-100 bg-white p-4 sm:p-5 mt-5 shadow-sm">
+              <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+                <div>
+                  {product.preco_original &&
+                    product.preco_original > unitPrice && (
+                      <p className="text-base text-gray-400 line-through">
+                        {formatMoney(product.preco_original)}
+                      </p>
+                    )}
+
+                  <p className="text-xs font-bold uppercase tracking-wide text-gray-400">
+                    {variations.length > 0
+                      ? 'Preço da opção escolhida'
+                      : 'Preço unitário'}
+                  </p>
+
+                  <p className="font-display text-4xl font-bold text-primary mt-1">
+                    {formatMoney(unitPrice)}
+                  </p>
+
+                  {selectedVariation && (
+                    <p className="text-sm text-gray-500 mt-1">
+                      {variationLabel(selectedVariation)}
+                    </p>
+                  )}
+                </div>
+
+                <div className="sm:text-right">
+                  <span
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-bold ${
+                      !isActive
+                        ? 'bg-gray-100 text-gray-600 border-gray-200'
+                        : selectedStock > 0
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : 'bg-blue-50 text-blue-700 border-blue-200'
+                    }`}
+                  >
+                    <CheckCircle2 size={14} />
+                    {!isActive
+                      ? 'Indisponível'
+                      : selectedStock > 0
+                        ? `${selectedStock} disponível(is)`
+                        : 'Produção sob encomenda'}
+                  </span>
+
+                  <p className="text-xs text-gray-500 mt-2">
+                    Prazo: {deliveryDays} dias úteis
+                  </p>
+                </div>
+              </div>
+            </div>
 
             <div className="rounded-3xl border border-gray-100 bg-white p-4 sm:p-5 mt-5 shadow-sm">
               <div className="flex items-center justify-between gap-4">
