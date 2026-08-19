@@ -16,6 +16,8 @@ type CaixaForm = {
   data_movimento: string;
   descricao: string;
   valor: string;
+  tipo: 'entrada' | 'saida';
+  categoria: string;
   forma_pagamento: string;
   origem: string;
   observacoes: string;
@@ -62,6 +64,8 @@ function buildForm(): CaixaForm {
     data_movimento: today(),
     descricao: '',
     valor: '',
+    tipo: 'entrada',
+    categoria: 'venda',
     forma_pagamento: 'pix',
     origem: 'manual',
     observacoes: ''
@@ -77,9 +81,10 @@ export function FluxoCaixa() {
     date_to: today(),
     forma_pagamento: 'todos',
     origem: 'todos',
+    tipo: 'todos',
     q: ''
   });
-  const [data, setData] = useState<any>({ movimentos: [], resumoPorDia: [], totalEntradas: 0, quantidade: 0 });
+  const [data, setData] = useState<any>({ movimentos: [], resumoPorDia: [], totalEntradas: 0, totalSaidas: 0, saldo: 0, quantidade: 0 });
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState<CaixaForm>(buildForm());
   const [showForm, setShowForm] = useState(false);
@@ -94,10 +99,11 @@ export function FluxoCaixa() {
       if (filters.date_to) qs.set('date_to', filters.date_to);
       if (filters.forma_pagamento !== 'todos') qs.set('forma_pagamento', filters.forma_pagamento);
       if (filters.origem !== 'todos') qs.set('origem', filters.origem);
+      if (filters.tipo !== 'todos') qs.set('tipo', filters.tipo);
       if (filters.q.trim()) qs.set('q', filters.q.trim());
 
       const result = await apiFetch<any>('/admin/fluxo-caixa?' + qs.toString());
-      setData(result || { movimentos: [], resumoPorDia: [], totalEntradas: 0, quantidade: 0 });
+      setData(result || { movimentos: [], resumoPorDia: [], totalEntradas: 0, totalSaidas: 0, saldo: 0, quantidade: 0 });
     } catch (error: any) {
       alert(error.message || 'Erro ao carregar fluxo de caixa.');
     } finally {
@@ -112,7 +118,7 @@ export function FluxoCaixa() {
 
   const movimentos = Array.isArray(data.movimentos) ? data.movimentos : [];
   const resumoPorDia = Array.isArray(data.resumoPorDia) ? data.resumoPorDia : [];
-  const maiorDia = Math.max(1, ...resumoPorDia.map((item: any) => Number(item.total || 0)));
+  const maiorDia = Math.max(1, ...resumoPorDia.map((item: any) => Math.abs(Number(item.total || 0))));
 
   const formasMap = useMemo(() => Object.fromEntries(formasPagamento.map((item) => [item.value, item.label])), []);
   const origensMap = useMemo(() => Object.fromEntries(origens.map((item) => [item.value, item.label])), []);
@@ -129,6 +135,8 @@ export function FluxoCaixa() {
       data_movimento: String(movimento.data_movimento || today()).slice(0, 10),
       descricao: movimento.descricao || '',
       valor: String(movimento.valor || ''),
+      tipo: movimento.tipo === 'saida' ? 'saida' : 'entrada',
+      categoria: movimento.categoria || 'venda',
       forma_pagamento: movimento.forma_pagamento || 'pix',
       origem: movimento.origem || 'manual',
       observacoes: movimento.observacoes || ''
@@ -146,17 +154,17 @@ export function FluxoCaixa() {
     const valor = moneyToNumber(form.valor);
 
     if (!form.data_movimento) {
-      alert('Informe a data da entrada.');
+      alert('Informe a data da movimentação.');
       return;
     }
 
     if (!form.descricao.trim()) {
-      alert('Informe a descrição da entrada.');
+      alert('Informe a descrição da movimentação.');
       return;
     }
 
     if (valor <= 0) {
-      alert('Informe um valor de entrada maior que zero.');
+      alert('Informe um valor maior que zero.');
       return;
     }
 
@@ -167,6 +175,8 @@ export function FluxoCaixa() {
           data_movimento: form.data_movimento,
           descricao: form.descricao,
           valor,
+          tipo: form.tipo,
+          categoria: form.categoria,
           forma_pagamento: form.forma_pagamento,
           origem: form.origem,
           observacoes: form.observacoes
@@ -177,7 +187,7 @@ export function FluxoCaixa() {
       setShowForm(false);
       setEditingId(null);
       await load();
-      alert(editingId ? 'Entrada atualizada no caixa.' : 'Entrada registrada no caixa.');
+      alert(editingId ? 'Movimentação atualizada.' : `${form.tipo === 'entrada' ? 'Entrada' : 'Saída'} registrada no caixa.`);
     } catch (error: any) {
       alert(error.message || 'Erro ao salvar entrada no caixa.');
     }
@@ -189,21 +199,23 @@ export function FluxoCaixa() {
       return;
     }
 
-    if (!confirm('Deseja excluir esta entrada do caixa?')) return;
+    if (!confirm('Deseja excluir esta movimentação do caixa?')) return;
 
     try {
       await apiFetch('/admin/fluxo-caixa/' + movimento.id, { method: 'DELETE' });
       await load();
-      alert('Entrada excluída.');
+      alert('Movimentação excluída.');
     } catch (error: any) {
-      alert(error.message || 'Erro ao excluir entrada.');
+      alert(error.message || 'Erro ao excluir movimentação.');
     }
   }
 
   function exportCsv() {
-    const header = ['Data', 'Descrição', 'Valor', 'Forma de pagamento', 'Origem', 'Responsável', 'Observações'];
+    const header = ['Data', 'Tipo', 'Categoria', 'Descrição', 'Valor', 'Forma de pagamento', 'Origem', 'Responsável', 'Observações'];
     const rows = movimentos.map((m: any) => [
       shortDate(m.data_movimento),
+      m.tipo === 'saida' ? 'Saída' : 'Entrada',
+      m.categoria || '',
       m.descricao || '',
       String(Number(m.valor || 0)).replace('.', ','),
       formasMap[m.forma_pagamento] || m.forma_pagamento || '',
@@ -233,12 +245,12 @@ export function FluxoCaixa() {
             <WalletCards size={30} /> Fluxo de Caixa
           </h1>
           <p className="text-gray-500 mt-1">
-            Registre somente entradas do caixa e acompanhe a movimentação por período.
+            Controle entradas, saídas e saldo do caixa por período.
           </p>
         </div>
 
         <button className="btn btn-primary w-full sm:w-auto" onClick={openCreateMovement}>
-          <Plus size={18} /> Nova entrada
+          <Plus size={18} /> Nova movimentação
         </button>
       </div>
 
@@ -248,20 +260,27 @@ export function FluxoCaixa() {
           <p className="font-display text-3xl font-bold text-primary mt-1">{formatMoney(data.totalEntradas || 0)}</p>
         </div>
         <div className="card p-5">
+          <p className="text-sm text-gray-500">Total de saídas</p>
+          <p className="font-display text-3xl font-bold text-red-600 mt-1">{formatMoney(data.totalSaidas || 0)}</p>
+        </div>
+        <div className="card p-5">
+          <p className="text-sm text-gray-500">Saldo do período</p>
+          <p className={`font-display text-3xl font-bold mt-1 ${Number(data.saldo || 0) < 0 ? 'text-red-600' : 'text-emerald-700'}`}>{formatMoney(data.saldo || 0)}</p>
+        </div>
+        <div className="card p-5">
           <p className="text-sm text-gray-500">Movimentações</p>
           <p className="font-display text-3xl font-bold text-primary mt-1">{data.quantidade || 0}</p>
         </div>
-        <div className="card p-5">
-          <p className="text-sm text-gray-500">Período inicial</p>
-          <p className="font-display text-xl font-bold text-primary mt-1">{shortDate(filters.date_from)}</p>
-        </div>
-        <div className="card p-5">
-          <p className="text-sm text-gray-500">Período final</p>
-          <p className="font-display text-xl font-bold text-primary mt-1">{shortDate(filters.date_to)}</p>
-        </div>
       </div>
 
-      <div className="card p-4 mb-6 grid md:grid-cols-2 xl:grid-cols-6 gap-3">
+      <div className="card p-4 mb-6 grid md:grid-cols-2 xl:grid-cols-7 gap-3">
+        <label className="block">
+          <span className="text-xs font-bold text-primary mb-1">Tipo</span>
+          <select className="input" value={filters.tipo} onChange={(e) => setFilters({ ...filters, tipo: e.target.value })}>
+            <option value="todos">Todos</option><option value="entrada">Entradas</option><option value="saida">Saídas</option>
+          </select>
+        </label>
+
         <label className="block">
           <span className="text-xs font-bold text-primary mb-1 flex items-center gap-1"><CalendarDays size={14} /> Início</span>
           <input className="input" type="date" value={filters.date_from} onChange={(e) => setFilters({ ...filters, date_from: e.target.value })} />
@@ -305,24 +324,24 @@ export function FluxoCaixa() {
         <div className="card p-5">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="font-display text-lg font-bold text-primary">Entradas por dia</h2>
+              <h2 className="font-display text-lg font-bold text-primary">Saldo por dia</h2>
               <p className="text-sm text-gray-500">Relatório visual conforme o filtro.</p>
             </div>
             <button className="p-2 rounded-xl bg-gray-50 hover:bg-gray-100" onClick={load} title="Atualizar"><RefreshCcw size={18} /></button>
           </div>
 
           <div className="space-y-4 max-h-[460px] overflow-y-auto pr-1">
-            {resumoPorDia.length === 0 && <p className="text-gray-500">Nenhuma entrada encontrada no período.</p>}
+            {resumoPorDia.length === 0 && <p className="text-gray-500">Nenhuma movimentação encontrada no período.</p>}
             {resumoPorDia.map((item: any) => {
-              const width = Math.max(3, (Number(item.total || 0) / maiorDia) * 100);
+              const width = Math.max(3, (Math.abs(Number(item.total || 0)) / maiorDia) * 100);
               return (
                 <div key={item.data}>
                   <div className="flex justify-between text-sm mb-1">
                     <span className="font-bold text-primary">{shortDate(item.data)}</span>
-                    <span className="text-gray-500">{formatMoney(item.total || 0)} • {item.quantidade} entrada(s)</span>
+                    <span className={Number(item.total || 0) < 0 ? 'text-red-600' : 'text-emerald-700'}>{formatMoney(item.total || 0)} • {item.quantidade} movimento(s)</span>
                   </div>
                   <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
-                    <div className="h-full bg-gold rounded-full" style={{ width: `${width}%` }} />
+                    <div className={`h-full rounded-full ${Number(item.total || 0) < 0 ? 'bg-red-500' : 'bg-emerald-500'}`} style={{ width: `${width}%` }} />
                   </div>
                 </div>
               );
@@ -332,7 +351,7 @@ export function FluxoCaixa() {
 
         <div className="card overflow-hidden">
           <div className="p-5 border-b border-gray-100">
-            <h2 className="font-display text-lg font-bold text-primary">Movimentações de entrada</h2>
+            <h2 className="font-display text-lg font-bold text-primary">Movimentações do caixa</h2>
             <p className="text-sm text-gray-500">Registro diário do caixa.</p>
           </div>
 
@@ -350,13 +369,13 @@ export function FluxoCaixa() {
                 </div>
 
                 <div className="text-right shrink-0">
-                  <p className="font-display text-lg font-bold text-emerald-700">{formatMoney(m.valor || 0)}</p>
+                  <p className={`font-display text-lg font-bold ${m.tipo === 'saida' ? 'text-red-600' : 'text-emerald-700'}`}>{m.tipo === 'saida' ? '- ' : '+ '}{formatMoney(m.valor || 0)}</p>
                   <div className="mt-2 flex justify-end gap-2">
-                    <button className="p-2 rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100" onClick={() => openEditMovement(m)} title="Editar entrada">
+                    <button className="p-2 rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100" onClick={() => openEditMovement(m)} title="Editar movimentação">
                       <Pencil size={16} />
                     </button>
                     {isAdmin && (
-                      <button className="p-2 rounded-lg bg-red-50 text-red-700 hover:bg-red-100" onClick={() => deleteMovement(m)} title="Excluir entrada">
+                      <button className="p-2 rounded-lg bg-red-50 text-red-700 hover:bg-red-100" onClick={() => deleteMovement(m)} title="Excluir movimentação">
                         <Trash2 size={16} />
                       </button>
                     )}
@@ -372,13 +391,13 @@ export function FluxoCaixa() {
         <div className="fixed inset-0 z-[9999] bg-slate-950/70 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[92vh] overflow-hidden flex flex-col">
             <div className="p-5 border-b border-gray-100">
-              <h2 className="font-display text-xl font-bold text-primary">{editingId ? 'Editar entrada no caixa' : 'Nova entrada no caixa'}</h2>
-              <p className="text-sm text-gray-500">Registre somente valores que entraram no caixa.</p>
+              <h2 className="font-display text-xl font-bold text-primary">{editingId ? 'Editar movimentação' : 'Nova movimentação'}</h2>
+              <p className="text-sm text-gray-500">Registre um recebimento ou um pagamento realizado.</p>
             </div>
 
             <div className="p-5 space-y-4 overflow-y-auto">
               <label className="block">
-                <span className="text-sm font-bold text-primary mb-1">Data da entrada</span>
+                <span className="text-sm font-bold text-primary mb-1">Data da movimentação</span>
                 <input className="input" type="date" value={form.data_movimento} onChange={(e) => setForm({ ...form, data_movimento: e.target.value })} />
               </label>
 
@@ -387,9 +406,11 @@ export function FluxoCaixa() {
                 <input className="input" value={form.descricao} placeholder="Ex: Entrada do pedido MAN123, pagamento de cliente..." onChange={(e) => setForm({ ...form, descricao: e.target.value })} />
               </label>
 
-              <div className="grid sm:grid-cols-3 gap-3">
+              <div className="grid sm:grid-cols-2 gap-3">
+                <label className="block"><span className="text-sm font-bold text-primary mb-1">Tipo</span><select className="input" value={form.tipo} onChange={(e) => setForm({ ...form, tipo: e.target.value as 'entrada' | 'saida', categoria: e.target.value === 'saida' && form.categoria === 'venda' ? 'despesa' : form.categoria })}><option value="entrada">Entrada</option><option value="saida">Saída</option></select></label>
+                <label className="block"><span className="text-sm font-bold text-primary mb-1">Categoria</span><select className="input" value={form.categoria} onChange={(e) => setForm({ ...form, categoria: e.target.value })}><option value="venda">Venda</option><option value="recebimento">Recebimento</option><option value="despesa">Despesa</option><option value="fornecedor">Fornecedor</option><option value="retirada">Retirada</option><option value="ajuste">Ajuste</option><option value="outro">Outro</option></select></label>
                 <label className="block">
-                  <span className="text-sm font-bold text-primary mb-1">Valor da entrada R$</span>
+                  <span className="text-sm font-bold text-primary mb-1">Valor R$</span>
                   <input className="input" value={form.valor} placeholder="0,00" onChange={(e) => setForm({ ...form, valor: e.target.value })} />
                 </label>
 
@@ -416,7 +437,7 @@ export function FluxoCaixa() {
 
             <div className="p-4 border-t border-gray-100 grid grid-cols-2 gap-3">
               <button className="btn btn-outline" onClick={closeForm}>Cancelar</button>
-              <button className="btn btn-primary" onClick={saveMovement}>{editingId ? 'Salvar alterações' : 'Salvar entrada'}</button>
+              <button className="btn btn-primary" onClick={saveMovement}>{editingId ? 'Salvar alterações' : 'Salvar movimentação'}</button>
             </div>
           </div>
         </div>

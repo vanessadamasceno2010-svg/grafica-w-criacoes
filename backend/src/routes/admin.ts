@@ -733,6 +733,8 @@ const caixaSchema = z.object({
   data_movimento: z.string().min(8),
   descricao: z.string().min(2),
   valor: z.coerce.number().positive(),
+  tipo: z.enum(['entrada', 'saida']).optional().default('entrada'),
+  categoria: z.string().optional().default('venda'),
   forma_pagamento: z.string().optional().default('pix'),
   origem: z.string().optional().default('manual'),
   observacoes: z.string().optional().default(''),
@@ -744,6 +746,7 @@ adminRoutes.get('/fluxo-caixa', asyncHandler(async (req, res) => {
   const dateTo = String(req.query.date_to || '');
   const formaPagamento = String(req.query.forma_pagamento || 'todos');
   const origem = String(req.query.origem || 'todos');
+  const tipo = String(req.query.tipo || 'todos');
   const q = String(req.query.q || '').trim().toLowerCase();
 
   let path = '/caixa_movimentacoes?select=*&order=data_movimento.desc,created_at.desc&limit=3000';
@@ -751,6 +754,7 @@ adminRoutes.get('/fluxo-caixa', asyncHandler(async (req, res) => {
   if (dateTo) path += `&data_movimento=lte.${restEq(dateTo)}`;
   if (formaPagamento && formaPagamento !== 'todos') path += `&forma_pagamento=eq.${restEq(formaPagamento)}`;
   if (origem && origem !== 'todos') path += `&origem=eq.${restEq(origem)}`;
+  if (tipo && tipo !== 'todos') path += `&tipo=eq.${restEq(tipo)}`;
 
   let movimentos = await supabaseRest<any[]>(path).catch(() => []);
 
@@ -764,14 +768,15 @@ adminRoutes.get('/fluxo-caixa', asyncHandler(async (req, res) => {
     ].join(' ').toLowerCase().includes(q));
   }
 
-  const totalEntradas = movimentos.reduce((sum, m) => sum + asNumber(m.valor), 0);
+  const totalEntradas = movimentos.filter((m) => (m.tipo || 'entrada') === 'entrada').reduce((sum, m) => sum + asNumber(m.valor), 0);
+  const totalSaidas = movimentos.filter((m) => m.tipo === 'saida').reduce((sum, m) => sum + asNumber(m.valor), 0);
   const map = new Map<string, { data: string; total: number; quantidade: number }>();
 
   for (const m of movimentos) {
     const key = dateOnly(m.data_movimento || m.created_at);
     if (!key) continue;
     const item = map.get(key) || { data: key, total: 0, quantidade: 0 };
-    item.total += asNumber(m.valor);
+    item.total += (m.tipo || 'entrada') === 'saida' ? -asNumber(m.valor) : asNumber(m.valor);
     item.quantidade += 1;
     map.set(key, item);
   }
@@ -782,6 +787,8 @@ adminRoutes.get('/fluxo-caixa', asyncHandler(async (req, res) => {
     movimentos,
     resumoPorDia,
     totalEntradas,
+    totalSaidas,
+    saldo: totalEntradas - totalSaidas,
     quantidade: movimentos.length
   });
 }));
@@ -795,6 +802,8 @@ adminRoutes.post('/fluxo-caixa', asyncHandler(async (req, res) => {
       data_movimento: d.data_movimento.slice(0, 10),
       descricao: d.descricao,
       valor: d.valor,
+      tipo: d.tipo,
+      categoria: d.categoria,
       forma_pagamento: d.forma_pagamento,
       origem: d.origem,
       observacoes: d.observacoes || '',
@@ -828,6 +837,138 @@ adminRoutes.delete('/fluxo-caixa/:id', onlyAdmin, asyncHandler(async (req, res) 
   await supabaseRest(`/caixa_movimentacoes?id=eq.${restEq(req.params.id)}`, { method: 'DELETE' });
   res.json({ ok: true });
 }));
+
+const pdvVendaSchema = z.object({
+  cliente_nome: z.string().min(2),
+  cliente_email: z.string().optional().default(''),
+  cliente_telefone: z.string().optional().default(''),
+  items: z.array(z.object({
+    produto_id: z.string().uuid(),
+    nome: z.string().optional().default('Produto'),
+    quantidade: z.coerce.number().int().positive(),
+    preco_unitario: z.coerce.number().nonnegative(),
+    especificacoes: z.record(z.any()).optional().default({})
+  })).min(1),
+  desconto: z.coerce.number().nonnegative().optional().default(0),
+  valor_recebido: z.coerce.number().nonnegative().optional().default(0),
+  metodo_pagamento: z.string().optional().default('pix'),
+  tipo_entrega: z.enum(['retirada', 'entrega']).optional().default('retirada'),
+  endereco_entrega: z.string().optional().default('Retirada na loja'),
+  prazo_entrega: z.string().optional().nullable(),
+  observacoes: z.string().optional().default('')
+});
+
+adminRoutes.post('/pdv/vendas', asyncHandler(async (req, res) => {
+  const d = pdvVendaSchema.parse(req.body);
+  const cliente = await findOrCreateClienteSimples({
+    nome: d.cliente_nome,
+    email: d.cliente_email,
+    telefone: d.cliente_telefone
+  });
+  const subtotal = d.items.reduce((sum, item) => sum + item.quantidade * item.preco_unitario, 0);
+  const total = Math.max(subtotal - d.desconto, 0);
+  const recebido = Math.min(d.valor_recebido, total);
+  const restante = Math.max(total - recebido, 0);
+  const numero = `PDV${Date.now()}`;
+  const now = new Date().toISOString();
+
+  const pedidos = await supabaseRest<any[]>('/pedidos', {
+    method: 'POST',
+    body: JSON.stringify({
+      usuario_id: cliente?.id || null,
+      numero_pedido: numero,
+      status: 'confirmado',
+      subtotal,
+      frete: 0,
+      desconto: d.desconto,
+      total,
+      valor_entrada: recebido,
+      valor_restante: restante,
+      metodo_pagamento: d.metodo_pagamento,
+      status_pagamento: restante <= 0 ? 'confirmado' : recebido > 0 ? 'parcial' : 'pendente',
+      endereco_entrega: d.tipo_entrega === 'retirada' ? 'Retirada na loja' : d.endereco_entrega,
+      tipo_entrega: d.tipo_entrega,
+      observacoes: d.observacoes || 'Venda registrada no PDV.',
+      cliente_nome: cliente?.nome || d.cliente_nome,
+      cliente_email: d.cliente_email || cliente?.email || '',
+      cliente_telefone: d.cliente_telefone || cliente?.telefone || '',
+      origem: 'pdv',
+      prazo_entrega: d.prazo_entrega || null,
+      data_entrega_estimada: d.prazo_entrega || null,
+      etapa_producao: 'aguardando',
+      prioridade: 'normal',
+      created_at: now,
+      updated_at: now
+    })
+  });
+  const pedido = pedidos[0];
+
+  for (const item of d.items) {
+    await supabaseRest('/itens_pedido', {
+      method: 'POST',
+      body: JSON.stringify({
+        pedido_id: pedido.id,
+        produto_id: item.produto_id,
+        quantidade: item.quantidade,
+        preco_unitario: item.preco_unitario,
+        especificacoes: { nome_produto: item.nome, ...item.especificacoes },
+        created_at: now
+      })
+    });
+  }
+
+  await registrarHistorico(pedido.id, req.user, 'criou venda no PDV', 'pedido', '', numero);
+  await registrarEntradaCaixaPedido(pedido, req.user, recebido, 'venda registrada no PDV');
+  res.status(201).json(pedido);
+}));
+
+adminRoutes.get('/producao', asyncHandler(async (_req, res) => {
+  const pedidos = await supabaseRest<any[]>('/pedidos?select=*&status=neq.cancelado&order=created_at.desc&limit=500').catch(() => []);
+  const ids = pedidos.map((pedido) => pedido.id).filter(Boolean);
+  const itens = ids.length
+    ? await supabaseRest<any[]>(`/itens_pedido?select=*&pedido_id=in.(${ids.map(restEq).join(',')})`).catch(() => [])
+    : [];
+
+  res.json(pedidos.map((pedido) => ({
+    ...pedido,
+    itens: itens.filter((item) => item.pedido_id === pedido.id)
+  })));
+}));
+
+adminRoutes.put('/producao/:pedidoId', asyncHandler(async (req, res) => {
+  const d = z.object({
+    etapa_producao: z.enum(['aguardando', 'arte', 'aprovacao', 'producao', 'acabamento', 'pronto', 'finalizado']).optional(),
+    prioridade: z.enum(['normal', 'urgente']).optional()
+  }).parse(req.body);
+  const payload: any = { ...d, updated_at: new Date().toISOString() };
+  if (d.etapa_producao === 'producao') payload.status = 'em_producao';
+  if (d.etapa_producao === 'pronto') payload.status = 'pronto';
+  if (d.etapa_producao === 'finalizado') payload.status = 'entregue';
+
+  const rows = await supabaseRest<any[]>(`/pedidos?id=eq.${restEq(req.params.pedidoId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload)
+  });
+  await registrarHistorico(req.params.pedidoId, req.user, 'atualizou produção', 'etapa', '', d.etapa_producao || d.prioridade || '');
+  res.json(rows[0] || { ok: true });
+}));
+
+adminRoutes.post('/producao/:pedidoId/impressao', asyncHandler(async (req, res) => {
+  const pedidos = await supabaseRest<any[]>(`/pedidos?select=id,impressoes&id=eq.${restEq(req.params.pedidoId)}&limit=1`);
+  if (!pedidos[0]) return res.status(404).json({ message: 'Pedido não encontrado.' });
+  const agora = new Date().toISOString();
+  const rows = await supabaseRest<any[]>(`/pedidos?id=eq.${restEq(req.params.pedidoId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      impressoes: asNumber(pedidos[0].impressoes) + 1,
+      ultima_impressao_em: agora,
+      updated_at: agora
+    })
+  });
+  await registrarHistorico(req.params.pedidoId, req.user, 'imprimiu comanda', 'impressão', '', agora);
+  res.json(rows[0] || { ok: true });
+}));
+
 const contaPagarSchema = z.object({
   descricao: z.string().min(2),
   fornecedor: z.string().optional().default(''),

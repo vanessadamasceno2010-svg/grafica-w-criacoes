@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { Menu, X, LogOut, LayoutDashboard, Package, ShoppingCart, Users, Settings, FolderTree, TicketPercent, MessageSquare, BarChart3, UserCog, Home, ClipboardList, WalletCards, ReceiptText } from 'lucide-react';
+import { Menu, X, LogOut, LayoutDashboard, Package, ShoppingCart, Users, Settings, FolderTree, TicketPercent, MessageSquare, BarChart3, UserCog, Home, ClipboardList, WalletCards, ReceiptText, MonitorSmartphone } from 'lucide-react';
 import { useApp } from '../../contexts/AppContext';
 
 const links = [
   { to: '/admin', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/admin/produtos', label: 'Produtos', icon: Package },
   { to: '/admin/pedidos', label: 'Pedidos', icon: ShoppingCart },
+  { to: '/admin/pdv', label: 'PDV e Produção', icon: MonitorSmartphone },
   { to: '/admin/orcamentos', label: 'Orçamentos', icon: ClipboardList },
   { to: '/admin/fluxo-caixa', label: 'Fluxo de Caixa', icon: WalletCards },
   { to: '/admin/contas-pagar', label: 'Contas a Pagar', icon: ReceiptText, adminOnly: true },

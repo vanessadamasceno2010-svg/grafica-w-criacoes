@@ -26,6 +26,7 @@ import { Usuarios } from './pages/admin/Usuarios';
 import { Orcamentos } from './pages/admin/Orcamentos';
 import { FluxoCaixa } from './pages/admin/FluxoCaixa';
 import { ContasPagar } from './pages/admin/ContasPagar';
+import { PDV } from './pages/admin/PDV';
 
 function App() {
   return (
@@ -49,6 +50,7 @@ function App() {
             <Route index element={<Dashboard />} />
             <Route path="produtos" element={<Produtos />} />
             <Route path="pedidos" element={<Pedidos />} />
+            <Route path="pdv" element={<PDV />} />
             <Route path="orcamentos" element={<Orcamentos />} />
             <Route path="fluxo-caixa" element={<FluxoCaixa />} />
             <Route path="contas-pagar" element={<ContasPagar />} />
