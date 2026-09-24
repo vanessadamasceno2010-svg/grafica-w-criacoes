@@ -1068,6 +1068,7 @@ export function Pedidos() {
               </div>
             </div>
 
+            {selectedOrder.itens_snapshot?.length > 0 && <section className="space-y-3"><h3 className="font-bold">Itens escolhidos no catálogo</h3>{selectedOrder.itens_snapshot.map((item:any,index:number)=><div key={index} className="flex gap-3 border rounded-xl p-3"><img src={item.imagem_principal} alt={item.nome} className="w-20 h-20 object-contain"/><div><p className="font-bold">{item.nome}</p><p>{item.quantidade} × {formatMoney(item.preco_unitario)}</p>{Object.entries(item.especificacoes_selecionadas || {}).filter(([key])=>!key.startsWith('_')).map(([key,value])=><p key={key} className="text-sm text-gray-600">{key}: {String(value)}</p>)}</div></div>)}</section>}
             <div className="grid sm:grid-cols-2 gap-3">
               <label className="block">
                 <span className="text-sm font-bold text-primary mb-1 block">Nome do cliente</span>

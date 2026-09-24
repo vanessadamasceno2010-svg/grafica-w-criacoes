@@ -18,6 +18,7 @@ export const BRAND = {
 };
 
 export type ProductVariation = {
+  imagens?: string[];
   id?: string;
   nome: string;
   opcoes?: Record<string, string>;
@@ -248,6 +249,7 @@ export function normalizeProduct(product: any): Product {
       ? product.variacoes.map((v: any) => ({
           id: v?.id || String(Date.now() + Math.random()),
           nome: v?.nome || '',
+          imagens: Array.isArray(v?.imagens) ? v.imagens : [],
           opcoes: v?.opcoes && typeof v.opcoes === 'object' && !Array.isArray(v.opcoes)
             ? v.opcoes
             : {},

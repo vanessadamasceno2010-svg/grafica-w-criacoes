@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, MessageCircle, CheckCircle, MapPin, Store } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
@@ -16,14 +16,14 @@ function safePrice(value: any) {
   return Number.isFinite(price) ? price : 0;
 }
 
-function buildCheckoutWhatsAppMessage(order: LocalOrder, backendOrder?: any) {
+export function buildCheckoutWhatsAppMessage(order: LocalOrder, backendOrder?: any) {
   const numero = backendOrder?.numero_pedido || order.numero;
   const link = `${window.location.origin}/acompanhar?pedido=${encodeURIComponent(numero)}`;
 
   const itens = order.items
     .map((item, index) => {
       const specs = Object.entries(item.especificacoes_selecionadas || {})
-        .filter(([, value]) => value !== undefined && value !== null && String(value).trim() !== '')
+        .filter(([key, value]) => !key.startsWith('_') && value !== undefined && value !== null && String(value).trim() !== '')
         .map(([key, value]) => `${key}: ${value}`)
         .join(' | ');
 
@@ -88,6 +88,7 @@ export function Checkout() {
     observacoes: '',
   });
 
+  const submissionLock = useRef(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const subtotal = useMemo(() => {
@@ -122,6 +123,7 @@ export function Checkout() {
 
   const handleSubmit = async (e: React.FormEvent | React.MouseEvent) => {
     e.preventDefault();
+    if (submissionLock.current) return;
 
     if (cart.length === 0) {
       alert('Seu carrinho está vazio.');
@@ -138,10 +140,18 @@ export function Checkout() {
       }
     }
 
+    submissionLock.current = true;
     setIsSubmitting(true);
+    const whatsappWindow = window.open('about:blank', '_blank');
+    if (whatsappWindow) whatsappWindow.opener = null;
+    let orderRegistered = false;
 
     try {
       const numeroLocal = 'WC' + Date.now();
+      const fingerprint = JSON.stringify({cart, formData, deliveryType});
+      const previous = JSON.parse(sessionStorage.getItem('gp_checkout_attempt') || 'null');
+      const checkoutKey = previous?.fingerprint === fingerprint ? previous.key : crypto.randomUUID();
+      sessionStorage.setItem('gp_checkout_attempt', JSON.stringify({key: checkoutKey, fingerprint}));
       const endereco = buildAddress();
 
       const safeItems = cart.map((item) => ({
@@ -166,7 +176,6 @@ export function Checkout() {
         desconto: 0,
         total,
         created_at: new Date().toISOString(),
-        status: 'pendente' as any,
       };
 
       let backendOrder: any = null;
@@ -175,7 +184,8 @@ export function Checkout() {
         backendOrder = await apiFetch('/pedidos/site', {
           method: 'POST',
           body: JSON.stringify({
-            items: safeItems,
+            chave_checkout: checkoutKey,
+            items: safeItems.map(item => ({produto_id:item.produto_id,quantidade:item.quantidade,variacao_id:item.especificacoes_selecionadas._variacao_id || undefined,especificacoes:item.especificacoes_selecionadas})),
             subtotal,
             frete,
             desconto: 0,
@@ -201,19 +211,28 @@ export function Checkout() {
 
       const orderToSave = {
         ...order,
-        numero: backendOrder?.numero_pedido || numeroLocal
+        numero: backendOrder.numero_pedido,
+        items: backendOrder.itens_snapshot,
+        subtotal: Number(backendOrder.subtotal),
+        total: Number(backendOrder.total)
       };
 
+      orderRegistered = true;
       localStorage.setItem('gp_last_order', JSON.stringify(orderToSave));
 
       const url = whatsappUrl(buildCheckoutWhatsAppMessage(orderToSave, backendOrder));
+      localStorage.setItem('gp_order_whatsapp', url);
+      sessionStorage.removeItem('gp_checkout_attempt');
       clearCart();
 
-      await new Promise((resolve) => setTimeout(resolve, 300));
 
-      window.open(url, '_blank');
+      if (whatsappWindow && !whatsappWindow.closed) whatsappWindow.location.href = url;
       navigate(`/pedido-confirmado/${backendOrder?.numero_pedido || numeroLocal}`);
+    } catch (error: any) {
+      alert(error.message || 'Não foi possível finalizar. Seu carrinho foi mantido.');
     } finally {
+      if (!orderRegistered && whatsappWindow && !whatsappWindow.closed) whatsappWindow.close();
+      submissionLock.current = false;
       setIsSubmitting(false);
     }
   };
@@ -234,7 +253,7 @@ export function Checkout() {
 
       <h1 className="font-display text-3xl font-bold text-primary mb-3">Finalizar Pedido</h1>
       <p className="text-gray-500 mb-8 leading-relaxed">
-        O pagamento <strong>não</strong> é feito pelo site. Seu pedido será registrado no painel e enviado para o WhatsApp da gráfica ({BRAND.whatsapp}) para confirmação.
+        O pagamento <strong>não</strong> é feito pelo site. Seu pedido será registrado no painel e você poderá enviar o resumo para o WhatsApp da gráfica ({BRAND.whatsapp}) para confirmação.
       </p>
 
       <div className="lg:grid lg:grid-cols-3 lg:gap-8">
@@ -344,11 +363,12 @@ export function Checkout() {
 
                 return (
                   <div key={`${item.id}-${JSON.stringify(item.especificacoes_selecionadas)}`} className="flex gap-3 text-sm">
+                    <img src={item.imagem_principal} alt={item.nome} className="w-14 h-14 rounded-lg object-contain bg-gray-50" />
                     <span className="font-bold text-primary flex-shrink-0">{quantidade}x</span>
                     <div className="min-w-0 flex-1">
                       <p className="font-medium text-gray-800 truncate">{item.nome}</p>
                       <p className="text-gray-500 text-xs">
-                        {Object.values(item.especificacoes_selecionadas || {}).join(' / ')}
+                        {Object.entries(item.especificacoes_selecionadas || {}).filter(([key])=>!key.startsWith('_')).map(([key,value])=>`${key}: ${value}`).join(' / ')}
                       </p>
                     </div>
                     <span className="font-semibold text-gray-700 flex-shrink-0">
@@ -381,7 +401,7 @@ export function Checkout() {
             </button>
 
             <p className="text-xs text-gray-500 text-center mt-4 leading-relaxed">
-              Ao clicar, o pedido será registrado no painel admin e depois enviado para o WhatsApp.
+              Ao clicar, o pedido será registrado no painel admin e você poderá enviar o resumo pelo WhatsApp.
             </p>
           </div>
         </div>
@@ -389,3 +409,5 @@ export function Checkout() {
     </div>
   );
 }
+
+export default Checkout;

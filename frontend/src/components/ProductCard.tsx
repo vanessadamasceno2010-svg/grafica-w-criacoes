@@ -68,7 +68,7 @@ export function ProductCard({ product }: ProductCardProps) {
           <img
             src={image}
             alt={product.nome}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            className="w-full h-full object-contain p-3 group-hover:scale-105 transition-transform duration-500"
             loading="lazy"
             onError={(event) => {
               event.currentTarget.src = FALLBACK_IMAGE;
@@ -140,7 +140,7 @@ export function ProductCard({ product }: ProductCardProps) {
               to={`/produto/${target}`}
               className="min-h-11 w-full rounded-xl bg-primary text-white font-bold text-sm flex items-center justify-center gap-2 px-3"
             >
-              Ver produto
+              Escolher opções
               <ArrowRight size={16} />
             </Link>
 

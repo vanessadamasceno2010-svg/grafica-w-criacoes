@@ -13,10 +13,7 @@ import {
 
 import { useApp } from '../contexts/AppContext';
 import {
-  createWhatsAppOrderMessage,
   formatMoney,
-  LocalOrder,
-  whatsappUrl
 } from '../lib/api';
 
 function safeQuantity(value: unknown) {
@@ -32,7 +29,7 @@ function safePrice(value: unknown) {
 function selectedOptions(
   specifications: Record<string, unknown> | undefined
 ) {
-  return Object.entries(specifications || {})
+  return Object.entries(specifications || {}).filter(([key]) => !key.startsWith('_'))
     .filter(([, value]) => {
       return (
         value !== undefined &&
@@ -81,32 +78,7 @@ export function Carrinho() {
     clearCart();
   };
 
-  const handlePedidoRapido = () => {
-    if (cart.length === 0) return;
-
-    const order: LocalOrder = {
-      numero: 'ORC-' + Date.now(),
-      items: cart,
-      cliente: {
-        nome: 'Cliente',
-        telefone: '',
-        email: '',
-        endereco: 'A combinar',
-        observacoes: 'Pedido rápido pelo carrinho'
-      },
-      subtotal,
-      frete: 0,
-      desconto: 0,
-      total: subtotal,
-      created_at: new Date().toISOString()
-    };
-
-    window.open(
-      whatsappUrl(createWhatsAppOrderMessage(order)),
-      '_blank',
-      'noopener,noreferrer'
-    );
-  };
+  const handlePedidoRapido = () => { if (cart.length) navigate('/checkout'); };
 
   if (cart.length === 0) {
     return (

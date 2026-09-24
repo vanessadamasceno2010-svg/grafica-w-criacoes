@@ -34,7 +34,8 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Layout />}>
-            <Route index element={<Home />} />
+            <Route index element={<Catalogo />} />
+            <Route path="a-grafica" element={<Home />} />
             <Route path="catalogo" element={<Catalogo />} />
             <Route path="produto/:slug" element={<Produto />} />
             <Route path="carrinho" element={<Carrinho />} />

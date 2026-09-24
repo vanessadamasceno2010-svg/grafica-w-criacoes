@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   ArrowDownUp,
   Filter,
@@ -90,6 +90,9 @@ export function Catalogo() {
     (searchParams.get('ordenar') as SortOption) || 'destaque'
   );
 
+  const [finish, setFinish] = useState(searchParams.get('acabamento') || '');
+  const [material, setMaterial] = useState(searchParams.get('material') || '');
+  const [size, setSize] = useState(searchParams.get('tamanho') || '');
   const [filterOpen, setFilterOpen] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -101,10 +104,13 @@ export function Catalogo() {
 
     if (search.trim()) params.set('q', search.trim());
     if (category) params.set('categoria', category);
+    if (finish) params.set('acabamento', finish);
+    if (material) params.set('material', material);
+    if (size) params.set('tamanho', size);
     if (sort !== 'destaque') params.set('ordenar', sort);
 
     setSearchParams(params, { replace: true });
-  }, [search, category, sort, setSearchParams]);
+  }, [search, category, sort, finish, material, size, setSearchParams]);
 
   async function loadCatalog() {
     setLoading(true);
@@ -112,7 +118,15 @@ export function Catalogo() {
 
     try {
       const [productResponse, categoryRows] = await Promise.all([
-        apiFetch<{ data: unknown[] }>('/produtos?limit=100'),
+        (async () => {
+          const data: unknown[] = [];
+          for(let page=1; ;page++) {
+            const batch=await apiFetch<{data:unknown[]}>(`/produtos?limit=100&page=${page}`);
+            data.push(...batch.data);
+            if(batch.data.length<100) break;
+          }
+          return {data};
+        })(),
         apiFetch<unknown[]>('/categorias')
       ]);
 
@@ -172,6 +186,9 @@ export function Catalogo() {
         }
       }
 
+      if (finish && !(product.variacoes || []).some(v => v.ativo !== false && (v.acabamento === finish || v.opcoes?.Acabamento === finish))) return false;
+      if (material && !(product.variacoes || []).some(v=>v.ativo!==false && v.opcoes?.Material===material)) return false;
+      if (size && !(product.variacoes || []).some(v=>v.ativo!==false && (v.opcoes?.Tamanho===size || v.tamanho===size))) return false;
       if (!query) return true;
 
       const searchable = normalizeText(
@@ -180,7 +197,8 @@ export function Catalogo() {
           product.descricao,
           product.descricao_longa,
           product.categoria_nome,
-          product.sku
+          product.sku,
+          ...(product.variacoes || []).filter(v=>v.ativo!==false).flatMap(v=>[v.nome,v.acabamento,v.tamanho,v.modelo,...Object.values(v.opcoes || {})])
         ].join(' ')
       );
 
@@ -235,6 +253,7 @@ export function Catalogo() {
     return result;
   }, [
     products,
+    finish, material, size,
     search,
     category,
     selectedCategory,
@@ -243,12 +262,13 @@ export function Catalogo() {
 
   const clearFilters = () => {
     setSearch('');
+    setFinish('');setMaterial('');setSize('');
     setCategory('');
     setSort('destaque');
   };
 
   const hasActiveFilters =
-    Boolean(search.trim()) ||
+    Boolean(material) || Boolean(size) || Boolean(finish) || Boolean(search.trim()) ||
     Boolean(category) ||
     sort !== 'destaque';
 
@@ -274,8 +294,9 @@ export function Catalogo() {
           </h1>
 
           <p className="text-gray-600 text-base sm:text-lg mt-2">
-            Encontre o produto ideal para sua marca, evento ou negócio.
+            Escolha seus produtos e acabamentos, monte seu pedido e finalize pelo WhatsApp.
           </p>
+          <div className="flex gap-4 mt-3 text-sm font-semibold"><Link to="/a-grafica" className="underline">Conheça a gráfica</Link><Link to="/acompanhar" className="underline">Acompanhar pedido</Link></div>
         </div>
 
         {!loading && !loadError && (
@@ -362,6 +383,7 @@ export function Catalogo() {
                     : 'bg-white border-gray-200 text-gray-600 hover:border-gold'
                 }`}
               >
+                {item.imagem_url && <img src={item.imagem_url} alt="" className="w-16 h-16 rounded-xl object-cover mx-auto mb-2" />}
                 {item.nome}
               </button>
             );
@@ -369,6 +391,11 @@ export function Catalogo() {
         </div>
       </div>
 
+      <div className="grid sm:grid-cols-3 gap-3">
+      {[{name:'Material',value:material,set:setMaterial},{name:'Tamanho',value:size,set:setSize}].map(filter=><label key={filter.name} className="block mb-5 text-sm font-bold">{filter.name}<select className="input mt-1" value={filter.value} onChange={e=>filter.set(e.target.value)}><option value="">Todos</option>{Array.from(new Set(products.flatMap(p=>(p.variacoes||[]).filter(v=>v.ativo!==false).map(v=>v.opcoes?.[filter.name] || (filter.name==='Tamanho' ? v.tamanho : '') || '')).filter(Boolean))).sort().map(value=><option key={value}>{value}</option>)}</select></label>)}
+      <label className="block mb-5 text-sm font-bold">Acabamento
+        <select value={finish} onChange={e=>setFinish(e.target.value)} className="input mt-1 max-w-sm"><option value="">Todos os acabamentos</option>{Array.from(new Set(products.flatMap(p=>(p.variacoes || []).filter(v=>v.ativo!==false).map(v=>v.opcoes?.Acabamento || v.acabamento || '')).filter(Boolean))).sort().map(value=><option key={value} value={value}>{value}</option>)}</select>
+      </label></div>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
         <div>
           <p className="font-bold text-primary">
@@ -558,7 +585,8 @@ export function Catalogo() {
                         : 'bg-white border-gray-200 text-gray-600'
                     }`}
                   >
-                    {item.nome}
+                    {item.imagem_url && <img src={item.imagem_url} alt="" className="w-16 h-16 rounded-xl object-cover mx-auto mb-2" />}
+                {item.nome}
                   </button>
                 );
               })}

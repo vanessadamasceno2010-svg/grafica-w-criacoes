@@ -11,11 +11,12 @@ export function Confirmacao() {
   useEffect(() => {
     const saved = localStorage.getItem('gp_last_order');
     if (saved) {
-      setOrder(JSON.parse(saved));
+      const parsed=JSON.parse(saved);
+      if(parsed.numero===numero) setOrder(parsed); else navigate('/acompanhar');
     } else {
       navigate('/catalogo');
     }
-  }, [navigate]);
+  }, [navigate, numero]);
 
   const handlePrint = () => {
     window.print();
@@ -42,6 +43,8 @@ export function Confirmacao() {
           </p>
         </div>
 
+        <a href={localStorage.getItem('gp_order_whatsapp') || '#'} target="_blank" rel="noopener noreferrer" className="btn bg-green-700 text-white w-full mb-6">Enviar pedido pelo WhatsApp</a>
+        <p className="text-sm text-gray-500 mb-6">Seu pedido já está registrado. Toque acima e confirme o envio da mensagem no WhatsApp.</p>
         {/* Receipt */}
         <div className="bg-gray-50 rounded-2xl p-5 sm:p-6 mb-6 print:bg-white print:shadow-none print:border print:border-gray-300">
           <div className="flex items-center gap-4 mb-6">
@@ -50,7 +53,7 @@ export function Confirmacao() {
             </div>
             <div>
               <h2 className="font-display text-xl font-bold text-primary">Recibo do Pedido</h2>
-              <p className="text-sm text-gray-500">{BRAND.nome}</p>
+              <p className="text-sm text-gray-500">{BRAND.name}</p>
             </div>
           </div>
 
@@ -75,13 +78,13 @@ export function Confirmacao() {
                 <div className="flex-1">
                   <span className="font-semibold text-gray-800">{item.quantidade}x {item.nome}</span>
                   <p className="text-gray-500 text-xs mt-0.5">
-                    {Object.entries(item.especificacoes_selecionadas)
+                    {Object.entries(item.especificacoes_selecionadas).filter(([key]) => !key.startsWith('_'))
                       .map(([k, v]) => `${k}: ${v}`)
                       .join(' · ')}
                   </p>
                 </div>
                 <span className="font-semibold text-gray-800 flex-shrink-0 ml-4">
-                  {formatMoney(item.preco * item.quantidade)}
+                  {formatMoney(item.preco_unitario * item.quantidade)}
                 </span>
               </div>
             ))}

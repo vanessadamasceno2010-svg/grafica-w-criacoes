@@ -223,6 +223,7 @@ export function Produto() {
       );
     });
 
+    if (filterGroups.length > 0) return exactMatch || null;
     return (
       exactMatch ||
       variations.find(
@@ -234,7 +235,8 @@ export function Produto() {
     );
   }, [variations, filterGroups, selectedSpecs, selectedVariationId]);
 
-  const allImages = useMemo(() => uniqueImages(product), [product]);
+  const allImages = useMemo(() => selectedVariation?.imagens?.length ? selectedVariation.imagens : uniqueImages(product), [product, selectedVariation]);
+  useEffect(() => { setImageIndex(0); }, [selectedVariation?.id]);
 
   useEffect(() => {
     if (imageIndex >= allImages.length) {
@@ -328,7 +330,8 @@ export function Produto() {
   const cartProduct = product
     ? {
         ...product,
-        preco: unitPrice
+        preco: unitPrice,
+        imagem_principal: allImages[0]
       }
     : null;
 
@@ -337,6 +340,7 @@ export function Produto() {
     ...(selectedVariation
       ? {
           Variação: variationLabel(selectedVariation),
+          _variacao_id: String(selectedVariation.id || ''),
           'Preço da variação': formatMoney(unitPrice),
           'Prazo estimado': `${deliveryDays} dias úteis`
         }

@@ -1,3 +1,4 @@
+import { ImageManager } from '../../components/ImageManager';
 import { useEffect, useMemo, useState } from 'react';
 import { Plus, Search, Trash2, Copy, X, Wand2, Package, CheckCircle2, AlertTriangle, Star, Filter, Eye, EyeOff } from 'lucide-react';
 import {
@@ -88,6 +89,7 @@ function normalizeVariations(value: any): ProductVariation[] {
   return value.map((v) => ({
     id: v?.id || makeId('VAR'),
     nome: v?.nome || '',
+    imagens: Array.isArray(v?.imagens) ? v.imagens : [],
     opcoes: v?.opcoes && typeof v.opcoes === 'object' && !Array.isArray(v.opcoes)
       ? Object.fromEntries(
           Object.entries(v.opcoes).map(([key, optionValue]) => [key, String(optionValue || '')])
@@ -336,6 +338,7 @@ export function Produtos() {
   const [categoryFilter, setCategoryFilter] = useState('todos');
   const [statusFilter, setStatusFilter] = useState('todos');
   const [stockFilter, setStockFilter] = useState('todos');
+  const [imagesBusy, setImagesBusy] = useState(false);
   const [savingStatusId, setSavingStatusId] = useState('');
   const [products, setProducts] = useState<ProductForm[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -539,6 +542,7 @@ export function Produtos() {
       .map((v) => ({
         id: v.id || makeId('VAR'),
         nome: v.nome || variationDescription(v),
+        imagens: v.imagens || [],
         opcoes: variationOptions(v),
         quantidade: v.quantidade || '',
         modelo: v.modelo || '',
@@ -631,7 +635,7 @@ export function Produtos() {
   };
 
   const deleteProduct = async (product: ProductForm) => {
-    if (!confirmAction(`Deseja deletar o produto ${product.nome}?`)) return;
+    if (!confirmAction(`Deseja arquivar o produto ${product.nome}? O histórico dos pedidos será preservado.`)) return;
 
     try {
       await apiFetch(`/produtos/${product.id}`, { method: 'DELETE' });
@@ -1139,9 +1143,9 @@ export function Produtos() {
         )}
       </BottomSheet>
 
-      <BottomSheet isOpen={(mode === 'edit' || mode === 'new') && !!editingProduct} onClose={close} title={mode === 'new' ? 'Novo Produto' : 'Editar Produto'}>
+      <BottomSheet isOpen={(mode === 'edit' || mode === 'new') && !!editingProduct} onClose={()=>{if(!imagesBusy) close();}} title={mode === 'new' ? 'Novo Produto' : 'Editar Produto'}>
         {editingProduct && (
-          <div className="space-y-5">
+          <fieldset disabled={imagesBusy} className="space-y-5">
             <div className="rounded-2xl bg-amber-50 border border-amber-100 p-4">
               <h3 className="font-bold text-primary">Cadastro avançado de produto</h3>
               <p className="text-sm text-gray-600 mt-1">
@@ -1187,6 +1191,7 @@ export function Produtos() {
               <input className="input" placeholder="URL da imagem" value={editingProduct.imagem_principal || ''} onChange={(e) => setEditingProduct({ ...editingProduct, imagem_principal: e.target.value })} />
             </label>
 
+            <ImageManager onBusyChange={setImagesBusy} images={[editingProduct.imagem_principal, ...(editingProduct.imagens_adicionais || [])].filter(Boolean) as string[]} onChange={(images)=>setEditingProduct({...editingProduct,imagem_principal:images[0]||'',imagens_adicionais:images.slice(1)})} />
             <div className="rounded-3xl border border-gray-100 p-4 space-y-4">
               <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
                 <div>
@@ -1285,6 +1290,9 @@ export function Produtos() {
                       </button>
                     </div>
 
+                    <p className="text-sm font-bold">Fotos desta combinação</p>
+                    <ImageManager onBusyChange={setImagesBusy} images={variation.imagens || []} onChange={(images)=>updateVariation(index, 'imagens', images)} />
+                    <p className="text-xs text-gray-500">Sem fotos próprias, serão usadas as fotos gerais do produto.</p>
                     {specGroups.filter((group) => group.nome.trim()).length > 0 ? (
                       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
                         {specGroups.filter((group) => group.nome.trim()).map((group) => {
@@ -1378,7 +1386,7 @@ export function Produtos() {
               <button type="button" className="btn btn-outline" onClick={close}>Cancelar</button>
               <button className="btn btn-primary" onClick={saveProduct}>Salvar produto</button>
             </div>
-          </div>
+          </fieldset>
         )}
       </BottomSheet>
     </div>
