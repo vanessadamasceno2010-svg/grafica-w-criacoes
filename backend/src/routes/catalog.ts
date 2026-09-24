@@ -251,16 +251,8 @@ catalogRoutes.put('/produtos/:id', auth, staff, asyncHandler(async (req, res) =>
 catalogRoutes.delete('/produtos/:id', auth, staff, asyncHandler(async (req, res) => {
   const id = req.params.id;
 
-  await supabaseRest(`/itens_pedido?produto_id=eq.${restEq(id)}`, { method: 'DELETE' }).catch(() => null);
-  await supabaseRest(`/avaliacoes?produto_id=eq.${restEq(id)}`, { method: 'DELETE' }).catch(() => null);
-  await supabaseRest(`/carrinho?produto_id=eq.${restEq(id)}`, { method: 'DELETE' }).catch(() => null);
-
-  await supabaseRest(`/produtos?id=eq.${restEq(id)}`, { method: 'DELETE' }).catch(async () => {
-    await supabaseRest(`/produtos?id=eq.${restEq(id)}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ ativo: false, updated_at: new Date().toISOString() })
-    });
+  await supabaseRest(`/produtos?id=eq.${restEq(id)}`, {
+    method: 'PATCH', body: JSON.stringify({ ativo: false, updated_at: new Date().toISOString() })
   });
-
   res.json({ ok: true });
 }));

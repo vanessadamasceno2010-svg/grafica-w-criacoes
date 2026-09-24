@@ -7,6 +7,8 @@ import rateLimit from 'express-rate-limit';
 import { config } from './config.js';
 import { authRoutes } from './routes/auth.js';
 import { catalogRoutes } from './routes/catalog.js';
+import { imageRoutes } from './routes/images.js';
+import { catalogOrderRoutes } from './routes/catalogOrders.js';
 import { orderRoutes } from './routes/orders.js';
 import { adminRoutes } from './routes/admin.js';
 import { publicRoutes } from './routes/public.js';
@@ -108,6 +110,8 @@ app.get('/health', (_req: Request, res: Response) => {
 
 app.use('/api/auth', authRoutes);
 app.use('/api', catalogRoutes);
+app.use('/api', imageRoutes);
+app.use('/api', catalogOrderRoutes);
 app.use('/api', orderRoutes);
 app.use('/api', publicRoutes);
 app.use('/api/admin', adminRoutes);

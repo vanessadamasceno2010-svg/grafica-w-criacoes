@@ -1,0 +1,24 @@
+Substitua estes arquivos nos mesmos caminhos, a partir da raiz do projeto. O ZIP contém o projeto completo. Preserve os arquivos .env locais.
+
+V8_CATALOGO_ONLINE.md
+backend/package.json
+backend/src/index.ts
+backend/src/routes/catalog.ts
+backend/src/routes/catalogOrders.ts
+backend/src/routes/images.ts
+backend/tests/catalog-orders.mjs
+database/migrations/012_catalogo_pedidos.sql
+frontend/src/App.tsx
+frontend/src/components/ImageManager.tsx
+frontend/src/components/ProductCard.tsx
+frontend/src/lib/api.ts
+frontend/src/pages/Carrinho.tsx
+frontend/src/pages/Catalogo.tsx
+frontend/src/pages/Checkout.tsx
+frontend/src/pages/Confirmacao.tsx
+frontend/src/pages/Produto.tsx
+frontend/src/pages/admin/Pedidos.tsx
+frontend/src/pages/admin/Produtos.tsx
+package-lock.json
+ARQUIVOS_ATUALIZADOS.txt
+PROMPT_MESTRE_ATUALIZADO.md

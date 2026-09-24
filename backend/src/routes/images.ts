@@ -1,0 +1,21 @@
+import { Router } from 'express';
+import { randomUUID } from 'node:crypto';
+import { z } from 'zod';
+import { auth, staff } from '../middleware/auth.js';
+import { config } from '../config.js';
+import { asyncHandler, HttpError } from '../utils/http.js';
+export const imageRoutes = Router();
+imageRoutes.post('/imagens', auth, staff, asyncHandler(async(req,res) => {
+ const {data} = z.object({data:z.string().max(2000000)}).parse(req.body);
+ const match = /^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/.exec(data);
+ if(!match) throw new HttpError(400,'Envie JPEG, PNG ou WebP.');
+ const bytes = Buffer.from(match[2],'base64');
+ if(bytes.length > 1500000) throw new HttpError(400,'Imagem muito grande.');
+ const valid = match[1]==='jpeg' ? bytes.subarray(0,3).equals(Buffer.from([255,216,255])) : match[1]==='png' ? bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])) : bytes.toString('ascii',0,4)==='RIFF' && bytes.toString('ascii',8,12)==='WEBP';
+ if(!valid) throw new HttpError(400,'Arquivo de imagem inválido.');
+ const path = `produtos/${randomUUID()}.${match[1]}`;
+ const base = config.supabaseUrl.replace(/\/$/,'');
+ const response = await fetch(`${base}/storage/v1/object/catalogo/${path}`, {method:'POST',headers:{Authorization:`Bearer ${config.supabaseServiceRoleKey}`,apikey:config.supabaseServiceRoleKey,'Content-Type':`image/${match[1]}`},body:bytes,signal:AbortSignal.timeout(20000)});
+ if(!response.ok) throw new HttpError(502,'Não foi possível salvar a imagem. Verifique o bucket catálogo.');
+ res.status(201).json({url:`${base}/storage/v1/object/public/catalogo/${path}`});
+}));
