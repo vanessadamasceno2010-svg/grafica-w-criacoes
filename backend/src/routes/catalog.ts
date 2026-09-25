@@ -7,10 +7,12 @@ import { restEq, slugify, supabaseRest } from '../lib/supabaseRest.js';
 export const catalogRoutes = Router();
 
 function normalizeProduct(product: any, categories: any[] = []) {
-  const category = categories.find((c) => c.id === product.categoria_id);
+  const categoryIds = Array.isArray(product.categoria_ids) ? product.categoria_ids : (product.categoria_id ? [product.categoria_id] : []);
+  const category = categories.find((c) => categoryIds.includes(c.id));
 
   return {
     ...product,
+    categoria_ids: categoryIds,
     categoria_nome: product.categoria_nome || category?.nome || 'Sem categoria',
     categoria_slug: product.categoria_slug || category?.slug || '',
     imagens_adicionais: Array.isArray(product.imagens_adicionais) ? product.imagens_adicionais : [],
@@ -121,7 +123,7 @@ catalogRoutes.get('/produtos', asyncHandler(async (req, res) => {
 
   if (categoria) {
     const cat = categories.find((c) => c.slug === categoria || c.id === categoria);
-    if (cat?.id) path += `&categoria_id=eq.${restEq(cat.id)}`;
+    if (cat?.id) path += `&or=(categoria_id.eq.${restEq(cat.id)},categoria_ids.cs.%5B%22${encodeURIComponent(cat.id)}%22%5D)`;
   }
 
   const [products, sales] = await Promise.all([supabaseRest<any[]>(path),supabaseRest<any[]>('/rpc/catalogo_vendas',{method:'POST',body:'{}'})]);
@@ -189,7 +191,8 @@ catalogRoutes.get('/produtos/:idOrSlug', asyncHandler(async (req, res) => {
 }));
 
 const productSchema = z.object({
-  categoria_id: z.string().uuid(),
+  categoria_id: z.string().uuid().optional(),
+  categoria_ids: z.array(z.string().uuid()).optional().default([]),
   nome: z.string().min(2),
   descricao: z.string().optional().default(''),
   descricao_longa: z.string().optional().default(''),
@@ -211,11 +214,14 @@ const productSchema = z.object({
 
 catalogRoutes.post('/produtos', auth, staff, asyncHandler(async (req, res) => {
   const p = productSchema.parse(req.body);
+  const categoriaIds = Array.from(new Set([...(p.categoria_ids || []), ...(p.categoria_id ? [p.categoria_id] : [])]));
+  if (!categoriaIds.length) throw new HttpError(400, 'Selecione ao menos uma categoria.');
 
   const rows = await supabaseRest<any[]>('/produtos', {
     method: 'POST',
     body: JSON.stringify({
       ...p,
+      categoria_id: categoriaIds[0], categoria_ids: categoriaIds,
       descricao: p.descricao || '',
       descricao_longa: p.descricao_longa || '',
       preco_original: p.preco_original || null,
@@ -238,6 +244,7 @@ catalogRoutes.post('/produtos', auth, staff, asyncHandler(async (req, res) => {
 catalogRoutes.put('/produtos/:id', auth, staff, asyncHandler(async (req, res) => {
   const p = productSchema.partial().parse(req.body);
   const payload: any = { ...p, updated_at: new Date().toISOString() };
+  if (p.categoria_ids || p.categoria_id) { const ids = Array.from(new Set([...(p.categoria_ids || []), ...(p.categoria_id ? [p.categoria_id] : [])])); payload.categoria_ids = ids; payload.categoria_id = ids[0]; }
 
   if (payload.nome && !payload.slug) payload.slug = slugify(payload.nome);
 

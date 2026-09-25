@@ -864,6 +864,7 @@ const optionalDate = z.union([z.literal(''), z.string().date()]).optional();
 adminRoutes.post('/pdv/avulso', asyncHandler(async (req,res) => {
  const d=z.object({
   chave_checkout:z.string().uuid(), cliente_nome:z.string().max(160).optional(),cliente_telefone:z.string().max(40).optional(),
+  items:z.array(z.object({descricao:z.string().max(5000).optional().default(''),quantidade:z.coerce.number().int().min(1).max(10000),preco_unitario:optionalMoney.optional()})).max(100).optional().default([]),
   descricao:z.string().max(5000).optional(),quantidade:z.preprocess(v=>v===''||v===null?undefined:v,z.coerce.number().int().min(1).max(10000).default(1)),
   preco_unitario:optionalMoney,valor_total:optionalMoney,desconto:optionalMoney,valor_pago:optionalMoney,data_pedido:optionalDate,data_entrega:optionalDate
  }).parse(req.body);
