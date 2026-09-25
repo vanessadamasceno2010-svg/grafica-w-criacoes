@@ -18,7 +18,8 @@ publicRoutes.get('/acompanhar/:numero', asyncHandler(async (req, res) => {
   let path = `/pedidos?select=*&numero_pedido=eq.${numero}&limit=1`;
   if (email) path += `&cliente_email=eq.${restEq(email)}`;
 
-  const rows = await supabaseRest<any[]>(path);
+  let rows = await supabaseRest<any[]>(path);
+  if (!rows.length) rows = await supabaseRest<any[]>(path.replace('numero_pedido=eq.', 'numero_pedido_anterior=eq.'));
   const pedido = rows[0];
 
   if (!pedido) return res.status(404).json({ message: 'Pedido não encontrado.' });

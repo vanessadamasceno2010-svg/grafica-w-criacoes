@@ -501,7 +501,8 @@ adminRoutes.get('/pedidos/:id/documento', asyncHandler(async (req, res) => {
   const pedido = pedidoRows[0];
   if (!pedido) return res.status(404).json({ message: 'Pedido não encontrado.' });
 
-  const itens = await supabaseRest<any[]>(`/itens_pedido?select=*&pedido_id=eq.${restEq(pedido.id)}`).catch(() => []);
+  const storedItems = await supabaseRest<any[]>(`/itens_pedido?select=*&pedido_id=eq.${restEq(pedido.id)}`).catch(() => []);
+  const itens = storedItems.length ? storedItems : (pedido.itens_snapshot || []).map((item:any)=>({...item,especificacoes:{nome_produto:item.nome,...item.especificacoes_selecionadas}}));
   const configs = await supabaseRest<any[]>('/configuracoes_site?select=chave,valor').catch(() => []);
   const cfg = Object.fromEntries((configs || []).map((c: any) => [c.chave, c.valor]));
   const pago = pedido.status_pagamento === 'confirmado' || asNumber(pedido.valor_restante) <= 0;
@@ -857,6 +858,18 @@ const pdvVendaSchema = z.object({
   prazo_entrega: z.string().optional().nullable(),
   observacoes: z.string().optional().default('')
 });
+
+const optionalMoney = z.preprocess(v => v === '' || v === null ? undefined : v, z.coerce.number().finite().min(0).max(99999999).optional());
+const optionalDate = z.union([z.literal(''), z.string().date()]).optional();
+adminRoutes.post('/pdv/avulso', asyncHandler(async (req,res) => {
+ const d=z.object({
+  chave_checkout:z.string().uuid(), cliente_nome:z.string().max(160).optional(),cliente_telefone:z.string().max(40).optional(),
+  descricao:z.string().max(5000).optional(),quantidade:z.preprocess(v=>v===''||v===null?undefined:v,z.coerce.number().int().min(1).max(10000).default(1)),
+  preco_unitario:optionalMoney,valor_total:optionalMoney,desconto:optionalMoney,valor_pago:optionalMoney,data_pedido:optionalDate,data_entrega:optionalDate
+ }).parse(req.body);
+ const pedido=await supabaseRest('/rpc/criar_pedido_avulso',{method:'POST',body:JSON.stringify({d,operador:req.user!.id})});
+ res.status(201).json(pedido);
+}));
 
 adminRoutes.post('/pdv/vendas', asyncHandler(async (req, res) => {
   const d = pdvVendaSchema.parse(req.body);

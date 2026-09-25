@@ -124,8 +124,9 @@ catalogRoutes.get('/produtos', asyncHandler(async (req, res) => {
     if (cat?.id) path += `&categoria_id=eq.${restEq(cat.id)}`;
   }
 
-  const products = await supabaseRest<any[]>(path);
-  res.json({ data: products.map((p) => normalizeProduct(p, categories)), page, limit });
+  const [products, sales] = await Promise.all([supabaseRest<any[]>(path),supabaseRest<any[]>('/rpc/catalogo_vendas',{method:'POST',body:'{}'})]);
+  const totals = new Map(sales.map(row=>[row.produto_id,Number(row.vendidos)]));
+  res.json({ data: products.map((p) => ({...normalizeProduct(p, categories),vendidos:totals.get(p.id)||0})), page, limit });
 }));
 
 catalogRoutes.get('/produtos/:idOrSlug', asyncHandler(async (req, res) => {

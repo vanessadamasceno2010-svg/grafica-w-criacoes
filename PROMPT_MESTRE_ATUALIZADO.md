@@ -15,7 +15,8 @@ Este resumo prevalece sobre o histórico abaixo nas partes alteradas. Use sempre
 - Preservar demais módulos e autenticação. Não houve deploy nem alteração do banco real.
 - Leia V8_CATALOGO_ONLINE.md e ARQUIVOS_ATUALIZADOS.txt para instalar.
 - Build, TypeScript e testes passaram novamente após a revisão final; repetir `npm run build`, `npm test` após qualquer ajuste. Testes do banco usam PostgreSQL embarcado, sem serviços externos. Conferência visual e integração com Supabase real ainda são necessárias.
-- Próxima melhoria: galerias reutilizáveis por acabamento e filtros/paginação no servidor para catálogos extensos.
+- V9 concluída: ajustes visuais, numeração curta, WhatsApp, banners, ranking e pedido avulso no PDV. Leia V9_ATUALIZACOES.md.
+- Próxima melhoria: serviço local opcional para impressão silenciosa na Elgin e filtros/paginação no servidor para catálogos extensos.
 
 ---
 # Histórico recebido do usuário
