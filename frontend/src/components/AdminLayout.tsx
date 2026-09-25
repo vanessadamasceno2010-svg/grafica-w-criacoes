@@ -37,7 +37,7 @@ export function AdminLayout() {
             Tela inicial
           </Link>
           <div className="flex items-center gap-3">
-            <img src="/assets/logo-icon.png" className="w-10 h-10 rounded-full" />
+            <img src="/assets/logo-grafica-w-criacoes.png" className="w-36 h-10 rounded-lg object-contain bg-white" alt="Gráfica W Criações" />
             <div>
               <h2 className="font-bold text-lg">Painel Admin</h2>
               <p className="text-xs text-slate-400">Perfil: {role}</p>

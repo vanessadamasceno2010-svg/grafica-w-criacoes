@@ -1,8 +1,7 @@
 import { Link } from 'react-router-dom';
-import { ArrowRight, Share2 } from 'lucide-react';
+import { ArrowRight, Star } from 'lucide-react';
 
 import { Product, formatMoney } from '../lib/api';
-import { shareProduct } from '../lib/share';
 
 interface ProductCardProps {
   product: Product;
@@ -44,20 +43,6 @@ export function ProductCard({ product }: ProductCardProps) {
   const target = safeProductPath(product);
   const image = product.imagem_principal || FALLBACK_IMAGE;
 
-  async function handleShare() {
-    try {
-      await shareProduct(product, {
-        price,
-        prazoEntrega: `${product.tempo_producao || 3} dias úteis`
-      });
-    } catch (error) {
-      console.error(error);
-      window.alert(
-        'Não foi possível compartilhar este produto. Tente novamente.'
-      );
-    }
-  }
-
   return (
     <article className="group card flex flex-col h-full overflow-hidden transition hover:ring-2 hover:ring-gold/40">
       <Link
@@ -76,14 +61,14 @@ export function ProductCard({ product }: ProductCardProps) {
           />
 
           {product.destaque && (
-            <span className="absolute top-3 left-3 badge bg-gold text-primary shadow-lg">
-              Destaque
+            <span aria-label="Produto em destaque" className="absolute top-2 left-2 badge p-1.5 bg-gold text-primary shadow-lg">
+              <Star size={14} fill="currentColor" />
             </span>
           )}
 
           {product.preco_original &&
             product.preco_original > price && (
-              <span className="absolute top-3 right-3 badge bg-danger text-white shadow-lg">
+              <span className="absolute top-2 right-2 badge px-2 py-1 text-[10px] bg-danger text-white shadow-lg">
                 Oferta
               </span>
             )}
@@ -100,9 +85,6 @@ export function ProductCard({ product }: ProductCardProps) {
             {product.nome}
           </h3>
 
-          <p className="text-gray-500 text-xs line-clamp-2 mb-2">
-            {product.descricao || 'Produto personalizado.'}
-          </p>
         </Link>
 
         <div className="mt-auto pt-3 border-t border-gray-100">
@@ -132,14 +114,6 @@ export function ProductCard({ product }: ProductCardProps) {
               <ArrowRight size={16} />
             </Link>
 
-            <button
-              type="button"
-              onClick={handleShare}
-              className="min-h-11 w-full rounded-xl border border-gray-200 bg-white text-primary font-bold text-xs flex items-center justify-center gap-2 px-3"
-            >
-              <Share2 size={16} />
-              Compartilhar
-            </button>
           </div>
         </div>
       </div>

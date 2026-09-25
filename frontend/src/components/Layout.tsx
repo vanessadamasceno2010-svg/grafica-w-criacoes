@@ -40,9 +40,7 @@ export function Layout() {
                 {config.logo_site_url ? (
                   <img src={config.logo_site_url} className="w-12 h-12 rounded-2xl object-contain bg-white/10" alt={nome} />
                 ) : (
-                  <div className="w-12 h-12 rounded-2xl bg-white/10 flex items-center justify-center">
-                    <span className="text-gold font-display font-bold text-3xl">W</span>
-                  </div>
+                  <img src="/assets/logo-grafica-w-criacoes.png" className="w-40 h-12 rounded-xl object-contain bg-white" alt={nome} />
                 )}
                 <span className="font-display font-bold text-2xl">{nome}</span>
               </div>

@@ -49,6 +49,7 @@ export type Product = {
   destaque?: boolean;
   tempo_producao: number;
   categoria_id?: string;
+  categoria_ids?: string[];
   categoria_nome?: string;
   categoria_slug?: string;
   avaliacao_media?: number;

@@ -48,7 +48,8 @@ function App() {
             <Route path="contato" element={<Contato />} />
           </Route>
           <Route path="/admin" element={<AdminLayout />}>
-            <Route index element={<Dashboard />} />
+            <Route index element={<PDV />} />
+            <Route path="dashboard" element={<Dashboard />} />
             <Route path="produtos" element={<Produtos />} />
             <Route path="pedidos" element={<Pedidos />} />
             <Route path="pdv" element={<PDV />} />

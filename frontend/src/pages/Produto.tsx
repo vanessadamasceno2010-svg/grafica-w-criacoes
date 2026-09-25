@@ -477,11 +477,11 @@ export function Produto() {
           </div>
           <div className="flex items-center justify-between gap-3 my-4"><div>{product.preco_original && product.preco_original>unitPrice ? <p className="line-through text-xs text-gray-400">{formatMoney(product.preco_original)}</p>:null}<p className="text-3xl font-bold text-primary">{formatMoney(totalPrice)}</p></div>
           {!quantityInOptions&&<div className="flex items-center gap-2"><button className="border rounded-lg w-10 h-10" aria-label="Diminuir quantidade" onClick={()=>changeQuantity(quantity-1)}>−</button><span>{quantity}</span><button className="border rounded-lg w-10 h-10" aria-label="Aumentar quantidade" onClick={()=>changeQuantity(quantity+1)}>+</button></div>}</div>
+          {product.descricao_longa && product.descricao_longa!==product.descricao && <details open className="mb-4 text-sm border rounded-xl p-3"><summary className="cursor-pointer font-semibold">Descrição completa</summary><p className="mt-3 whitespace-pre-line text-gray-600">{product.descricao_longa}</p></details>}
           <div className="grid grid-cols-2 gap-2 fixed sm:static bottom-[calc(4rem+env(safe-area-inset-bottom))] left-0 right-0 z-30 p-3 sm:p-0 bg-white border-t sm:border-0 shadow-lg sm:shadow-none">
             <button className="btn btn-outline px-2 text-xs sm:text-sm" onClick={handleAddToCart} disabled={!canPurchase}><ShoppingCart size={17}/>Adicionar ao carrinho</button>
             <button className="btn btn-primary px-2 text-xs sm:text-sm" onClick={handleBuyNow} disabled={!canPurchase}><Zap size={17}/>Comprar agora</button>
           </div>
-          {product.descricao_longa && product.descricao_longa!==product.descricao && <details className="mt-5 text-sm border rounded-xl p-3"><summary className="cursor-pointer font-semibold">Descrição completa</summary><p className="mt-3 whitespace-pre-line text-gray-600">{product.descricao_longa}</p></details>}
         </section>
       </div>
       {showImagePreview && (

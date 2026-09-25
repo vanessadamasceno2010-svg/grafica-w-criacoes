@@ -24,6 +24,7 @@ type Category = {
 
 type ProductForm = Product & {
   categoria_id: string;
+  categoria_ids: string[];
   preco_original?: number | null;
   ativo?: boolean;
   variacoes: ProductVariation[];
@@ -40,6 +41,7 @@ const NEW_CATEGORY_VALUE = '__nova_categoria__';
 const emptyProduct: ProductForm = {
   id: '',
   categoria_id: '',
+  categoria_ids: [],
   nome: '',
   slug: '',
   sku: '',
@@ -410,7 +412,7 @@ export function Produtos() {
 
       if (
         categoryFilter !== 'todos' &&
-        product.categoria_id !== categoryFilter
+        product.categoria_id !== categoryFilter && !product.categoria_ids?.includes(categoryFilter)
       ) {
         return false;
       }
@@ -444,6 +446,7 @@ export function Produtos() {
     const product = {
       ...emptyProduct,
       categoria_id: firstCategory,
+      categoria_ids: firstCategory ? [firstCategory] : [],
       sku: `SKU-${Date.now()}`,
       variacoes: [],
       especificacoes: {
@@ -461,6 +464,7 @@ export function Produtos() {
   const openEdit = (product: ProductForm) => {
     const nextProduct = {
       ...product,
+      categoria_ids: product.categoria_ids?.length ? product.categoria_ids : (product.categoria_id ? [product.categoria_id] : []),
       variacoes: normalizeVariations(product.variacoes),
       especificacoes: product.especificacoes && typeof product.especificacoes === 'object' ? product.especificacoes : {}
     };
@@ -521,6 +525,7 @@ export function Produtos() {
 
   const payloadFromForm = (p: ProductForm) => ({
     categoria_id: p.categoria_id || categories[0]?.id,
+    categoria_ids: Array.from(new Set([...(p.categoria_ids || []), ...(p.categoria_id && p.categoria_id !== NEW_CATEGORY_VALUE ? [p.categoria_id] : [])])),
     nome: p.nome,
     descricao: p.descricao || p.nome,
     descricao_longa: p.descricao_longa || p.descricao || '',
@@ -1169,13 +1174,15 @@ export function Produtos() {
                 <span className="text-sm font-bold text-primary">Categoria</span>
                 <select className="input" value={editingProduct.categoria_id || ''} onChange={(e) => {
                   const categoria_id = e.target.value;
-                  setEditingProduct({ ...editingProduct, categoria_id });
+                  setEditingProduct({ ...editingProduct, categoria_id, categoria_ids: categoria_id === NEW_CATEGORY_VALUE ? editingProduct.categoria_ids : Array.from(new Set([...(editingProduct.categoria_ids || []), categoria_id])) });
                   if (categoria_id !== NEW_CATEGORY_VALUE) setNewCategoryName('');
                 }}>
                   <option value="">Selecione uma categoria</option>
                   {categories.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
                   <option value={NEW_CATEGORY_VALUE}>Outros — criar nova categoria</option>
                 </select>
+                <span className="block text-xs text-gray-500 mt-2">Categorias adicionais</span>
+                <div className="grid grid-cols-2 gap-2 mt-1">{categories.map(c=><label key={c.id} className="flex items-center gap-2 text-xs"><input type="checkbox" checked={(editingProduct.categoria_ids || []).includes(c.id)} onChange={e=>setEditingProduct({...editingProduct,categoria_ids:e.target.checked?Array.from(new Set([...(editingProduct.categoria_ids||[]),c.id])):(editingProduct.categoria_ids||[]).filter(id=>id!==c.id)})}/>{c.nome}</label>)}</div>
               </label>
             </div>
 

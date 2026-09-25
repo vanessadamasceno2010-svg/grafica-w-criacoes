@@ -56,7 +56,7 @@ function formatDate(value: unknown) {
 }
 
 export function PDV() {
-  const [tab, setTab] = useState<'venda' | 'producao' | 'avulso'>('venda');
+  const [tab, setTab] = useState<'venda' | 'producao' | 'avulso'>('avulso');
   const [labelWidth,setLabelWidth]=useState(()=>localStorage.getItem('elgin_label_width')||'100');
   const [labelHeight,setLabelHeight]=useState(()=>localStorage.getItem('elgin_label_height')||'150');
   const [products, setProducts] = useState<Product[]>([]);

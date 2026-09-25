@@ -67,7 +67,7 @@ export function AdminLayout() {
             <Home size={18} /> Tela inicial
           </Link>
           <div className="flex items-center gap-3">
-            <img src="/assets/logo-icon.png" alt="Gráfica W Criações" className="w-10 h-10 rounded-xl bg-white object-contain" />
+            <img src="/assets/logo-grafica-w-criacoes.png" alt="Gráfica W Criações" className="w-36 h-10 rounded-xl bg-white object-contain" />
             <div>
               <p className="font-display font-bold">Painel Admin</p>
               <p className="text-xs text-gray-400">Perfil: {user?.role || 'admin'}</p>
