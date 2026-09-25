@@ -1,3 +1,4 @@
+import { visualKey } from '../../lib/productImages';
 import { ImageManager } from '../../components/ImageManager';
 import { useEffect, useMemo, useState } from 'react';
 import { Plus, Search, Trash2, Copy, X, Wand2, Package, CheckCircle2, AlertTriangle, Star, Filter, Eye, EyeOff } from 'lucide-react';
@@ -705,6 +706,11 @@ export function Produtos() {
     if (!editingProduct) return;
 
     const next = normalizeVariations(editingProduct.variacoes);
+    if (field === 'imagens') {
+      const key = visualKey(next[index]);
+      setEditingProduct({...editingProduct,variacoes:next.map(v=>visualKey(v)===key?{...v,imagens:value}:v)});
+      return;
+    }
     next[index] = {
       ...next[index],
       [field]: field === 'preco' || field === 'estoque' || field === 'prazo_entrega_dias' ? Number(value || 0) : value
@@ -1290,9 +1296,9 @@ export function Produtos() {
                       </button>
                     </div>
 
-                    <p className="text-sm font-bold">Fotos desta combinação</p>
+                    <p className="text-sm font-bold">Fotos deste modelo / acabamento</p>
                     <ImageManager onBusyChange={setImagesBusy} images={variation.imagens || []} onChange={(images)=>updateVariation(index, 'imagens', images)} />
-                    <p className="text-xs text-gray-500">Sem fotos próprias, serão usadas as fotos gerais do produto.</p>
+                    <p className="text-xs text-gray-500">Estas fotos serão usadas em todas as quantidades com as mesmas características. Sem fotos próprias, será usada a galeria geral.</p>
                     {specGroups.filter((group) => group.nome.trim()).length > 0 ? (
                       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
                         {specGroups.filter((group) => group.nome.trim()).map((group) => {

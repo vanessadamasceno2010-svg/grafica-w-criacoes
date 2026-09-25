@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { ArrowRight, Share2, Star } from 'lucide-react';
+import { ArrowRight, Share2 } from 'lucide-react';
 
 import { Product, formatMoney } from '../lib/api';
 import { shareProduct } from '../lib/share';
@@ -90,32 +90,20 @@ export function ProductCard({ product }: ProductCardProps) {
         </div>
       </Link>
 
-      <div className="p-4 flex flex-col flex-1">
+      <div className="p-2.5 sm:p-3 flex flex-col flex-1 min-w-0">
         <Link to={`/produto/${target}`} className="block">
           <p className="text-xs font-semibold text-gold uppercase tracking-wider mb-1">
             {product.categoria_nome || 'Produto'}
           </p>
 
-          <h3 className="font-display font-bold text-primary text-lg leading-tight mb-2 line-clamp-2">
+          <h3 className="font-display font-bold text-primary text-sm sm:text-base leading-tight mb-2 line-clamp-2">
             {product.nome}
           </h3>
 
-          <p className="text-gray-500 text-sm line-clamp-2 mb-4">
+          <p className="text-gray-500 text-xs line-clamp-2 mb-2">
             {product.descricao || 'Produto personalizado.'}
           </p>
         </Link>
-
-        <div className="flex items-center gap-1.5 mb-3">
-          <Star size={14} className="text-gold fill-current" />
-
-          <span className="text-sm font-bold text-gray-700">
-            {Number(product.avaliacao_media || 5).toFixed(1)}
-          </span>
-
-          <span className="text-xs text-gray-400">
-            · {product.tempo_producao || 3} dias úteis
-          </span>
-        </div>
 
         <div className="mt-auto pt-3 border-t border-gray-100">
           {product.preco_original &&
@@ -131,23 +119,23 @@ export function ProductCard({ product }: ProductCardProps) {
             </p>
           )}
 
-          <p className="font-display font-bold text-2xl text-primary">
+          <p className="font-display font-bold text-xl text-primary">
             {formatMoney(price)}
           </p>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-4">
+          <div className="grid grid-cols-1 gap-2 mt-4">
             <Link
               to={`/produto/${target}`}
-              className="min-h-11 w-full rounded-xl bg-primary text-white font-bold text-sm flex items-center justify-center gap-2 px-3"
+              className="min-h-11 w-full rounded-xl bg-primary text-white font-bold text-xs flex items-center justify-center gap-2 px-3"
             >
-              Escolher opções
+              Ver opções
               <ArrowRight size={16} />
             </Link>
 
             <button
               type="button"
               onClick={handleShare}
-              className="min-h-11 w-full rounded-xl border border-gray-200 bg-white text-primary font-bold text-sm flex items-center justify-center gap-2 px-3"
+              className="min-h-11 w-full rounded-xl border border-gray-200 bg-white text-primary font-bold text-xs flex items-center justify-center gap-2 px-3"
             >
               <Share2 size={16} />
               Compartilhar

@@ -33,6 +33,8 @@ export type ProductVariation = {
 };
 
 export type Product = {
+  vendidos?: number;
+  created_at?: string;
   id: string;
   nome: string;
   slug: string;
@@ -226,6 +228,8 @@ export function normalizeProduct(product: any): Product {
         ? Number(product.preco_original)
         : null,
     estoque: Number(product?.estoque || 0),
+    vendidos: Number(product?.vendidos || 0),
+    created_at: product?.created_at,
     imagem_principal: product?.imagem_principal || '',
     imagens_adicionais: Array.isArray(product?.imagens_adicionais)
       ? product.imagens_adicionais

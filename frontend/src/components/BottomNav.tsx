@@ -15,7 +15,6 @@ export function BottomNav() {
 
   const navItems = [
     { to: '/', icon: Home, label: 'Início' },
-    { to: '/catalogo', icon: Grid3X3, label: 'Catálogo' },
     { 
       to: '/carrinho', 
       icon: ShoppingCart, 

@@ -16,7 +16,6 @@ export function Header() {
 
   const navLinks = [
     { to: '/', label: 'Início' },
-    { to: '/catalogo', label: 'Catálogo' },
     { to: '/acompanhar', label: 'Acompanhar' },
     { to: '/sobre', label: 'Sobre Nós' },
     { to: '/contato', label: 'Contato' },

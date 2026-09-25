@@ -1,0 +1,15 @@
+import { useEffect, useState } from 'react';
+import { apiFetch } from '../lib/api';
+import { ImageManager } from './ImageManager';
+import { Banner, parseBanners, safeBannerLink } from './PromotionBanner';
+export function BannerEditor(){
+ const [rows,setRows]=useState<Banner[]>([]);const [busy,setBusy]=useState(false);const [loading,setLoading]=useState(true);const [loadError,setLoadError]=useState('');const [saving,setSaving]=useState(false);
+ useEffect(()=>{apiFetch<any[]>('/admin/configuracoes').then(data=>setRows(parseBanners(data.find(c=>c.chave==='catalogo_banners')?.valor))).catch(e=>setLoadError(e.message)).finally(()=>setLoading(false));},[]);
+ const update=(index:number,changes:Partial<Banner>)=>setRows(prev=>prev.map((row,i)=>i===index?{...row,...changes}:row));
+ async function save(){if(rows.some(b=>!b.imagem || (b.link&&!safeBannerLink(b.link))))return alert('Adicione a imagem de cada banner e use links começando com / ou https://.');setSaving(true);try{await apiFetch('/admin/configuracoes/catalogo_banners',{method:'PUT',body:JSON.stringify({valor:JSON.stringify(rows),tipo:'json'})});alert('Banners salvos.');}catch(e:any){alert(e.message);}finally{setSaving(false);}}
+ if(loading)return <p>Carregando banners…</p>;
+ if(loadError)return <p role="alert">Não foi possível carregar os banners: {loadError}</p>;
+ return <fieldset disabled={busy||saving} className="card p-5 mb-5 space-y-4"><h2 className="font-bold text-xl text-primary">Banners do catálogo</h2><p className="text-sm text-gray-500">Promoções e novidades, na ordem abaixo. Troca automática a cada 5 segundos. Use imagens horizontais com o conteúdo principal no centro.</p>
+ {rows.map((b,i)=><div key={b.id} className="border rounded-xl p-4 space-y-3"><div className="flex gap-3 items-center"><b>Banner {i+1}</b><button type="button" disabled={i===0} className="text-sm underline" onClick={()=>setRows(prev=>{const n=[...prev];[n[i-1],n[i]]=[n[i],n[i-1]];return n;})}>Mover para cima</button><button type="button" className="text-sm text-red-600" onClick={()=>setRows(prev=>prev.filter(x=>x.id!==b.id))}>Remover</button></div><ImageManager images={b.imagem?[b.imagem]:[]} onBusyChange={setBusy} onChange={images=>update(i,{imagem:images[images.length-1]||''})}/><label className="block text-sm">Descrição da imagem<input className="input mt-1" value={b.titulo} onChange={e=>update(i,{titulo:e.target.value})}/></label><label className="block text-sm">Link ao clicar (opcional)<input className="input mt-1" value={b.link} onChange={e=>update(i,{link:e.target.value})} placeholder="/catalogo?categoria=papelaria"/></label><label className="flex gap-2 items-center"><input type="checkbox" checked={b.ativo} onChange={e=>update(i,{ativo:e.target.checked})}/>Exibir no catálogo</label></div>)}
+ <div className="flex flex-wrap gap-2"><button type="button" className="btn btn-outline" disabled={rows.length>=10} onClick={()=>setRows(prev=>[...prev,{id:crypto.randomUUID(),imagem:'',titulo:'',link:'',ativo:true}])}>Adicionar banner</button><button type="button" className="btn btn-primary" onClick={save}>{saving?'Salvando…':'Salvar banners'}</button></div></fieldset>;
+}

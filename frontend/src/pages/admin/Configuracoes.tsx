@@ -1,3 +1,4 @@
+import { BannerEditor } from '../../components/BannerEditor';
 import { useEffect, useState } from 'react';
 import { Save } from 'lucide-react';
 import { apiFetch, formatPhoneDigits } from '../../lib/api';
@@ -98,6 +99,7 @@ export function Configuracoes() {
         <button onClick={salvarTudo} disabled={salvando} className="btn btn-primary"><Save size={18} />{salvando ? 'Salvando...' : 'Salvar configurações'}</button>
       </div>
 
+      <BannerEditor />
       <div className="grid xl:grid-cols-2 gap-5">
         {grupos.map((grupo) => (
           <div key={grupo.titulo} className="card p-5 grid gap-4 content-start">

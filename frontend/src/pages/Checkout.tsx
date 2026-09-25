@@ -23,7 +23,7 @@ export function buildCheckoutWhatsAppMessage(order: LocalOrder, backendOrder?: a
   const itens = order.items
     .map((item, index) => {
       const specs = Object.entries(item.especificacoes_selecionadas || {})
-        .filter(([key, value]) => !key.startsWith('_') && value !== undefined && value !== null && String(value).trim() !== '')
+        .filter(([key, value]) => !key.startsWith('_') && !['Variação','Preço da variação','Prazo estimado','nome_produto'].includes(key) && value !== undefined && value !== null && String(value).trim() !== '')
         .map(([key, value]) => `${key}: ${value}`)
         .join(' | ');
 
@@ -38,7 +38,6 @@ export function buildCheckoutWhatsAppMessage(order: LocalOrder, backendOrder?: a
     'Olá, vim do Site e quero finalizar meu pedido na Gráfica W Criações.',
     '',
     `*Pedido número:* ${numero}`,
-    `*Código para acompanhamento:* ${numero}`,
     '',
     '*Cliente:*',
     `Nome: ${order.cliente.nome}`,

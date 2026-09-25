@@ -1,3 +1,5 @@
+import { AvulsoForm } from '../../components/AvulsoForm';
+import { renderElginLabel } from '../../lib/printLabel';
 import { useEffect, useMemo, useState } from 'react';
 import {
   Banknote,
@@ -54,7 +56,9 @@ function formatDate(value: unknown) {
 }
 
 export function PDV() {
-  const [tab, setTab] = useState<'venda' | 'producao'>('venda');
+  const [tab, setTab] = useState<'venda' | 'producao' | 'avulso'>('venda');
+  const [labelWidth,setLabelWidth]=useState(()=>localStorage.getItem('elgin_label_width')||'100');
+  const [labelHeight,setLabelHeight]=useState(()=>localStorage.getItem('elgin_label_height')||'150');
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
   const [cart, setCart] = useState<PdvItem[]>([]);
@@ -184,6 +188,14 @@ export function PDV() {
     }
   }
 
+  async function printElgin(orderId:string){
+    const popup=window.open('','_blank','width=520,height=760');
+    if(!popup)return alert('Permita abrir a janela de impressão neste site.');
+    popup.document.write('<p>Preparando etiqueta…</p>');
+    try {const data=await apiFetch<any>(`/admin/pedidos/${orderId}/documento`);renderElginLabel(popup,data,Number(labelWidth),Number(labelHeight));}
+    catch(error:any){popup.close();alert(error.message||'Não foi possível preparar a etiqueta.');}
+  }
+
   async function printOrder(orderId: string) {
     const popup = window.open('', '_blank', 'width=520,height=760');
     if (!popup) return alert('O navegador bloqueou a impressão. Permita pop-ups para este site.');
@@ -191,7 +203,7 @@ export function PDV() {
     try {
       const documentData = await apiFetch<any>(`/admin/pedidos/${orderId}/documento`);
       const order = documentData.pedido;
-      const items = Array.isArray(documentData.itens) ? documentData.itens : [];
+      const items = documentData.pedido.itens_snapshot?.length ? documentData.pedido.itens_snapshot.map((i:any)=>({...i,especificacoes:{nome_produto:i.nome,...i.especificacoes_selecionadas}})) : (Array.isArray(documentData.itens) ? documentData.itens : []);
       const itemRows = items.map((item: any) => {
         const product = productsMap[item.produto_id];
         const specs = item.especificacoes && typeof item.especificacoes === 'object' ? item.especificacoes : {};
@@ -221,11 +233,14 @@ export function PDV() {
         <div className="flex flex-col sm:flex-row gap-2"><Link className="btn btn-outline" to="/admin/fluxo-caixa"><WalletCards size={18} /> Entradas e saídas</Link><button className="btn btn-outline" onClick={load}><RefreshCw size={18} /> Atualizar</button></div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-2xl mb-6 max-w-xl">
+      <div className="grid grid-cols-3 gap-2 p-1 bg-slate-100 rounded-2xl mb-6 max-w-xl">
         <button className={`btn ${tab === 'venda' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setTab('venda')}><Banknote size={18} /> Nova venda</button>
+        <button className={`btn ${tab === 'avulso' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setTab('avulso')}>Pedido avulso</button>
         <button className={`btn ${tab === 'producao' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setTab('producao')}><ClipboardList size={18} /> Produção</button>
       </div>
 
+      <details className="card p-4 mb-4"><summary className="cursor-pointer font-semibold">Impressão Elgin L42 Pro</summary><div className="flex flex-wrap gap-4 mt-3"><label className="text-sm">Largura da etiqueta (mm)<input type="number" min="40" max="108" className="input mt-1" value={labelWidth} onChange={e=>{setLabelWidth(e.target.value);localStorage.setItem('elgin_label_width',e.target.value);}}/></label><label className="text-sm">Altura da etiqueta (mm)<input type="number" min="40" max="300" className="input mt-1" value={labelHeight} onChange={e=>{setLabelHeight(e.target.value);localStorage.setItem('elgin_label_height',e.target.value);}}/></label></div><p className="text-sm text-gray-500 mt-3">Use as medidas do rolo instalado. Ao imprimir, selecione a Elgin no computador, escala 100%, sem cabeçalhos e rodapés.</p></details>
+      {tab==='avulso'&&<AvulsoForm onSaved={load} onPrint={printElgin}/>}
       {loading && <div className="card p-5">Carregando dados do PDV...</div>}
       {!loading && tab === 'venda' && <div className="grid xl:grid-cols-[1.2fr_.8fr] gap-5">
         <section className="space-y-5">
@@ -239,7 +254,7 @@ export function PDV() {
         </section>
       </div>}
 
-      {!loading && tab === 'producao' && <div><div className="card p-4 mb-5"><div className="relative"><Search className="absolute left-4 top-4 text-gray-400" size={18} /><input className="input pl-11" placeholder="Buscar pedido, cliente ou telefone" value={productionSearch} onChange={(e) => setProductionSearch(e.target.value)} /></div></div><div className="grid lg:grid-cols-2 2xl:grid-cols-3 gap-4">{filteredOrders.map((order) => <article key={order.id} className={`card p-5 border-l-4 ${order.prioridade === 'urgente' ? 'border-l-red-500' : 'border-l-amber-400'}`}><div className="flex justify-between gap-3"><div><span className="text-xs text-gray-500">{formatDate(order.prazo_entrega)}</span><h2 className="font-bold text-primary text-lg">{order.numero_pedido}</h2><p>{order.cliente_nome || 'Cliente não informado'}</p></div><button className="btn btn-outline px-3 py-2 self-start" onClick={() => printOrder(order.id)}><Printer size={18} /></button></div><div className="my-4 space-y-2">{(order.itens || []).map((item: any) => <div key={item.id} className="text-sm bg-gray-50 rounded-xl p-2"><b>{item.quantidade}x</b> {item.especificacoes?.nome_produto || productsMap[item.produto_id]?.nome || 'Produto'}{item.especificacoes?.detalhes && <div className="text-gray-500">{item.especificacoes.detalhes}</div>}</div>)}</div><div className="grid grid-cols-[1fr_auto] gap-2"><select className="input py-2" value={order.etapa_producao || 'aguardando'} onChange={(e) => updateProduction(order, { etapa_producao: e.target.value })}>{etapas.map((etapa) => <option key={etapa.value} value={etapa.value}>{etapa.label}</option>)}</select><button className={`px-3 rounded-xl font-bold ${order.prioridade === 'urgente' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-700'}`} onClick={() => updateProduction(order, { prioridade: order.prioridade === 'urgente' ? 'normal' : 'urgente' })}>{order.prioridade === 'urgente' ? 'Urgente' : 'Normal'}</button></div><div className="flex justify-between text-xs text-gray-500 mt-3"><span>{formatMoney(order.total)}</span><span>{Number(order.impressoes || 0)} impressão(ões)</span></div></article>)}</div>{filteredOrders.length === 0 && <div className="card p-10 text-center text-gray-500">Nenhum pedido ativo encontrado.</div>}</div>}
+      {!loading && tab === 'producao' && <div><div className="card p-4 mb-5"><div className="relative"><Search className="absolute left-4 top-4 text-gray-400" size={18} /><input className="input pl-11" placeholder="Buscar pedido, cliente ou telefone" value={productionSearch} onChange={(e) => setProductionSearch(e.target.value)} /></div></div><div className="grid lg:grid-cols-2 2xl:grid-cols-3 gap-4">{filteredOrders.map((order) => <article key={order.id} className={`card p-5 border-l-4 ${order.prioridade === 'urgente' ? 'border-l-red-500' : 'border-l-amber-400'}`}><div className="flex justify-between gap-3"><div><span className="text-xs text-gray-500">{formatDate(order.prazo_entrega)}</span><h2 className="font-bold text-primary text-lg">{order.numero_pedido}</h2><p>{order.cliente_nome || 'Cliente não informado'}</p></div><button className="btn btn-outline px-3 py-2 self-start" onClick={() => printOrder(order.id)}><Printer size={18} /></button></div><button className="btn btn-outline w-full mt-3 text-sm" onClick={()=>printElgin(order.id)}>Imprimir etiqueta Elgin</button><div className="my-4 space-y-2">{!order.itens?.length && order.itens_snapshot?.map((item:any,i:number)=><div key={i} className="text-sm bg-gray-50 rounded-xl p-2"><b>{item.quantidade}x</b> {item.nome}</div>)}{(order.itens || []).map((item: any) => <div key={item.id} className="text-sm bg-gray-50 rounded-xl p-2"><b>{item.quantidade}x</b> {item.especificacoes?.nome_produto || productsMap[item.produto_id]?.nome || 'Produto'}{item.especificacoes?.detalhes && <div className="text-gray-500">{item.especificacoes.detalhes}</div>}</div>)}</div><div className="grid grid-cols-[1fr_auto] gap-2"><select className="input py-2" value={order.etapa_producao || 'aguardando'} onChange={(e) => updateProduction(order, { etapa_producao: e.target.value })}>{etapas.map((etapa) => <option key={etapa.value} value={etapa.value}>{etapa.label}</option>)}</select><button className={`px-3 rounded-xl font-bold ${order.prioridade === 'urgente' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-700'}`} onClick={() => updateProduction(order, { prioridade: order.prioridade === 'urgente' ? 'normal' : 'urgente' })}>{order.prioridade === 'urgente' ? 'Urgente' : 'Normal'}</button></div><div className="flex justify-between text-xs text-gray-500 mt-3"><span>{formatMoney(order.total)}</span><span>{Number(order.impressoes || 0)} impressão(ões)</span></div></article>)}</div>{filteredOrders.length === 0 && <div className="card p-10 text-center text-gray-500">Nenhum pedido ativo encontrado.</div>}</div>}
     </div>
   );
 }
