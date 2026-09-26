@@ -352,6 +352,7 @@ export function Produtos() {
   const [mode, setMode] = useState<'view' | 'edit' | 'new' | null>(null);
   const [loading, setLoading] = useState(true);
   const [dragVariationIndex, setDragVariationIndex] = useState<number | null>(null);
+  const [dragSpecIndex, setDragSpecIndex] = useState<number | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -522,6 +523,14 @@ export function Produtos() {
 
   const removeSpecGroup = (index: number) => {
     updateProductSpecs(specGroups.filter((_, i) => i !== index));
+  };
+
+  const moveSpecGroup = (from: number, to: number) => {
+    if (to < 0 || to >= specGroups.length) return;
+    const next = [...specGroups];
+    const [item] = next.splice(from, 1);
+    next.splice(to, 0, item);
+    updateProductSpecs(next);
   };
 
   const payloadFromForm = (p: ProductForm) => ({
@@ -1237,13 +1246,12 @@ export function Produtos() {
 
               <div className="space-y-3">
                 {specGroups.map((group, index) => (
-                  <div key={group.id} className="rounded-2xl border border-gray-100 bg-gray-50 p-3 space-y-3">
+                  <div key={group.id} draggable onDragStart={() => setDragSpecIndex(index)} onDragOver={(e) => e.preventDefault()} onDrop={() => { if (dragSpecIndex !== null) moveSpecGroup(dragSpecIndex, index); setDragSpecIndex(null); }} onDragEnd={() => setDragSpecIndex(null)} className={`rounded-2xl border border-gray-100 bg-gray-50 p-3 space-y-3 ${dragSpecIndex === index ? 'opacity-50 ring-2 ring-gold' : ''}`}>
                     <div className="flex items-center justify-between gap-3">
-                      <p className="font-bold text-primary">Grupo de opção {index + 1}</p>
-                      <button type="button" className="rounded-lg bg-red-50 p-2 text-red-600" onClick={() => removeSpecGroup(index)}>
-                        <X size={16} />
-                      </button>
+                      <div className="flex items-center gap-2 min-w-0"><GripVertical size={18} className="shrink-0 text-gray-400" /><p className="font-bold text-primary">Grupo de opção {index + 1}</p></div>
+                      <div className="flex items-center gap-1 shrink-0"><button type="button" title="Mover grupo para cima" className="rounded-lg bg-white p-2 text-primary disabled:opacity-30" disabled={index === 0} onClick={() => moveSpecGroup(index, index - 1)}><ArrowUp size={16} /></button><button type="button" title="Mover grupo para baixo" className="rounded-lg bg-white p-2 text-primary disabled:opacity-30" disabled={index === specGroups.length - 1} onClick={() => moveSpecGroup(index, index + 1)}><ArrowDown size={16} /></button><button type="button" className="rounded-lg bg-red-50 p-2 text-red-600" onClick={() => removeSpecGroup(index)}><X size={16} /></button></div>
                     </div>
+                    <p className="text-xs text-gray-500">Arraste para alterar a ordem. No celular, use as setas.</p>
 
                     <div className="grid sm:grid-cols-[220px_1fr] gap-3">
                       <label className="block">
