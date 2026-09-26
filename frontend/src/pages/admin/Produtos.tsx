@@ -1,7 +1,7 @@
 import { visualKey } from '../../lib/productImages';
 import { ImageManager } from '../../components/ImageManager';
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Search, Trash2, Copy, X, Wand2, Package, CheckCircle2, AlertTriangle, Star, Filter, Eye, EyeOff } from 'lucide-react';
+import { Plus, Search, Trash2, Copy, X, Wand2, Package, CheckCircle2, AlertTriangle, Star, Filter, Eye, EyeOff, GripVertical, ArrowUp, ArrowDown } from 'lucide-react';
 import {
   apiFetch,
   confirmAction,
@@ -351,6 +351,7 @@ export function Produtos() {
   const [specGroups, setSpecGroups] = useState<SpecGroup[]>([]);
   const [mode, setMode] = useState<'view' | 'edit' | 'new' | null>(null);
   const [loading, setLoading] = useState(true);
+  const [dragVariationIndex, setDragVariationIndex] = useState<number | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -754,6 +755,14 @@ export function Produtos() {
     if (!editingProduct) return;
 
     const next = normalizeVariations(editingProduct.variacoes).filter((_, i) => i !== index);
+    setEditingProduct({ ...editingProduct, variacoes: next });
+  };
+
+  const moveVariation = (from: number, to: number) => {
+    if (!editingProduct || to < 0 || to >= normalizeVariations(editingProduct.variacoes).length) return;
+    const next = normalizeVariations(editingProduct.variacoes);
+    const [item] = next.splice(from, 1);
+    next.splice(to, 0, item);
     setEditingProduct({ ...editingProduct, variacoes: next });
   };
 
@@ -1292,16 +1301,15 @@ export function Produtos() {
 
               <div className="space-y-3">
                 {normalizeVariations(editingProduct.variacoes).map((variation, index) => (
-                  <div key={variation.id || index} className="rounded-2xl border border-amber-200 bg-white p-4 space-y-3 shadow-sm">
+                  <div key={variation.id || index} draggable onDragStart={() => setDragVariationIndex(index)} onDragOver={(e) => e.preventDefault()} onDrop={() => { if (dragVariationIndex !== null) moveVariation(dragVariationIndex, index); setDragVariationIndex(null); }} onDragEnd={() => setDragVariationIndex(null)} className={`rounded-2xl border border-amber-200 bg-white p-3 sm:p-4 space-y-3 shadow-sm ${dragVariationIndex === index ? 'opacity-50 ring-2 ring-gold' : ''}`}>
                     <div className="flex items-center justify-between gap-3">
-                      <div>
+                      <div className="flex items-center gap-2 min-w-0"><GripVertical size={18} className="shrink-0 text-gray-400" /><div className="min-w-0">
                         <p className="font-bold text-primary">Preço {index + 1}</p>
-                        <p className="text-xs text-gray-500">{variationDescription(variation)}</p>
-                      </div>
-                      <button type="button" className="rounded-lg bg-red-50 p-2 text-red-600" onClick={() => removeVariation(index)}>
-                        <X size={16} />
-                      </button>
+                        <p className="text-xs text-gray-500 truncate">{variationDescription(variation)}</p></div></div>
+                      <div className="flex items-center gap-1 shrink-0"><button type="button" title="Mover para cima" className="rounded-lg bg-gray-50 p-2 text-primary disabled:opacity-30" disabled={index === 0} onClick={() => moveVariation(index, index - 1)}><ArrowUp size={16} /></button><button type="button" title="Mover para baixo" className="rounded-lg bg-gray-50 p-2 text-primary disabled:opacity-30" disabled={index === normalizeVariations(editingProduct.variacoes).length - 1} onClick={() => moveVariation(index, index + 1)}><ArrowDown size={16} /></button><button type="button" className="rounded-lg bg-red-50 p-2 text-red-600" onClick={() => removeVariation(index)}><X size={16} /></button></div>
                     </div>
+
+                    <p className="text-xs text-gray-500">Arraste este bloco para alterar a ordem. No celular, use as setas.</p>
 
                     <p className="text-sm font-bold">Fotos deste modelo / acabamento</p>
                     <ImageManager onBusyChange={setImagesBusy} images={variation.imagens || []} onChange={(images)=>updateVariation(index, 'imagens', images)} />

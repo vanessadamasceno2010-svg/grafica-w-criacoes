@@ -31,7 +31,7 @@ export function BottomSheet({ isOpen, onClose, title, children }: BottomSheetPro
   if (!isOpen) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-slate-950/70 px-3 py-3 sm:px-6 sm:py-8">
+    <div className="fixed inset-0 z-[99999] flex items-end sm:items-center justify-center bg-slate-950/70 px-0 py-0 sm:px-6 sm:py-8">
       <button
         type="button"
         aria-label="Fechar modal"
@@ -40,10 +40,10 @@ export function BottomSheet({ isOpen, onClose, title, children }: BottomSheetPro
       />
 
       <section
-        className="relative z-10 flex w-full max-w-3xl max-h-[calc(100dvh-24px)] sm:max-h-[calc(100vh-64px)] flex-col overflow-hidden rounded-3xl bg-white shadow-2xl"
+        className="relative z-10 flex w-full max-w-3xl max-h-[100dvh] sm:max-h-[calc(100vh-64px)] flex-col overflow-hidden rounded-t-3xl sm:rounded-3xl bg-white shadow-2xl"
         onClick={(event) => event.stopPropagation()}
       >
-        <header className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-gray-100 bg-white px-5 py-4">
+        <header className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-gray-100 bg-white px-3 sm:px-5 py-3 sm:py-4">
           <div>
             {title && <h2 className="font-display text-xl font-bold text-primary">{title}</h2>}
             {!title && <h2 className="font-display text-xl font-bold text-primary">Detalhes</h2>}
@@ -58,7 +58,7 @@ export function BottomSheet({ isOpen, onClose, title, children }: BottomSheetPro
           </button>
         </header>
 
-        <div className="flex-1 overflow-y-auto px-5 py-5 pb-[calc(24px+env(safe-area-inset-bottom))]">
+        <div className="flex-1 min-h-0 overflow-y-auto px-3 sm:px-5 py-3 sm:py-5 pb-[calc(24px+env(safe-area-inset-bottom))]">
           {children}
         </div>
       </section>
