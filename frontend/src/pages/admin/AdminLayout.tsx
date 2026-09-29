@@ -4,6 +4,7 @@ import { Menu, X, LogOut, LayoutDashboard, Package, ShoppingCart, Users, Setting
 import { useApp } from '../../contexts/AppContext';
 
 const links = [
+  { to: '/admin/digitais', label: 'Catálogo digital', icon: Package, adminOnly: true },
   { to: '/admin', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/admin/produtos', label: 'Produtos', icon: Package },
   { to: '/admin/pedidos', label: 'Pedidos', icon: ShoppingCart },

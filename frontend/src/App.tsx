@@ -1,3 +1,5 @@
+import { Digitais, PedidoDigital } from './pages/Digitais';
+import { DigitaisAdmin } from './pages/admin/DigitaisAdmin';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AppProvider } from './contexts/AppContext';
 import { Layout } from './components/Layout';
@@ -33,6 +35,8 @@ function App() {
     <AppProvider>
       <BrowserRouter>
         <Routes>
+          <Route path="/digitais" element={<Digitais />} />
+          <Route path="/digitais/pedido/:id" element={<PedidoDigital />} />
           <Route path="/" element={<Layout />}>
             <Route index element={<Catalogo />} />
             <Route path="a-grafica" element={<Home />} />
@@ -51,6 +55,7 @@ function App() {
             <Route index element={<PDV />} />
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="produtos" element={<Produtos />} />
+            <Route path="digitais" element={<DigitaisAdmin />} />
             <Route path="pedidos" element={<Pedidos />} />
             <Route path="pdv" element={<PDV />} />
             <Route path="orcamentos" element={<Orcamentos />} />

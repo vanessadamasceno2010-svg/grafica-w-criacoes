@@ -5,6 +5,7 @@ import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 
 import { config } from './config.js';
+import { digitalRoutes, digitalAdminRoutes } from './routes/digital.js';
 import { authRoutes } from './routes/auth.js';
 import { catalogRoutes } from './routes/catalog.js';
 import { imageRoutes } from './routes/images.js';
@@ -108,6 +109,8 @@ app.get('/health', (_req: Request, res: Response) => {
   });
 });
 
+app.use('/api/digital', digitalRoutes);
+app.use('/api/admin/digital', digitalAdminRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api', catalogRoutes);
 app.use('/api', imageRoutes);
