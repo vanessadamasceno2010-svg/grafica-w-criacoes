@@ -11,8 +11,8 @@ export const digitalAdminRoutes=Router();
 const uuid=z.string().uuid();
 const secret=z.string().regex(/^[a-f0-9]{64}$/);
 const hash=(s:string)=>createHash('sha256').update(s).digest('hex');
-const https=z.string().url().max(2048).refine(s=>new URL(s).protocol==='https:','Use um link HTTPS.');
-const product=z.object({nome:z.string().trim().min(1).max(150),descricao:z.string().max(10000).default(''),imagem_url:z.union([https,z.literal('')]).default(''),preco_centavos:z.number().int().min(1).max(100000000),download_url:https,ativo:z.boolean()});
+const https=z.string().url().max(2048).refine(s=>{try{return new URL(s).protocol==='https:';}catch{return false;}},'Use um link HTTPS.');
+const product=z.object({nome:z.string().trim().min(1).max(150),descricao:z.string().max(10000).default(''),imagem_url:z.union([https,z.literal('')]).default(''),imagens:z.array(https).max(12).optional(),preco_centavos:z.number().int().min(1).max(100000000),download_url:https,ativo:z.boolean()}).transform(p=>{const imagens=p.imagens ?? (p.imagem_url?[p.imagem_url]:[]);return {...p,imagens,imagem_url:imagens[0]||''};});
 const findOrder=async(id:string)=>(await db<any[]>('/pedidos_digitais?id=eq.'+restEq(uuid.parse(id))+'&select=*'))[0];
 async function verify(order:any) {
  if(order.status==='pago' || !order.referencia) return order;
@@ -26,7 +26,7 @@ async function verify(order:any) {
 }
 const publicOrder=(o:any)=>({id:o.id,nome:o.nome,valor_centavos:o.valor_centavos,status:o.status,checkout_url:o.checkout_url,...(o.status==='pago'?{download_url:o.download_url}: {})});
 digitalRoutes.use((_req,res,next)=>{res.set('Cache-Control','no-store');next();});
-digitalRoutes.get('/produtos',asyncHandler(async(_req,res)=>res.json(await db('/produtos_digitais?ativo=eq.true&select=id,nome,descricao,imagem_url,preco_centavos&order=created_at.desc'))));
+digitalRoutes.get('/produtos',asyncHandler(async(_req,res)=>res.json(await db('/produtos_digitais?ativo=eq.true&select=id,nome,descricao,imagem_url,imagens,preco_centavos&order=created_at.desc'))));
 digitalRoutes.post('/checkout',rateLimit({windowMs:60000,limit:10}),asyncHandler(async(req,res)=>{
  const input=z.object({id:uuid,produto_id:uuid,token:secret}).parse(req.body);
  let order=await findOrder(input.id);
@@ -86,4 +86,25 @@ digitalAdminRoutes.post('/integracao/webhook',asyncHandler(async(_req,res)=>{
  const hooks=await livepix('/webhooks');
  if(!Array.isArray(hooks) || !hooks.some(h=>h.url===url)) await livepix('/webhooks',{url});
  res.json({message:'Webhook configurado no LivePix.'});
+}));
+
+const settings=z.object({
+ nome:z.string().trim().min(1).max(100).default('Catálogo digital'),
+ logo:z.union([https,z.literal('')]).default(''),
+ titulo:z.string().max(160).default('Escolha, pague e baixe'),
+ subtitulo:z.string().max(600).default('Arquivos para seus projetos. Download após a confirmação do pagamento.'),
+ rodape_titulo:z.string().max(150).default('Catálogo digital'),
+ rodape_texto:z.string().max(4000).default(''),
+ contato:z.string().max(500).default(''),
+ direitos:z.string().max(250).default(''),
+ banner_intervalo:z.number().int().min(2).max(30).default(4),
+ banner_automatico:z.boolean().default(true),
+ banners:z.array(z.object({id:z.string().max(100),imagem:https,titulo:z.string().max(200).default(''),ativo:z.boolean().default(true)})).max(12).default([])
+});
+const readSettings=async()=>{const rows=await db<any[]>('/configuracoes_digitais?id=eq.1&select=dados');return settings.parse(rows[0]?.dados||{});};
+digitalRoutes.get('/configuracoes',asyncHandler(async(_req,res)=>res.json(await readSettings())));
+digitalAdminRoutes.get('/configuracoes',asyncHandler(async(_req,res)=>res.json(await readSettings())));
+digitalAdminRoutes.put('/configuracoes',asyncHandler(async(req,res)=>{
+ const dados=settings.parse(req.body);
+ await db('/configuracoes_digitais?on_conflict=id',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=representation'},body:JSON.stringify({id:1,dados})});res.json(dados);
 }));
