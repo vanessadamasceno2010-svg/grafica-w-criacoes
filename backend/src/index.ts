@@ -81,7 +81,7 @@ app.use(
   })
 );
 
-app.use(express.json({ limit: '2mb' }));
+app.use(express.json({ limit: '2mb', verify: (req, _res, buffer) => { if (req.url?.split('?')[0] === '/api/digital/webhook/uvvipay') (req as any).rawBody = Buffer.from(buffer); } }));
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 
 if (config.isProduction) {
