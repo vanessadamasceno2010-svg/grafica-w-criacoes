@@ -5,7 +5,9 @@ alter table public.pedidos_digitais
  add column if not exists gateway_payload jsonb,
  add column if not exists gateway_status text,
  add column if not exists pix_codigo text,
- add column if not exists pix_expira_em timestamptz;
+ add column if not exists pix_expira_em timestamptz,
+ add column if not exists cliente_documento_hash text;
+create index if not exists pedidos_digitais_cliente_documento_hash_idx on public.pedidos_digitais(cliente_documento_hash);
 alter table public.pedidos_digitais drop constraint if exists pedidos_digitais_status_check;
 alter table public.pedidos_digitais add constraint pedidos_digitais_status_check
  check(status in ('criando','pendente','pago','erro','expirado','cancelado','recusado','estornado','contestado'));

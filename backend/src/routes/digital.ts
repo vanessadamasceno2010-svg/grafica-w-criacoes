@@ -1,5 +1,5 @@
 import { isIP } from 'node:net';
-import { digitalGateway, uvviEnvironment, uvviConfigured, uvviWebhookConfigured, uvvipay, uvviCustomer, matchesUvviPayment, verifyUvviSignature, uvviEvents } from '../lib/uvvipay.js';
+import { digitalGateway, uvviEnvironment, uvviConfigured, uvviWebhookConfigured, uvvipay, uvviCustomer, validateDocument, matchesUvviPayment, verifyUvviSignature, uvviEvents } from '../lib/uvvipay.js';
 import { Router } from 'express';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
@@ -26,13 +26,15 @@ async function prepareUvvi(order:any) {
  if(order.pagamento_id) return verify(order);
  if(!order.gateway_payload) throw new HttpError(409,'Dados da cobrança indisponíveis. Contate a loja.');
  const payment=await uvvipay('/payments',{body:order.gateway_payload,idempotencyKey:order.id,environment:order.gateway_ambiente});
- return applyUvvi(order,payment);
+ await applyUvvi(order,payment);
+ return await findOrder(order.id);
 }
 async function verify(order:any) {
  if(order.gateway==='uvvipay') {
   if(!order.pagamento_id) return order;
   const payment=await uvvipay('/payments/'+encodeURIComponent(order.pagamento_id),{environment:order.gateway_ambiente});
-  return applyUvvi(order,payment);
+  await applyUvvi(order,payment);
+  return await findOrder(order.id);
  }
  if(order.status==='pago' || !order.referencia) return order;
  const payments=await livepix('/payments?reference='+encodeURIComponent(order.referencia));
@@ -45,7 +47,7 @@ async function verify(order:any) {
 }
 const publicOrder=(o:any)=>({id:o.id,nome:o.nome,valor_centavos:o.valor_centavos,status:o.status,checkout_url:o.checkout_url,
  gateway:o.gateway||'livepix',teste:o.gateway==='uvvipay' && o.gateway_ambiente==='staging',
- pix_codigo:o.status==='pendente'?o.pix_codigo:null,pix_expira_em:o.pix_expira_em,
+ pix_codigo:o.gateway==='uvvipay'&&o.pix_codigo?o.pix_codigo:null,pix_expira_em:o.gateway==='uvvipay'&&o.pix_codigo?o.pix_expira_em:null,
  pode_tentar_novamente:o.gateway==='uvvipay' && !o.pagamento_id && ['criando','erro'].includes(o.status),
  ...(o.status==='pago' && !(o.gateway==='uvvipay' && o.gateway_ambiente==='staging')?{download_url:o.download_url}: {})});
 async function authorizedOrder(id:string,value:unknown) {
@@ -81,7 +83,8 @@ digitalRoutes.post('/checkout',rateLimit({windowMs:60000,limit:10}),asyncHandler
    customer:{name:customer.nome,email:customer.email,document:{number:customer.documento,type:customer.documento.length===11?'cpf':'cnpj'}},
    items:[{title:p.nome,quantity:1,unitPrice:p.preco_centavos,tangible:false}],pix:{expiration:{type:'seconds',value:1800}}};
  }
- const inserted=await db<any[]>('/pedidos_digitais?on_conflict=id',{method:'POST',headers:{Prefer:'resolution=ignore-duplicates,return=representation'},body:JSON.stringify({id:input.id,token_hash:hash(input.token),produto_id:p.id,nome:p.nome,valor_centavos:p.preco_centavos,download_url:p.download_url,gateway,gateway_ambiente:gateway==='uvvipay'?uvviEnvironment():'production',gateway_payload:payload})});
+ const documentoHash=gateway==='uvvipay'?hash((payload.customer.document.number as string)):null;
+  const inserted=await db<any[]>('/pedidos_digitais?on_conflict=id',{method:'POST',headers:{Prefer:'resolution=ignore-duplicates,return=representation'},body:JSON.stringify({id:input.id,token_hash:hash(input.token),cliente_documento_hash:documentoHash,produto_id:p.id,nome:p.nome,valor_centavos:p.preco_centavos,download_url:p.download_url,gateway,gateway_ambiente:gateway==='uvvipay'?uvviEnvironment():'production',gateway_payload:payload})});
  if(!inserted.length) throw new HttpError(409,'Pedido em processamento. Consulte sua compra.');
  order=inserted[0];
  try {
@@ -99,6 +102,17 @@ digitalRoutes.post('/checkout',rateLimit({windowMs:60000,limit:10}),asyncHandler
   throw e;
  }
  res.status(201).json(publicOrder(order));
+}));
+digitalRoutes.post('/compras',rateLimit({windowMs:60000,limit:5}),asyncHandler(async(req,res)=>{
+ const documento=z.string().max(30).transform(s=>s.replace(/\D/g,'')).refine(validateDocument,'CPF ou CNPJ inválido.').parse(req.body?.documento);
+ const rows=await db<any[]>('/pedidos_digitais?cliente_documento_hash=eq.'+hash(documento)+'&status=eq.pago&select=id,nome,valor_centavos,status,created_at,pago_em&order=created_at.desc&limit=50');
+ res.json(rows.map(o=>({...o,pode_baixar:true})));
+}));
+digitalRoutes.post('/compras/:id/baixar',rateLimit({windowMs:60000,limit:12}),asyncHandler(async(req,res)=>{
+ const id=uuid.parse(req.params.id),documento=z.string().max(30).transform(s=>s.replace(/\D/g,'')).refine(validateDocument,'CPF ou CNPJ inválido.').parse(req.body?.documento);
+ const [order]=await db<any[]>('/pedidos_digitais?id=eq.'+id+'&cliente_documento_hash=eq.'+hash(documento)+'&status=eq.pago&select=id,download_url,gateway,gateway_ambiente');
+ if(!order || (order.gateway==='uvvipay'&&order.gateway_ambiente==='staging')) throw new HttpError(404,'Compra não encontrada ou ainda sem download disponível.');
+ res.json({download_url:order.download_url});
 }));
 digitalRoutes.post('/pedidos/:id',asyncHandler(async(req,res)=>res.json(publicOrder(await verify(await authorizedOrder(req.params.id,req.body.token))))));
 digitalRoutes.post('/pedidos/:id/retry',rateLimit({windowMs:60000,limit:6}),asyncHandler(async(req,res)=>{
