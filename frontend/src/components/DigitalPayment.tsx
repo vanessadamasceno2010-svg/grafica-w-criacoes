@@ -15,7 +15,8 @@ export function DigitalCheckout({product,onClose}:{product:{id:string;nome:strin
  const next=attempt||{id:crypto.randomUUID(),token:Array.from(crypto.getRandomValues(new Uint8Array(32)),v=>v.toString(16).padStart(2,'0')).join('')};setAttempt(next);
  try{
   localStorage.setItem('compras_digitais',JSON.stringify([{...next,nome:product.nome},...recentDigitalPurchases().filter(p=>p.id!==next.id)].slice(0,30)));
-  const created=await apiFetch<DigitalPurchase>('/digital/checkout',{method:'POST',body:JSON.stringify({...next,produto_id:product.id,...(config.gateway==='uvvipay'?{cliente:form}:{})})});
+  let created=await apiFetch<DigitalPurchase>('/digital/checkout',{method:'POST',body:JSON.stringify({...next,produto_id:product.id,...(config.gateway==='uvvipay'?{cliente:form}:{})})});
+  if(config.gateway==='uvvipay'&&!created.pix_codigo) created=await apiFetch<DigitalPurchase>('/digital/pedidos/'+next.id,{method:'POST',body:JSON.stringify({token:next.token})});
   sessionStorage.setItem('digital_checkout_'+next.id,JSON.stringify(created));
   window.location.assign('/digitais/pedido/'+next.id+'#'+next.token);
  }catch(e:any){setError(e.message);}finally{inFlight.current=false;setBusy(false);}}

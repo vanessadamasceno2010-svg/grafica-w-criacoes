@@ -17,6 +17,7 @@ const https=z.string().url().max(2048).refine(s=>{try{return new URL(s).protocol
 const product=z.object({nome:z.string().trim().min(1).max(150),descricao:z.string().max(10000).default(''),imagem_url:z.union([https,z.literal('')]).default(''),imagens:z.array(https).max(12).optional(),preco_centavos:z.number().int().min(1).max(100000000),download_url:https,ativo:z.boolean()}).refine(p=>digitalGateway()!=='uvvipay'||(p.preco_centavos>=100&&p.preco_centavos<=15000000),'Para UvviPay, use valores entre R$ 1,00 e R$ 150.000,00.').transform(p=>{const imagens=p.imagens ?? (p.imagem_url?[p.imagem_url]:[]);return {...p,imagens,imagem_url:imagens[0]||''};});
 const findOrder=async(id:string)=>(await db<any[]>('/pedidos_digitais?id=eq.'+restEq(uuid.parse(id))+'&select=*'))[0];
 async function applyUvvi(order:any,payment:any) {
+ payment=payment?.data&&typeof payment.data==='object'?payment.data:payment;
  if(!matchesUvviPayment(order,payment)) throw new HttpError(502,'Pagamento não corresponde a esta compra. Contate a loja.');
  const code=typeof payment.pix?.qrcode==='string' ? payment.pix.qrcode : null;
  const expires=payment.pix?.expiresAt;
@@ -25,7 +26,11 @@ async function applyUvvi(order:any,payment:any) {
 async function prepareUvvi(order:any) {
  if(order.pagamento_id) return verify(order);
  if(!order.gateway_payload) throw new HttpError(409,'Dados da cobrança indisponíveis. Contate a loja.');
- const payment=await uvvipay('/payments',{body:order.gateway_payload,idempotencyKey:order.id,environment:order.gateway_ambiente});
+ let payment=await uvvipay('/payments',{body:order.gateway_payload,idempotencyKey:order.id,environment:order.gateway_ambiente});
+ payment=payment?.data&&typeof payment.data==='object'?payment.data:payment;
+ // Alguns retornos de criação informam apenas o id; uma consulta imediata
+ // garante que o QR/Pix Copia e Cola já acompanhe a primeira resposta.
+ if(payment?.id && !payment?.pix?.qrcode) payment=await uvvipay('/payments/'+encodeURIComponent(payment.id),{environment:order.gateway_ambiente});
  await applyUvvi(order,payment);
  return await findOrder(order.id);
 }
